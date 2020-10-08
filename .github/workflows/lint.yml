@@ -25,4 +25,4 @@ jobs:
         with:
           reporter: github-pr-review
           github_token: ${{ secrets.github_token }}
-          config: .golangci.yml
+          golangci_lint_flags: "--config=.golangci.yml"
