@@ -1,9 +1,6 @@
 ---
 name: CI
-on:
-  pull_request:
-    branches:
-      - master
+on: [pull_request]
 
 jobs:
   build:
@@ -48,7 +45,3 @@ jobs:
         with:
           version: latest
           args: release --snapshot --skip-publish
-      - uses: jesusvasquez333/verify-pr-label-action@v1.2.0
-        with:
-            github-token: '${{ secrets.GITHUB_TOKEN }}'
-            valid-labels: 'bug, feature, security, maintenance'

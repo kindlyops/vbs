@@ -1,4 +1,4 @@
-name: lint reviewdog
+name: fast lint checks
 on: [pull_request]
 jobs:
   shellcheck:
@@ -26,3 +26,8 @@ jobs:
           reporter: github-pr-review
           github_token: ${{ secrets.github_token }}
           golangci_lint_flags: "--config=.golangci.yml"
+  verify-labels:
+      - uses: jesusvasquez333/verify-pr-label-action@v1.2.0
+        with:
+            github-token: '${{ secrets.GITHUB_TOKEN }}'
+            valid-labels: 'bug, feature, security, maintenance'
