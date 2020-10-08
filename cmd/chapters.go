@@ -70,11 +70,13 @@ func chapterSplit(cmd *cobra.Command, args []string) {
 	base := strings.Trim(path.Base(target), path.Ext(target))
 	targetdir := fmt.Sprintf("split_%s", base)
 	err = os.MkdirAll(targetdir, 0777)
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	var wg sync.WaitGroup
+
 	for _, c := range data.Chapters {
 		wg.Add(1)
 		go copyChapter(&wg, c, target, targetdir)
@@ -156,6 +158,7 @@ func getChapters(target string) (ffmprobeResponse, error) {
 	}
 
 	err = json.Unmarshal(output, &response)
+
 	return response, err
 }
 
@@ -186,12 +189,12 @@ func chapterList(cmd *cobra.Command, args []string) {
 		log.Fatal("Problem getting chapter data ", err)
 	}
 
-	formattedJson, err := json.MarshalIndent(data, "", "    ")
+	formattedJSON, err := json.MarshalIndent(data, "", "    ")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, _ = os.Stdout.Write(formattedJson)
+	_, _ = os.Stdout.Write(formattedJSON)
 }
 
 func init() {
