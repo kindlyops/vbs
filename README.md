@@ -2,18 +2,15 @@
 
 ## Chapters
 
-Generate OBS scenes from chapter markers for easier setup of run lists.# deleterious
-Helps you clean up AWS resources. This is handy when
-retention policies on CloudFormation stacks leave lots
-of orphaned AWS resources around costing money.
+Generate OBS scenes from chapter markers for easier setup of run lists.
 
 ## installation for homebrew (MacOS/Linux)
 
-    brew install kindlyops/tap/deleterious
+    brew install kindlyops/tap/vbs
 
 once installed, you can upgrade to a newer version using this command:
 
-    brew upgrade kindlyops/tap/deleterious
+    brew upgrade kindlyops/tap/vbs
 
 ## installation for scoop (Windows Powershell)
 
@@ -23,56 +20,22 @@ To enable the bucket for your scoop installation
     
 To install deleterious
 
-    scoop install deleterious
+    scoop install vbs
 
 once installed, you can upgrade to a newer version using this command:
 
     scoop status
-    scoop update deleterious
+    scoop update vbs
 
 ## installation from source
 
-    go get github.com/kindlyops/deleterious
-    deleterious help
+    go get github.com/kindlyops/vbs
+    vbs help
 
-## Example of deleting DynamoDB tables
-
-Once deleterious gives you a list of things to delete, and
-you have manually confirmed they are ok to delete, you
-can make a little loop to delete the objects. Here is an example with dynamoDB tables
+## Example of listing chapters from video file
 
 ```bash
-#!/bin/bash
-
-# tables that need to be deleted
-declare -a tables=("foo-MonkeyTable-1FDTVGZJOT25Y"
-"foo-BananaTable-1HFLQZL7CVQ7L"
-)
-
-for i in "${tables[@]}"; do
-	echo "deleting table: $i"
-	aws dynamodb delete-table --table-name "$i"
-done
-```
-
-## Example of deleting S3 buckets
-
-Once deleterious gives you a list of things to delete, and
-you have manually confirmed they are ok to delete, you
-can make a little loop to delete the objects. Here is an example with S3 buckets
-
-```bash
-#!/bin/bash
-
-# buckets that need to be deleted
-declare -a buckets=("foo-bananabucket-148lv5q85e3dc"
-	"foo-bananabucket-14bh2oapj6a3e"
-)
-
-for i in "${buckets[@]}"; do
-	echo "deleting bucket: $i"
-	aws s3api delete-bucket --bucket "$i"
-done
+vbs chapterlist file.mp4
 ```
 
 ## Testing release process
