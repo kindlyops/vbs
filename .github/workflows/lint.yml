@@ -27,6 +27,9 @@ jobs:
           github_token: ${{ secrets.github_token }}
           golangci_lint_flags: "--config=.golangci.yml"
   verify-labels:
+    name: verify labels
+    runs-on: ubuntu-latest
+    steps:
       - uses: jesusvasquez333/verify-pr-label-action@v1.2.0
         with:
             github-token: '${{ secrets.GITHUB_TOKEN }}'
