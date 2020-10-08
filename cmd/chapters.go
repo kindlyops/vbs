@@ -15,6 +15,8 @@
 package cmd
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -22,13 +24,96 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// lastUsedCmd represents the lastUsed command
 var chapterListCmd = &cobra.Command{
-	Use:   "chapterlist",
+	Use:   "chapterlist <videofile.mp4>",
 	Short: "List chapters in a video container.",
 	Long:  `Use ffprobe to discover all chapter metadata in a video file container.`,
 	Run:   chapterList,
 	Args:  cobra.ExactArgs(1),
+}
+
+var chapterSplitCmd = &cobra.Command{
+	Use:   "chaptersplit <videofile.mp4>",
+	Short: "Split video file into separate files per chapter.",
+	Long:  `Use ffmpeg to copy each chapter from a video file into it's own file.`,
+	Run:   chapterSplit,
+	Args:  cobra.ExactArgs(1),
+}
+
+func chapterSplit(cmd *cobra.Command, args []string) {
+
+	_, err := exec.LookPath("ffprobe")
+
+	if err != nil {
+		log.Fatal("Could not find ffprobe. Please install ffmpeg and ffprobe.")
+	}
+
+	_, err = exec.LookPath("ffmpeg")
+
+	if err != nil {
+		log.Fatal("Could not find ffmpeg. Please install ffmpeg.")
+	}
+
+	target := args[0]
+	_, err = os.Stat(target)
+
+	if err != nil {
+		log.Fatal("Could not access video container ", target)
+	}
+
+	_, err = getChapters(target)
+
+	fmt.Print("TODO: implement split")
+}
+
+// sample json output
+// {
+//   "chapters": [
+//       {
+//           "id": 0,
+//           "time_base": "1/1000",
+//           "start": 0,
+//           "start_time": "0.000000",
+//           "end": 6006,
+//           "end_time": "6.006000",
+//           "tags": {
+//               "title": "Title Page\r"
+//           }
+// 			}
+// 	]
+// }
+
+type tags struct {
+	Title string `json:"title"`
+}
+
+type chapter struct {
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+	Id        int    `json:"id"`
+	Tags      tags   `json:"tags"`
+}
+
+type ffmprobeResponse struct {
+	Chapters []chapter `json:"chapters"`
+}
+
+func getChapters(target string) (ffmprobeResponse, error) {
+	command := exec.Command("ffprobe",
+		"-print_format", "json",
+		"-loglevel", "error",
+		"-show_chapters",
+		"-i", target)
+
+	output, err := command.Output()
+	response := ffmprobeResponse{}
+
+	if err != nil {
+		return response, err
+	}
+
+	err = json.Unmarshal(output, &response)
+	return response, err
 }
 
 func chapterList(cmd *cobra.Command, args []string) {
@@ -45,12 +130,6 @@ func chapterList(cmd *cobra.Command, args []string) {
 		log.Fatal("Could not find ffmpeg. Please install ffmpeg.")
 	}
 
-	_, err = exec.LookPath("jq")
-
-	if err != nil {
-		log.Fatal("Could not find jq. Please install jq.")
-	}
-
 	target := args[0]
 	_, err = os.Stat(target)
 
@@ -58,26 +137,21 @@ func chapterList(cmd *cobra.Command, args []string) {
 		log.Fatal("Could not access video container ", target)
 	}
 
-	command := exec.Command("ffprobe",
-		"-print_format", "json",
-		"-loglevel", "error",
-		"-show_chapters",
-		"-i", target)
+	data, err := getChapters(target)
 
-	output, _ := command.Output()
-	_, _ = os.Stdout.Write(output)
+	if err != nil {
+		log.Fatal("Problem getting chapter data ", err)
+	}
+
+	json, err := json.MarshalIndent(data, "", "    ")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, _ = os.Stdout.Write(json)
 }
 
 func init() {
 	rootCmd.AddCommand(chapterListCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// dryrunCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-
+	rootCmd.AddCommand(chapterSplitCmd)
 }
