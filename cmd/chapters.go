@@ -15,7 +15,9 @@
 package cmd
 
 import (
-	"fmt"
+	"log"
+	"os"
+	"os/exec"
 
 	"github.com/spf13/cobra"
 )
@@ -31,7 +33,32 @@ var chapterListCmd = &cobra.Command{
 
 func chapterList(cmd *cobra.Command, args []string) {
 
-	fmt.Printf("This is chapterlist")
+	_, err := exec.LookPath("ffprobe")
+	if err != nil {
+		log.Fatal("Could not find ffprobe. Please install ffmpeg and ffprobe.")
+	}
+	_, err = exec.LookPath("ffmpeg")
+	if err != nil {
+		log.Fatal("Could not find ffmpeg. Please install ffmpeg.")
+	}
+	_, err = exec.LookPath("jq")
+	if err != nil {
+		log.Fatal("Could not find jq. Please install jq.")
+	}
+	target := args[0]
+	_, err = os.Stat(target)
+	if err != nil {
+		log.Fatal("Could not access video container ", target)
+	}
+	command := exec.Command("ffprobe",
+		"-print_format", "json",
+		"-loglevel", "error",
+		"-show_chapters",
+		"-i", target)
+
+	output, err := command.Output()
+
+	_, err = os.Stdout.Write(output)
 }
 
 func init() {
