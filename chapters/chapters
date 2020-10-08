@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+#set -x
+
+fail () {
+  local error_message="$1"
+  local exit_code=$2
+  echo "$error_message" >&2
+  exit "$exit_code"
+}
+
+check_dependency () {
+  local cmd="$1"
+  command -v "$cmd" > /dev/null || fail "Could not find required tools: please install $cmd" 2
+}
+
+check_dependencies () {
+  check_dependency 'ffprobe' \
+  && check_dependency 'jq'
+}
+
+check_file () {
+  local f=$1
+  if [[ ! -r $f ]]; then
+    fail "Could not access $f"
+  fi
+}
+
+list_chapters () {
+  local cmd="-show_chapters"
+  local target=$1
+  ffprobe -print_format json -loglevel error ${cmd} -i "$target"
+}
+
+list_chapter_tuples () { 
+  local target=$1
+  list_chapters "$target" | jq -r ".chapters|.[]|.start_time,.end_time,.id,.tags.title" | tr -d '\r' |paste - - - -
+}
+
+extract_chapter () {
+  local target=$1
+  local output_dir="split_${target%.*}"
+  local suffix="${target##*.}"
+  local IFS=$'\t'
+  read -r start end count title <<< "$2"
+  mkdir -p "$output_dir"
+  ffmpeg -i "${target}" -loglevel error -ss "$start" -to "$end" -c copy -map 0 "${output_dir}/${count}_${title}.${suffix}"
+}
+
+split_chapters () {
+  local target=$1
+  local IFS=$'\n'
+  for tuple in $(list_chapter_tuples "$target"); do
+    extract_chapter "$target" "${tuple}"
+  done
+}
+
+main () {
+  check_dependencies
+  if [[ $# -ne 2 ]]; then
+    fail "usage: $0 <video file> list|split" 3
+  fi
+  target=$1
+  cmd=$2
+  check_file "$target"
+
+  if [[ $cmd == "list" ]]; then
+    list_chapters "$target"
+  elif [[ $cmd == "split" ]]; then
+    split_chapters "$target"
+  else
+    fail "unrecognized command $cmd, valid options are list and split"
+  fi
+}
+
+main "$@"

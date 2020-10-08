@@ -1,0 +1,10 @@
+vbs
+bazel-bin
+bazel-vbs
+bazel-out
+bazel-testlogs
+bazel-workspace
+bdist
+dist
+.vscode/
+*.mp4

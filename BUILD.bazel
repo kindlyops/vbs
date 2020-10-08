@@ -1,0 +1,112 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@bazel_gazelle//:def.bzl", "gazelle")
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("//:version.bzl", "VERSION")
+
+# gazelle:prefix github.com/kindlyops/vbs
+# gazelle:exclude dummy.go
+gazelle(
+    name = "gazelle",
+    external = "vendored",
+)
+
+go_library(
+    name = "go_default_library",
+    srcs = ["main.go"],
+    importpath = "github.com/kindlyops/vbs",
+    visibility = ["//visibility:private"],
+    deps = ["//cmd:go_default_library"],
+)
+
+go_binary(
+    name = "vbs-linux",
+    embed = [":go_default_library"],
+    goos = "linux",
+    goarch = "amd64",
+    visibility = ["//visibility:public"],
+    x_defs = {
+        "version": VERSION,
+    },
+)
+
+go_binary(
+    name = "vbs-darwin",
+    embed = [":go_default_library"],
+    goos = "darwin",
+    goarch = "amd64",
+    visibility = ["//visibility:public"],
+    x_defs = {
+        "version": VERSION,
+    },
+)
+
+go_binary(
+    name = "vbs-windows",
+    embed = [":go_default_library"],
+    goos = "windows",
+    goarch = "amd64",
+    visibility = ["//visibility:public"],
+    x_defs = {
+        "version": VERSION,
+    },
+)
+
+pkg_tar(
+    name = "bdist",
+    srcs = [
+        "//:vbs-darwin",
+        "//:vbs-linux",
+        "//:vbs-windows",
+    ],
+    tags = ["manual"],
+    visibility = ["//visibility:private"],
+)
+
+sh_binary(
+    name = "install",
+    srcs = ["install.sh"],
+    args = ["$(location :bdist.tar)"],
+    data = [":bdist.tar"],
+    tags = ["manual"],
+)
+
+go_test(
+    name = "go_default_test",
+    size = "small",
+    srcs = ["main_test.go"],
+    args = ["-cli"] + select({
+        "@io_bazel_rules_go//go/platform:linux_amd64": [
+            "$(location :vbs-linux)",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin_amd64": [
+            "$(location :vbs-darwin)",
+        ],
+        "//conditions:default": [],
+    }),
+    data = select({
+        "@io_bazel_rules_go//go/platform:linux_amd64": [
+            ":vbs-linux",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin_amd64": [
+            ":vbs-darwin",
+        ],
+        "//conditions:default": [],
+    }),
+    embed = [":go_default_library"],
+    rundir = ".",
+    deps = ["//vendor/github.com/bazelbuild/rules_go/go/tools/bazel:go_default_library"],
+)
+
+sh_binary(
+    name = "vendor",
+    srcs = ["vendor.sh"],
+    args = [
+        "$(location @bazel_gazelle//cmd/gazelle)",
+    ],
+    data = [
+        "@bazel_gazelle//cmd/gazelle",
+        "@go_sdk//:files",
+    ],
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)
