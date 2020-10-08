@@ -73,20 +73,24 @@ func chapterSplit(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	var wg sync.WaitGroup
 	for _, c := range data.Chapters {
 		wg.Add(1)
 		go copyChapter(&wg, c, target, targetdir)
 	}
+
 	wg.Wait()
 }
 
 func copyChapter(wg *sync.WaitGroup, c chapter, sourcefile, targetdir string) error {
 	defer wg.Done()
+
 	title := strings.Trim(c.Tags.Title, " \n\r")
 	safetitle := sanitize.Name(title)
 	prefix := fmt.Sprintf("%03d_", c.Id)
 	outfile := filepath.Join(targetdir, prefix+safetitle+path.Ext(sourcefile))
+
 	cmd := exec.Command("ffmpeg",
 		"-loglevel", "error",
 		"-i", sourcefile,
@@ -95,10 +99,13 @@ func copyChapter(wg *sync.WaitGroup, c chapter, sourcefile, targetdir string) er
 		"-ss", c.StartTime,
 		"-to", c.EndTime,
 		outfile)
+
 	output, err := cmd.CombinedOutput()
+
 	if err != nil {
 		fmt.Printf("%s: %s\n", outfile, output)
 	}
+
 	return err
 }
 
