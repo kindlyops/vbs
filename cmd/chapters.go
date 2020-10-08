@@ -20,7 +20,12 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
+	"strings"
+	"sync"
 
+	"github.com/kennygrant/sanitize"
 	"github.com/spf13/cobra"
 )
 
@@ -61,9 +66,40 @@ func chapterSplit(cmd *cobra.Command, args []string) {
 		log.Fatal("Could not access video container ", target)
 	}
 
-	_, err = getChapters(target)
+	data, err := getChapters(target)
+	base := strings.Trim(path.Base(target), path.Ext(target))
+	targetdir := fmt.Sprintf("split_%s", base)
+	err = os.MkdirAll(targetdir, 0777)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for _, c := range data.Chapters {
+		wg.Add(1)
+		go copyChapter(&wg, c, target, targetdir)
+	}
+	wg.Wait()
+}
 
-	fmt.Print("TODO: implement split")
+func copyChapter(wg *sync.WaitGroup, c chapter, sourcefile string, targetdir string) error {
+	defer wg.Done()
+	title := strings.Trim(c.Tags.Title, " \n\r")
+	safetitle := sanitize.Name(title)
+	prefix := fmt.Sprintf("%03d_", c.Id)
+	outfile := filepath.Join(targetdir, prefix+safetitle+path.Ext(sourcefile))
+	cmd := exec.Command("ffmpeg",
+		"-loglevel", "error",
+		"-i", sourcefile,
+		"-c", "copy",
+		"-map", "0",
+		"-ss", c.StartTime,
+		"-to", c.EndTime,
+		outfile)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("%s: %s\n", outfile, output)
+	}
+	return err
 }
 
 // sample json output

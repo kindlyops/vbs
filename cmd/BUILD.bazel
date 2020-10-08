@@ -9,6 +9,7 @@ go_library(
     importpath = "github.com/kindlyops/vbs/cmd",
     visibility = ["//visibility:public"],
     deps = [
+        "//vendor/github.com/kennygrant/sanitize:go_default_library",
         "//vendor/github.com/mitchellh/go-homedir:go_default_library",
         "//vendor/github.com/spf13/cobra:go_default_library",
         "//vendor/github.com/spf13/viper:go_default_library",
