@@ -4,6 +4,18 @@
 
 Generate OBS scenes from chapter markers for easier setup of run lists.
 
+### Example of listing chapters from video file
+
+```bash
+vbs chapterlist file.mp4
+```
+
+### Example of splitting video file by chapters
+
+```bash
+vbs chaptersplit file.mp4
+```
+
 ## installation for homebrew (MacOS/Linux)
 
     brew install kindlyops/tap/vbs
@@ -31,12 +43,6 @@ once installed, you can upgrade to a newer version using this command:
 
     go get github.com/kindlyops/vbs
     vbs help
-
-## Example of listing chapters from video file
-
-```bash
-vbs chapterlist file.mp4
-```
 
 ## Testing release process
 
