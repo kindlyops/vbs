@@ -49,7 +49,15 @@ once installed, you can upgrade to a newer version using this command:
     go get github.com/kindlyops/vbs
     vbs help
 
-## Testing release process
+## Developer instructions
+
+Want to help add features or fix bugs? Awesome! vbs is build using bazel.
+
+    `brew install bazelisk`
+    grab the source code from github
+    `bazel run :vbs-darwin` to compile and run the current version on macOS
+
+### Testing release process
 
 To run goreleaser locally to test changes to the release process configuration:
 
