@@ -49,7 +49,7 @@ jobs:
         with:
           name: vbs-snapshot-macos
           path: bdist/vbs-darwin
-            - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v2
         with:
           name: vbs-snapshot-windows
           path: bdist/vbs-windows.exe
