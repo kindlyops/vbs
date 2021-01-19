@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"log"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -47,13 +48,26 @@ func ivsOscBridge(cmd *cobra.Command, args []string) {
 		log.Printf("Got stream arn: '%s'\n", arn)
 		log.Printf("Listening on port: '%s'\n", addr)
 	}
-	
-	// s := session.Must(session.NewSession())
-	// svc := ivs.New(mySession)
+
+	s := session.Must(session.NewSession())
+	svc := ivs.New(s)
+
 	d := osc.NewStandardDispatcher()
 	d.AddMsgHandler("/vbs/ivsbridge", func(msg *osc.Message) {
 		if Debug {
 			osc.PrintMessage(msg)
+		}
+		data := fmt.Sprintf("%v", msg.Arguments[0])
+		input := &ivs.PutMetadataInput{
+			ChannelArn: aws.String(arn),
+			Metadata:   aws.String(data),
+		}
+	
+		_, err := svc.PutMetadata(input)
+		if err != nil {
+			if Debug {
+				log.Printf("Error from ivs.PutMetadata: %s", err.Error())
+			}
 		}
 	})
 	
