@@ -41,7 +41,9 @@ var ivsPutMetadataCmd = &cobra.Command{
 
 func ivsOscBridge(cmd *cobra.Command, args []string) {
 	arn := args[0]
-	fmt.Printf("Got stream arn: '%s'\n", arn)
+	if Debug {
+		fmt.Printf("Got stream arn: '%s'\n", arn)
+	}
 
 	// s := session.Must(session.NewSession())
 	// svc := ivs.New(mySession)
@@ -51,7 +53,10 @@ func ivsOscBridge(cmd *cobra.Command, args []string) {
 func ivsPutMetadata(cmd *cobra.Command, args []string) {
 	arn := args[0]
 	data := args[1]
-	fmt.Printf("Got stream arn: '%s'\n", arn)
+	if Debug {
+		fmt.Printf("Got stream arn: '%s'\n", arn)
+		fmt.Printf("Got data: '%s'\n", data)
+	}
 
 	s := session.Must(session.NewSession())
 	svc := ivs.New(s)
