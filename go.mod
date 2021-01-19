@@ -1,8 +1,9 @@
 module github.com/kindlyops/vbs
 
-go 1.12
+go 1.15
 
 require (
+	github.com/aws/aws-sdk-go v1.36.28
 	// If changing rules_go version, remember to change version in WORKSPACE also
 	github.com/bazelbuild/rules_go v0.23.1
 	github.com/kennygrant/sanitize v1.2.4

@@ -1,6 +1,11 @@
 # Tools for video broadcast production
 
-## Chapters
+## IVS - OSC bridge
+
+An Open Sound Control bridge for integrating Companion, QLab, and more with
+the IVS PutMetadata API
+
+## media Chapters
 
 Generate OBS scenes from chapter markers for easier setup of run lists.
 
