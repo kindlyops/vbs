@@ -15,7 +15,7 @@
 package cmd
 
 import (
-	"fmt"
+	"log"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -41,8 +41,9 @@ var ivsPutMetadataCmd = &cobra.Command{
 
 func ivsOscBridge(cmd *cobra.Command, args []string) {
 	arn := args[0]
+	//port := 4427 // TODO: make this an arg
 	if Debug {
-		fmt.Printf("Got stream arn: '%s'\n", arn)
+		log.Printf("Got stream arn: '%s'\n", arn)
 	}
 
 	// s := session.Must(session.NewSession())
@@ -54,8 +55,8 @@ func ivsPutMetadata(cmd *cobra.Command, args []string) {
 	arn := args[0]
 	data := args[1]
 	if Debug {
-		fmt.Printf("Got stream arn: '%s'\n", arn)
-		fmt.Printf("Got data: '%s'\n", data)
+		log.Printf("Got stream arn: '%s'\n", arn)
+		log.Printf("Got data: '%s'\n", data)
 	}
 
 	s := session.Must(session.NewSession())
@@ -67,7 +68,7 @@ func ivsPutMetadata(cmd *cobra.Command, args []string) {
 
 	_, err := svc.PutMetadata(input)
 	if err != nil {
-		err = fmt.Errorf("Error from ivs.PutMetadata: %s", err.Error())
+		log.Fatalf("Error from ivs.PutMetadata: %s", err.Error())
 	}
 }
 
