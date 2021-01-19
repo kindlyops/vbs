@@ -45,3 +45,7 @@ jobs:
         with:
           version: latest
           args: release --snapshot --skip-publish
+      - uses: actions/upload-artifact@v2
+        with:
+          name: vbs-snapshot-build
+          path: bdist/vbs*
