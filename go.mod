@@ -11,4 +11,5 @@ require (
 	github.com/spf13/cobra v0.0.7
 	github.com/spf13/viper v1.7.0
 	github.com/stretchr/testify v1.5.1 // indirect
+	github.com/hypebeast/go-osc v0.0.0-20200115085105-85fee7fed692
 )

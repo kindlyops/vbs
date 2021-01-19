@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ivs"
 	"github.com/spf13/cobra"
+	"github.com/hypebeast/go-osc/osc"
 )
 
 var ivsOscBridgeCmd = &cobra.Command{
@@ -41,14 +42,26 @@ var ivsPutMetadataCmd = &cobra.Command{
 
 func ivsOscBridge(cmd *cobra.Command, args []string) {
 	arn := args[0]
-	//port := 4427 // TODO: make this an arg
+	addr := "127.0.0.1:"+Port
 	if Debug {
 		log.Printf("Got stream arn: '%s'\n", arn)
+		log.Printf("Listening on port: '%s'\n", addr)
 	}
-
+	
 	// s := session.Must(session.NewSession())
 	// svc := ivs.New(mySession)
-
+	d := osc.NewStandardDispatcher()
+	d.AddMsgHandler("/vbs/ivsbridge", func(msg *osc.Message) {
+		if Debug {
+			osc.PrintMessage(msg)
+		}
+	})
+	
+	server := &osc.Server{
+		Addr: addr,
+		Dispatcher:d,
+	}
+	server.ListenAndServe()
 }
 
 func ivsPutMetadata(cmd *cobra.Command, args []string) {
@@ -72,7 +85,11 @@ func ivsPutMetadata(cmd *cobra.Command, args []string) {
 	}
 }
 
+// Port to listen for OSC messages
+var Port string
+
 func init() {
+	ivsOscBridgeCmd.Flags().StringVarP(&Port, "port", "p", "4427", "Port to listen for OSC")
 	rootCmd.AddCommand(ivsOscBridgeCmd)
 	rootCmd.AddCommand(ivsPutMetadataCmd)
 }
