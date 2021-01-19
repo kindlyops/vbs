@@ -47,5 +47,13 @@ jobs:
           args: release --snapshot --skip-publish
       - uses: actions/upload-artifact@v2
         with:
-          name: vbs-snapshot-build
-          path: bdist/vbs*
+          name: vbs-snapshot-macos
+          path: bdist/vbs-darwin
+            - uses: actions/upload-artifact@v2
+        with:
+          name: vbs-snapshot-windows
+          path: bdist/vbs-windows.exe
+      - uses: actions/upload-artifact@v2
+        with:
+          name: vbs-snapshot-linux
+          path: bdist/vbs-linux
