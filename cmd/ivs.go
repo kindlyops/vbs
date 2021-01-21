@@ -44,8 +44,8 @@ var ivsPutMetadataCmd = &cobra.Command{
 func ivsOscBridge(cmd *cobra.Command, args []string) {
 	arn := args[0]
 	addr := "127.0.0.1:" + Port
+
 	if Debug {
-		log.Printf("Got stream arn: '%s'\n", arn)
 		log.Printf("Listening on port: '%s'\n", addr)
 	}
 
@@ -66,7 +66,7 @@ func ivsOscBridge(cmd *cobra.Command, args []string) {
 		_, err := svc.PutMetadata(input)
 		if err != nil {
 			if Debug {
-				log.Printf("Error from ivs.PutMetadata: %s", err.Error())
+				log.Printf("error from ivs.PutMetadata: %s", err.Error())
 			}
 		}
 	})
@@ -75,10 +75,11 @@ func ivsOscBridge(cmd *cobra.Command, args []string) {
 		Addr:       addr,
 		Dispatcher: d,
 	}
+
 	err := server.ListenAndServe()
 	if err != nil {
 		if Debug {
-			log.Printf("Error from server.ListenAndServe: %s", err.Error())
+			log.Printf("error from server.ListenAndServe: %s", err.Error())
 		}
 	}
 }
@@ -86,9 +87,9 @@ func ivsOscBridge(cmd *cobra.Command, args []string) {
 func ivsPutMetadata(cmd *cobra.Command, args []string) {
 	arn := args[0]
 	data := args[1]
+
 	if Debug {
-		log.Printf("Got stream arn: '%s'\n", arn)
-		log.Printf("Got data: '%s'\n", data)
+		log.Printf("got data: '%s'\n", data)
 	}
 
 	s := session.Must(session.NewSession())
@@ -100,11 +101,11 @@ func ivsPutMetadata(cmd *cobra.Command, args []string) {
 
 	_, err := svc.PutMetadata(input)
 	if err != nil {
-		log.Fatalf("Error from ivs.PutMetadata: %s", err.Error())
+		log.Fatalf("error from ivs.PutMetadata: %s", err.Error())
 	}
 }
 
-// Port to listen for OSC messages
+// Port to listen for OSC messages.
 var Port string
 
 func init() {
