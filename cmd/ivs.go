@@ -15,14 +15,14 @@
 package cmd
 
 import (
-	"log"
 	"fmt"
+	"log"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ivs"
-	"github.com/spf13/cobra"
 	"github.com/hypebeast/go-osc/osc"
+	"github.com/spf13/cobra"
 )
 
 var ivsOscBridgeCmd = &cobra.Command{
@@ -43,7 +43,7 @@ var ivsPutMetadataCmd = &cobra.Command{
 
 func ivsOscBridge(cmd *cobra.Command, args []string) {
 	arn := args[0]
-	addr := "127.0.0.1:"+Port
+	addr := "127.0.0.1:" + Port
 	if Debug {
 		log.Printf("Got stream arn: '%s'\n", arn)
 		log.Printf("Listening on port: '%s'\n", addr)
@@ -62,7 +62,7 @@ func ivsOscBridge(cmd *cobra.Command, args []string) {
 			ChannelArn: aws.String(arn),
 			Metadata:   aws.String(data),
 		}
-	
+
 		_, err := svc.PutMetadata(input)
 		if err != nil {
 			if Debug {
@@ -70,12 +70,17 @@ func ivsOscBridge(cmd *cobra.Command, args []string) {
 			}
 		}
 	})
-	
+
 	server := &osc.Server{
-		Addr: addr,
-		Dispatcher:d,
+		Addr:       addr,
+		Dispatcher: d,
 	}
-	server.ListenAndServe()
+	err := server.ListenAndServe()
+	if err != nil {
+		if Debug {
+			log.Printf("Error from server.ListenAndServe: %s", err.Error())
+		}
+	}
 }
 
 func ivsPutMetadata(cmd *cobra.Command, args []string) {
