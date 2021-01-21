@@ -4,11 +4,16 @@ go_library(
     name = "go_default_library",
     srcs = [
         "chapters.go",
+        "ivs.go",
         "root.go",
     ],
     importpath = "github.com/kindlyops/vbs/cmd",
     visibility = ["//visibility:public"],
     deps = [
+        "//vendor/github.com/aws/aws-sdk-go/aws:go_default_library",
+        "//vendor/github.com/aws/aws-sdk-go/aws/session:go_default_library",
+        "//vendor/github.com/aws/aws-sdk-go/service/ivs:go_default_library",
+        "//vendor/github.com/hypebeast/go-osc/osc:go_default_library",
         "//vendor/github.com/kennygrant/sanitize:go_default_library",
         "//vendor/github.com/mitchellh/go-homedir:go_default_library",
         "//vendor/github.com/spf13/cobra:go_default_library",
