@@ -6,7 +6,6 @@ require (
 	github.com/aws/aws-sdk-go v1.36.28
 	// If changing rules_go version, remember to change version in WORKSPACE also
 	github.com/bazelbuild/rules_go v0.23.1
-	github.com/daixiang0/gci v0.2.8 // indirect
 	github.com/hypebeast/go-osc v0.0.0-20200115085105-85fee7fed692
 	github.com/kennygrant/sanitize v1.2.4
 	github.com/mitchellh/go-homedir v1.1.0

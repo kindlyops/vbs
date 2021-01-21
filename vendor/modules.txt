@@ -41,6 +41,8 @@ github.com/aws/aws-sdk-go/service/sts/stsiface
 # github.com/bazelbuild/rules_go v0.23.1
 ## explicit
 github.com/bazelbuild/rules_go/go/tools/bazel
+# github.com/daixiang0/gci v0.2.8
+## explicit
 # github.com/fsnotify/fsnotify v1.4.7
 github.com/fsnotify/fsnotify
 # github.com/hashicorp/hcl v1.0.0
