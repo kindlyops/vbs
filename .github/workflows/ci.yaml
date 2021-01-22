@@ -20,7 +20,7 @@ jobs:
           token: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
           ref: ${{ github.head_ref }}
       - name: bazel build
-        run: bazel run :install
+        run: bazel build //...
       - name: Sync Dependencies
         run: bazel run //:vendor
         if: github.actor == 'dependabot-preview[bot]'
