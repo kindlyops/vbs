@@ -51,23 +51,22 @@ go_binary(
     },
 )
 
-
 copy_file(
     name = "install-darwin",
     src = "//:vbs-darwin",
-    out = "bdist/vbs-darwin",
+    out = "bdist/vbs_darwin_amd64/vbs",
 )
 
 copy_file(
     name = "install-linux",
     src = "//:vbs-linux",
-    out = "bdist/vbs-linux",
+    out = "bdist/vbs_linux_amd64/vbs",
 )
 
 copy_file(
     name = "install-windows",
     src = "//:vbs-windows",
-    out = "bdist/vbs-windows.exe",
+    out = "bdist/vbs_windows_amd64/vbs.exe",
 )
 
 
