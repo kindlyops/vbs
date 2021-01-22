@@ -1,7 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@bazel_gazelle//:def.bzl", "gazelle")
-load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("//:version.bzl", "VERSION")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
 # gazelle:prefix github.com/kindlyops/vbs
 # gazelle:exclude dummy.go
@@ -51,24 +51,25 @@ go_binary(
     },
 )
 
-pkg_tar(
-    name = "bdist",
-    srcs = [
-        "//:vbs-darwin",
-        "//:vbs-linux",
-        "//:vbs-windows",
-    ],
-    tags = ["manual"],
-    visibility = ["//visibility:private"],
+
+copy_file(
+    name = "install-darwin",
+    src = "//:vbs-darwin",
+    out = "bdist/vbs-darwin",
 )
 
-sh_binary(
-    name = "install",
-    srcs = ["install.sh"],
-    args = ["$(location :bdist.tar)"],
-    data = [":bdist.tar"],
-    tags = ["manual"],
+copy_file(
+    name = "install-linux",
+    src = "//:vbs-linux",
+    out = "bdist/vbs-linux",
 )
+
+copy_file(
+    name = "install-windows",
+    src = "//:vbs-windows",
+    out = "bdist/vbs-windows.exe",
+)
+
 
 go_test(
     name = "go_default_test",
