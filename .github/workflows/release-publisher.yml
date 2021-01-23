@@ -20,8 +20,10 @@ jobs:
         uses: actions/checkout@master
       - name: stamp version
         run: |
+          echo GITHUB_REF: $GITHUB_REF
           export VERSION=$(echo $GITHUB_REF|sed 's/refs\/tags\/v//')
           echo "VERSION = '$VERSION'" > version.bzl
+          cat version.bazl
       - name: bazel build 
         run : bazel build //...
       - name: clean working tree
