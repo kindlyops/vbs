@@ -51,6 +51,16 @@ go_binary(
     },
 )
 
+alias(
+    name = "vbs",
+    actual = select({
+        "@io_bazel_rules_go//go/platform:linux_amd64": ":vbs-linux",
+        "@io_bazel_rules_go//go/platform:darwin_amd64": ":vbs-darwin",
+        "@io_bazel_rules_go//go/platform:windows_amd64": ":vbs-windows",
+        "//conditions:default": ":vbs-linux",
+    }),
+)
+
 copy_file(
     name = "install-darwin",
     src = "//:vbs-darwin",
