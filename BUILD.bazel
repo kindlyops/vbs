@@ -81,6 +81,9 @@ go_test(
         "@io_bazel_rules_go//go/platform:darwin_amd64": [
             "$(location :vbs-darwin)",
         ],
+        "@io_bazel_rules_go//go/platform:windows_amd64": [
+            "$(location :vbs-windows)",
+        ],
         "//conditions:default": [],
     }),
     data = select({
@@ -89,6 +92,9 @@ go_test(
         ],
         "@io_bazel_rules_go//go/platform:darwin_amd64": [
             ":vbs-darwin",
+        ],
+        "@io_bazel_rules_go//go/platform:windows_amd64": [
+            ":vbs-windows",
         ],
         "//conditions:default": [],
     }),
