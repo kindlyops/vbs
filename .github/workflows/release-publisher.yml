@@ -22,7 +22,7 @@ jobs:
         run: |
           echo GITHUB_REF: $GITHUB_REF
           export VERSION=$(echo $GITHUB_REF|sed 's/refs\/tags\/v//')
-          echo "VERSION = '$VERSION'" > version.bzl
+          echo "VERSION = '$VERSION\n'" > version.bzl
           cat version.bzl
       - name: bazel build 
         run : bazel build //...

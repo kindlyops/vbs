@@ -1,2 +1,2 @@
-VERSION = 'dev.bazel version'
+VERSION = 'dev.bazel version\n'
 
