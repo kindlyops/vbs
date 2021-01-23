@@ -11,7 +11,7 @@ builds:
       - amd64
     binary: vbs
     hooks:
-      post: ./goreleaser-post-hook.sh
+      post: pwsh goreleaser-post-hook.ps1
 
 checksum:
   name_template: 'checksums.txt'
