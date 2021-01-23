@@ -20,7 +20,7 @@ jobs:
           token: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
           ref: ${{ github.head_ref }}
       - name: bazel build
-        run: bazel run :install
+        run: bazel build //...
       - name: Sync Dependencies
         run: bazel run //:vendor
         if: github.actor == 'dependabot-preview[bot]'
@@ -41,19 +41,19 @@ jobs:
       - name: dry run goreleaser
         uses: goreleaser/goreleaser-action@master
         env:
-          GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
+          POWERSHELL_TELEMETRY_OPTOUT: true
         with:
           version: latest
           args: release --snapshot --skip-publish
       - uses: actions/upload-artifact@v2
         with:
           name: vbs-snapshot-macos
-          path: bdist/vbs-darwin
+          path: bazel-bin/bdist/vbs_darwin_amd64/vbs
       - uses: actions/upload-artifact@v2
         with:
           name: vbs-snapshot-windows
-          path: bdist/vbs-windows.exe
+          path: bazel-bin/bdist/vbs_windows_amd64/vbs.exe
       - uses: actions/upload-artifact@v2
         with:
           name: vbs-snapshot-linux
-          path: bdist/vbs-linux
+          path:  bazel-bin/bdist/vbs_linux_amd64/vbs

@@ -30,6 +30,7 @@ jobs:
       - name: Run goreleaser
         uses: goreleaser/goreleaser-action@master
         env:
+          POWERSHELL_TELEMETRY_OPTOUT: true
           GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
         with:
           version: latest
