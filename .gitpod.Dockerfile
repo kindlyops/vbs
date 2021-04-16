@@ -26,5 +26,5 @@ RUN wget -O $HOME/bin/gostarlark https://github.com/stackb/bzl/releases/download
   
 # Add Bazel command line completion
 USER root
-COPY scripts/bazel-complete.bash /etc/bash_completion.d/bazel-complete.bash
+#COPY scripts/bazel-complete.bash /etc/bash_completion.d/bazel-complete.bash
 USER gitpod
