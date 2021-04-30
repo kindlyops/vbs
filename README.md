@@ -57,7 +57,7 @@ Want to help add features or fix bugs? Awesome! vbs is build using bazel.
 
     `brew install bazelisk`
     grab the source code from github
-    `bazel run :vbs-darwin` to compile and run the current version on macOS
+    `bazel run vbs` to compile and run the locally compiled version
 
 ### Testing release process
 
