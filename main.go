@@ -18,7 +18,7 @@ import (
 	"github.com/kindlyops/vbs/cmd"
 )
 
-// these are filled out as linker flags by bazel
+// these are filled out as linker flags by bazel.
 var (
 	version = "dev"
 )

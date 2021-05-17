@@ -20,8 +20,6 @@ linters-settings:
     min-occurrences: 3
   lll:
     line-length: 120
-  maligned:
-    suggest-new: true
   misspell:
     locale: US
   funlen:
@@ -34,6 +32,15 @@ linters:
     # prealloc is not recommended by `golangci-lint` developers.
     - prealloc
     - gochecknoglobals
+    - interfacer
+    - scopelint
+    - maligned
+    - forbidigo
+    - gochecknoinits
+    - exhaustivestruct
+    - testpackage
+    - ifshort
+    - gofumpt
 
 run:
   skip-files:

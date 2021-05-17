@@ -38,7 +38,7 @@ var ivsPutMetadataCmd = &cobra.Command{
 	Short: "Send payload to IVS PutMetadata.",
 	Long:  `Send messages to IVS using PutMetadata API.`,
 	Run:   ivsPutMetadata,
-	Args:  cobra.ExactArgs(2),
+	Args:  cobra.ExactArgs(2), //nolint:gomnd // this is an appropriate magic number
 }
 
 func ivsOscBridge(cmd *cobra.Command, args []string) {
@@ -51,7 +51,7 @@ func ivsOscBridge(cmd *cobra.Command, args []string) {
 	svc := ivs.New(s)
 
 	d := osc.NewStandardDispatcher()
-	d.AddMsgHandler("/vbs/ivsbridge", func(msg *osc.Message) {
+	_ = d.AddMsgHandler("/vbs/ivsbridge", func(msg *osc.Message) {
 		log.Debug().Msg(msg.String())
 		data := fmt.Sprintf("%v", msg.Arguments[0])
 		input := &ivs.PutMetadataInput{
@@ -70,8 +70,7 @@ func ivsOscBridge(cmd *cobra.Command, args []string) {
 		Dispatcher: d,
 	}
 
-	err := server.ListenAndServe()
-	if err != nil {
+	if err := server.ListenAndServe(); err != nil {
 		log.Error().Err(err).Msg("error from server.ListenAndServe")
 	}
 }

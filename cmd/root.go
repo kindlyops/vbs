@@ -29,10 +29,10 @@ import (
 
 var cfgFile string
 
-// Debug controls whether or not debug messages should be printed
+// Debug controls whether or not to enable debug level logging.
 var Debug bool
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
 	Version: "dev",
 	Use:     "vbs",
@@ -59,6 +59,7 @@ use at your own risk.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute(v string) {
 	rootCmd.SetVersionTemplate(v)
+
 	if err := rootCmd.Execute(); err != nil {
 		log.Error().Err(err).Msg("error running root command")
 		os.Exit(1)
@@ -67,6 +68,7 @@ func Execute(v string) {
 
 func init() {
 	zerolog.TimeFieldFormat = time.RFC3339
+
 	if isatty.IsTerminal(os.Stdout.Fd()) {
 		output := zerolog.ConsoleWriter{Out: os.Stderr}
 		log.Logger = log.With().Caller().Logger().Output(output)

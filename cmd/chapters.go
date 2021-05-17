@@ -46,7 +46,6 @@ var chapterSplitCmd = &cobra.Command{
 }
 
 func chapterSplit(cmd *cobra.Command, args []string) {
-
 	_, err := exec.LookPath("ffprobe")
 
 	if err != nil {
@@ -67,6 +66,10 @@ func chapterSplit(cmd *cobra.Command, args []string) {
 	}
 
 	data, err := getChapters(target)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not extract chapters")
+	}
+
 	base := strings.Trim(path.Base(target), path.Ext(target))
 	targetdir := fmt.Sprintf("split_%s", base)
 	err = os.MkdirAll(targetdir, 0777)
@@ -79,18 +82,19 @@ func chapterSplit(cmd *cobra.Command, args []string) {
 
 	for _, c := range data.Chapters {
 		wg.Add(1)
+
 		go copyChapter(&wg, c, target, targetdir)
 	}
 
 	wg.Wait()
 }
 
-func copyChapter(wg *sync.WaitGroup, c chapter, sourcefile, targetdir string) error {
+func copyChapter(wg *sync.WaitGroup, c chapter, sourcefile, targetdir string) {
 	defer wg.Done()
 
 	title := strings.Trim(c.Tags.Title, " \n\r")
 	safetitle := sanitize.Name(title)
-	prefix := fmt.Sprintf("%03d_", c.Id)
+	prefix := fmt.Sprintf("%03d_", c.ID)
 	outfile := filepath.Join(targetdir, prefix+safetitle+path.Ext(sourcefile))
 
 	cmd := exec.Command("ffmpeg",
@@ -107,8 +111,6 @@ func copyChapter(wg *sync.WaitGroup, c chapter, sourcefile, targetdir string) er
 	if err != nil {
 		log.Error().Err(err).Msgf("%s: %s\n", outfile, output)
 	}
-
-	return err
 }
 
 // sample json output
@@ -135,7 +137,7 @@ type tags struct {
 type chapter struct {
 	StartTime string `json:"start_time"`
 	EndTime   string `json:"end_time"`
-	Id        int    `json:"id"`
+	ID        int    `json:"id"`
 	Tags      tags   `json:"tags"`
 }
 
@@ -154,16 +156,19 @@ func getChapters(target string) (ffmprobeResponse, error) {
 	response := ffmprobeResponse{}
 
 	if err != nil {
-		return response, err
+		return response, fmt.Errorf("could not probe chapters: %w", err)
 	}
 
 	err = json.Unmarshal(output, &response)
 
-	return response, err
+	if err != nil {
+		return response, fmt.Errorf("failed unmarshaling ffprobe response: %w", err)
+	}
+
+	return response, nil
 }
 
 func chapterList(cmd *cobra.Command, args []string) {
-
 	_, err := exec.LookPath("ffprobe")
 
 	if err != nil {
@@ -191,7 +196,7 @@ func chapterList(cmd *cobra.Command, args []string) {
 
 	formattedJSON, err := json.MarshalIndent(data, "", "    ")
 	if err != nil {
-		log.Fatal().Err(err).Msg("Trouble marshalling to JSON")
+		log.Fatal().Err(err).Msg("Trouble marshaling to JSON")
 	}
 
 	_, _ = os.Stdout.Write(formattedJSON)
