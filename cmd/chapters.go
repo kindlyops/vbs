@@ -17,7 +17,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path"
@@ -26,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/kennygrant/sanitize"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -50,20 +50,20 @@ func chapterSplit(cmd *cobra.Command, args []string) {
 	_, err := exec.LookPath("ffprobe")
 
 	if err != nil {
-		log.Fatal("Could not find ffprobe. Please install ffmpeg and ffprobe.")
+		log.Fatal().Err(err).Msg("Could not find ffprobe. Please install ffmpeg and ffprobe.")
 	}
 
 	_, err = exec.LookPath("ffmpeg")
 
 	if err != nil {
-		log.Fatal("Could not find ffmpeg. Please install ffmpeg.")
+		log.Fatal().Err(err).Msg("Could not find ffmpeg. Please install ffmpeg.")
 	}
 
 	target := args[0]
 	_, err = os.Stat(target)
 
 	if err != nil {
-		log.Fatal("Could not access video container ", target)
+		log.Fatal().Err(err).Msgf("Could not access video container %s", target)
 	}
 
 	data, err := getChapters(target)
@@ -72,7 +72,7 @@ func chapterSplit(cmd *cobra.Command, args []string) {
 	err = os.MkdirAll(targetdir, 0777)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err).Msg("Could not create output directory")
 	}
 
 	var wg sync.WaitGroup
@@ -105,7 +105,7 @@ func copyChapter(wg *sync.WaitGroup, c chapter, sourcefile, targetdir string) er
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
-		fmt.Printf("%s: %s\n", outfile, output)
+		log.Error().Err(err).Msgf("%s: %s\n", outfile, output)
 	}
 
 	return err
@@ -167,31 +167,31 @@ func chapterList(cmd *cobra.Command, args []string) {
 	_, err := exec.LookPath("ffprobe")
 
 	if err != nil {
-		log.Fatal("Could not find ffprobe. Please install ffmpeg and ffprobe.")
+		log.Fatal().Err(err).Msg("Could not find ffprobe. Please install ffmpeg and ffprobe.")
 	}
 
 	_, err = exec.LookPath("ffmpeg")
 
 	if err != nil {
-		log.Fatal("Could not find ffmpeg. Please install ffmpeg.")
+		log.Fatal().Err(err).Msg("Could not find ffmpeg. Please install ffmpeg.")
 	}
 
 	target := args[0]
 	_, err = os.Stat(target)
 
 	if err != nil {
-		log.Fatal("Could not access video container ", target)
+		log.Fatal().Err(err).Msgf("Could not access video container %s", target)
 	}
 
 	data, err := getChapters(target)
 
 	if err != nil {
-		log.Fatal("Problem getting chapter data ", err)
+		log.Fatal().Err(err).Msg("Problem getting chapter data")
 	}
 
 	formattedJSON, err := json.MarshalIndent(data, "", "    ")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err).Msg("Trouble marshalling to JSON")
 	}
 
 	_, _ = os.Stdout.Write(formattedJSON)
