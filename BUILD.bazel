@@ -79,7 +79,6 @@ copy_file(
     out = "bdist/vbs_windows_amd64/vbs.exe",
 )
 
-
 go_test(
     name = "go_default_test",
     size = "small",
