@@ -21,8 +21,8 @@ go_library(
 go_binary(
     name = "vbs-linux",
     embed = [":go_default_library"],
-    goos = "linux",
     goarch = "amd64",
+    goos = "linux",
     visibility = ["//visibility:public"],
     x_defs = {
         "version": VERSION,
@@ -32,8 +32,8 @@ go_binary(
 go_binary(
     name = "vbs-darwin",
     embed = [":go_default_library"],
-    goos = "darwin",
     goarch = "amd64",
+    goos = "darwin",
     visibility = ["//visibility:public"],
     x_defs = {
         "version": VERSION,
@@ -43,8 +43,8 @@ go_binary(
 go_binary(
     name = "vbs-windows",
     embed = [":go_default_library"],
-    goos = "windows",
     goarch = "amd64",
+    goos = "windows",
     visibility = ["//visibility:public"],
     x_defs = {
         "version": VERSION,
@@ -115,6 +115,20 @@ go_test(
 sh_binary(
     name = "vendor",
     srcs = ["vendor.sh"],
+    args = [
+        "$(location @bazel_gazelle//cmd/gazelle)",
+    ],
+    data = [
+        "@bazel_gazelle//cmd/gazelle",
+        "@go_sdk//:files",
+    ],
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "lint",
+    srcs = ["lint.sh"],
     args = [
         "$(location @bazel_gazelle//cmd/gazelle)",
     ],
