@@ -1,0 +1,61 @@
+load("@build_bazel_rules_nodejs//:index.bzl", "copy_to_bin")
+load("@npm//next:index.bzl", "next")
+
+package(default_visibility = ["//visibility:public"])
+
+# Next.js doesn't allow its build output to be written anywhere outside of the
+# source directory, so we copy all of the source files over into the bin folder
+# and run next on the source there. That way, the output will be written there
+# and we can return it as our rule output.
+
+filegroup(
+    name = "source_files",
+    srcs = glob([
+        "public/**/*",
+        "pages/*",
+        "styles/*",
+    ]) + [
+        #"tsconfig.json",
+        #"next.config.js",
+        #"next-env.d.ts",
+        "package.json",
+        "yarn.lock",
+        #"postcss.config.js",
+        #"tailwind.config.js",
+    ],
+)
+
+# NPM_DEPENDENCIES = [
+#     "@npm//@types/node",
+#     "@npm//@types/react",
+#     "@npm//autoprefixer",
+#     "@npm//next-pwa",
+#     "@npm//postcss",
+#     "@npm//react",
+#     "@npm//react-dom",
+#     "@npm//tailwindcss",
+#     "@npm//typescript",
+#     "@npm//sass",
+# ]
+
+copy_to_bin(
+    name = "copy_source_files",
+    srcs = ["source_files"],
+)
+
+next(
+    name = "next_build",
+    outs = [".next"],
+    args = ["build $(RULEDIR)"],
+    data = [":copy_source_files"], # + NPM_DEPENDENCIES,
+)
+
+next(
+    name = "build",
+    outs = ["dist"],
+    args = [
+        "export $(RULEDIR)",
+        "-o $(@)",
+    ],
+    data = [":next_build"],
+)

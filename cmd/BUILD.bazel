@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "chapters.go",
         "ivs.go",
+        "lighting.go",
         "root.go",
     ],
     importpath = "github.com/kindlyops/vbs/cmd",
