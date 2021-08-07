@@ -14,7 +14,8 @@ gazelle(
 go_library(
     name = "go_default_library",
     srcs = ["main.go"],
-    embedsrcs = ["//nextjs:build"],
+    embedsrcs =["//nextjs:build"],
+    #data = ["//nextjs:dist"],
     importpath = "github.com/kindlyops/vbs",
     visibility = ["//visibility:private"],
     deps = ["//cmd:go_default_library"],

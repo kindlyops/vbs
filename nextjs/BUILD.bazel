@@ -48,6 +48,7 @@ next(
     outs = [".next"],
     args = ["build $(RULEDIR)"],
     data = [":copy_source_files"], # + NPM_DEPENDENCIES,
+    tags = ["no-sandbox"],
 )
 
 next(
@@ -58,4 +59,5 @@ next(
         "-o $(@)",
     ],
     data = [":next_build"],
+    tags = ["no-sandbox"],
 )

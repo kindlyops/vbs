@@ -22,7 +22,7 @@ import (
 
 var nextFS embed.FS
 
-//go:embed dist/index.html
+//go:embed *.html
 
 /// go:embed nextjs/out/*.svg
 /// go:embed nextjs/out/*.ico
