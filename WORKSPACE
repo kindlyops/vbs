@@ -22,7 +22,7 @@ load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_depe
 go_rules_dependencies()
 
 go_register_toolchains(
-    go_version = "1.16.5",
+    go_version = "1.16.7",
 )
 
 # to easily generate the http_archive with sha use a command like
@@ -70,7 +70,7 @@ load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "yarn_install
 # NOTE: this rule installs nodejs, npm, and yarn, but does NOT install
 # your npm dependencies into your node_modules folder.
 # You must still run the package manager to do this.
-node_repositories(package_json = ["//nextjs:package.json"])
+node_repositories(package_json = ["//embeddy:package.json"])
 
 # Setup Bazel managed npm dependencies with the `yarn_install` rule.
 # The name of this rule should be set to `npm` so that `ts_library` and `ts_web_test_suite`
@@ -79,7 +79,7 @@ node_repositories(package_json = ["//nextjs:package.json"])
 # See https://github.com/bazelbuild/rules_nodejs#dependencies for more info.
 yarn_install(
   name = "npm",
-  package_json = "//nextjs:package.json",
+  package_json = "//embeddy:package.json",
   quiet = False,
-  yarn_lock = "//nextjs:yarn.lock",
+  yarn_lock = "//embeddy:yarn.lock",
 )

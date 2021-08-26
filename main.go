@@ -15,20 +15,8 @@
 package main
 
 import (
-	"embed"
-
 	"github.com/kindlyops/vbs/cmd"
 )
-
-var nextFS embed.FS
-
-//go:embed *.html
-
-/// go:embed nextjs/out/*.svg
-/// go:embed nextjs/out/*.ico
-/// go:embed nextjs/out/_next/static
-/// go:embed nextjs/out/_next/static/chunks/pages/*.js
-/// go:embed nextjs/out/_next/static/*/*.js
 
 // these are filled out as linker flags by bazel.
 var (

@@ -22,5 +22,6 @@ go_library(
         "//vendor/github.com/rs/zerolog/log:go_default_library",
         "//vendor/github.com/spf13/cobra:go_default_library",
         "//vendor/github.com/spf13/viper:go_default_library",
+        "//embeddy:go_default_library",
     ],
 )

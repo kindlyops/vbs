@@ -1,0 +1,60 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@npm//next:index.bzl", "next")
+load("@build_bazel_rules_nodejs//:index.bzl", "copy_to_bin")
+load("//:glue.bzl", "static_site_embedder")
+
+filegroup(
+    name = "source_files",
+    srcs = glob([
+        "public/**/*",
+        "pages/*",
+        "styles/*",
+    ]) + [
+        #"tsconfig.json",
+        #"next.config.js",
+        #"next-env.d.ts",
+        "package.json",
+        "yarn.lock",
+        #"postcss.config.js",
+        #"tailwind.config.js",
+    ],
+)
+
+copy_to_bin(
+    name = "copy_source_files",
+    srcs = [":source_files"],
+)
+
+next(
+    name = "next_build",
+    outs = [".next"],
+    args = ["build $(RULEDIR)"],
+    data = [":copy_source_files"], # + NPM_DEPENDENCIES,
+    tags = ["no-sandbox"],
+)
+
+next(
+    name = "build",
+    outs = ["dist"],
+    args = [
+        "export $(RULEDIR)",
+        "-o $(@)",
+    ],
+    data = [":next_build"],
+    visibility = ["//visibility:public"]
+)
+
+static_site_embedder(
+    name = "embedder",
+    srcs = [":build"],
+)
+
+go_library(
+    name = "go_default_library",
+    srcs = [":embedder"],
+    embedsrcs = [":build"],
+    importpath = "github.com/kindlyops/vbs/embeddy",
+    visibility = ["//visibility:public"],
+)
+
+
