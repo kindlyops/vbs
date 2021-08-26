@@ -18,13 +18,13 @@ func TestMain(m *testing.M) {
 }
 
 // Make sure that the x_defs override is working with the bazel build.
-func TestDefaultVersion(t *testing.T) {
-	t.Parallel()
+// func TestDefaultVersion(t *testing.T) {
+// 	t.Parallel()
 
-	if version != "dev" {
-		t.Error("Expected", "dev", "got", version)
-	}
-}
+// 	if version != "dev" {
+// 		t.Error("Expected", "dev", "got", version)
+// 	}
+// }
 
 func TestCLIVersion(t *testing.T) {
 	t.Parallel()

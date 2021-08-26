@@ -14,21 +14,6 @@ gazelle(
     external = "vendored",
 )
 
-# pkg_tar(
-#     name = "nextjs-generated",
-#     extension = "tar.gz",
-#     srcs = ["//:dist"],
-# )
-
-# genrule(
-#     name = "unpacked-nextjs-generated",
-#     srcs = [":nextjs-generated"],
-#     outs = ["gdist.bzl"],
-#     cmd = "tar -ztvf $(SRCS) > $@"
-# )
-
-# load("gdist.bzl", "generated_files")
-
 go_library(
     name = "go_default_library",
     srcs = ["main.go"],
@@ -98,38 +83,37 @@ copy_file(
     out = "bdist/vbs_windows_amd64/vbs.exe",
 )
 
-# go_test(
-#     name = "go_default_test",
-#     size = "small",
-#     srcs = ["main_test.go"],
-#     args = ["-cli"] + select({
-#         "@io_bazel_rules_go//go/platform:linux_amd64": [
-#             "$(location :vbs-linux)",
-#         ],
-#         "@io_bazel_rules_go//go/platform:darwin_amd64": [
-#             "$(location :vbs-darwin)",
-#         ],
-#         "@io_bazel_rules_go//go/platform:windows_amd64": [
-#             "$(location :vbs-windows)",
-#         ],
-#         "//conditions:default": [],
-#     }),
-#     data = select({
-#         "@io_bazel_rules_go//go/platform:linux_amd64": [
-#             ":vbs-linux",
-#         ],
-#         "@io_bazel_rules_go//go/platform:darwin_amd64": [
-#             ":vbs-darwin",
-#         ],
-#         "@io_bazel_rules_go//go/platform:windows_amd64": [
-#             ":vbs-windows",
-#         ],
-#         "//conditions:default": [],
-#     }),
-#     embed = [":go_default_library" ],
-#     rundir = ".",
-#     deps = ["//vendor/github.com/bazelbuild/rules_go/go/tools/bazel", "//embeddy:go_default_library"],
-# )
+go_test(
+    name = "go_default_test",
+    size = "small",
+    srcs = ["main_test.go"],
+    args = ["-cli"] + select({
+        "@io_bazel_rules_go//go/platform:linux_amd64": [
+            "$(location :vbs-linux)",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin_amd64": [
+            "$(location :vbs-darwin)",
+        ],
+        "@io_bazel_rules_go//go/platform:windows_amd64": [
+            "$(location :vbs-windows)",
+        ],
+        "//conditions:default": [],
+    }),
+    data = select({
+        "@io_bazel_rules_go//go/platform:linux_amd64": [
+            ":vbs-linux",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin_amd64": [
+            ":vbs-darwin",
+        ],
+        "@io_bazel_rules_go//go/platform:windows_amd64": [
+            ":vbs-windows",
+        ],
+        "//conditions:default": [],
+    }),
+    rundir = ".",
+    deps = ["//vendor/github.com/bazelbuild/rules_go/go/tools/bazel"],
+)
 
 sh_binary(
     name = "vendor",
