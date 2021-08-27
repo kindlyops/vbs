@@ -26,12 +26,8 @@ export default function Home() {
 
       <main>
         <h1 className="title">
-          Welcome to <a href="https://github.com/kindlyops/vbs">VBS Lighting Bridge!</a>
+          <a href="https://github.com/kindlyops/vbs">VBS</a> Lighting bridge
         </h1>
-
-        <p className="description">
-          The buttons send <code>OSC</code> commands to your Companion controller.
-        </p>
 
         <div className="grid">
           <a href="#on" className="card" onClick={lightsOn}>
@@ -44,6 +40,9 @@ export default function Home() {
             <p>Turn the lights off.</p>
           </a>
         </div>
+        <p className="description">
+          Send <code>OSC</code> commands to Companion.app
+        </p>
       </main>
 
       <footer>
@@ -140,6 +139,7 @@ export default function Home() {
           display: flex;
           align-items: center;
           justify-content: center;
+          flex-direction: row;
           flex-wrap: wrap;
 
           max-width: 800px;
@@ -183,7 +183,7 @@ export default function Home() {
         @media (max-width: 600px) {
           .grid {
             width: 100%;
-            flex-direction: row;
+            flex-direction: column;
           }
         }
       `}</style>

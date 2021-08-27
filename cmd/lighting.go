@@ -17,6 +17,7 @@ package cmd
 import (
 	"io/fs"
 
+	"github.com/hypebeast/go-osc/osc"
 	"github.com/kindlyops/vbs/embeddy"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -45,6 +46,11 @@ func lightingBridge(cmd *cobra.Command, args []string) {
 		return nil
 	})
 
+	// TODO: maybe switch to echo
+	// https://echo.labstack.com/middleware/static/
+	// https://echo.labstack.com/middleware/csrf/
+	// https://echo.labstack.com/middleware/rate-limiter/
+	// https://echo.labstack.com/middleware/secure/
 	http.Handle("/", http.FileServer(http.FS(dist)))
 	// The API will be served under `/api`.
 	http.HandleFunc("/api/on", handleON)
@@ -61,12 +67,22 @@ func lightingBridge(cmd *cobra.Command, args []string) {
 func handleON(w http.ResponseWriter, r *http.Request) {
 	// TODO: only accept POST
 	log.Debug().Msg("handleON")
+	client := osc.NewClient("localhost", 12321) // TODO configurable port
+	// TODO configurable button. right now, page 20, 2nd button
+	msg := osc.NewMessage("/press/bank/20/2")
+	client.Send(msg)
 	sendAPIResponse(w, r)
 }
 
 func handleOff(w http.ResponseWriter, r *http.Request) {
 	// TODO: only accept POST
 	log.Debug().Msg("handleOff")
+
+	client := osc.NewClient("localhost", 12321)
+	// page 20, 3rd button
+	msg := osc.NewMessage("/press/bank/20/3")
+	client.Send(msg)
+
 	sendAPIResponse(w, r)
 }
 
