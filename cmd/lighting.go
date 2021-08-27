@@ -30,12 +30,11 @@ var lightingBridgeCmd = &cobra.Command{
 	Short: "Serve embedded lighting control page",
 	Long:  `Use OSC to send messages to Companion API for lighting control.`,
 	Run:   lightingBridge,
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.NoArgs,
 }
 
 func lightingBridge(cmd *cobra.Command, args []string) {
-	//companionAddr := args[0] // TODO: connect to companion
-	serverAddr := "127.0.0.1:" + ServerPort
+	listenAddr := "127.0.0.1:" + ServerPort
 	dist, _ := fs.Sub(embeddy.GetNextFS(), "dist")
 
 	fs.WalkDir(dist, ".", func(path string, d fs.DirEntry, err error) error {
@@ -55,34 +54,52 @@ func lightingBridge(cmd *cobra.Command, args []string) {
 	// The API will be served under `/api`.
 	http.HandleFunc("/api/on", handleON)
 	http.HandleFunc("/api/off", handleOff)
+	http.HandleFunc("/api/ftb", handleFTB)
+	http.HandleFunc("/api/dsk", handleDSK)
 
 	// Start HTTP server at :8080.
-	log.Debug().Msgf("Starting HTTP server at: http://%s\n", serverAddr)
-	err := http.ListenAndServe(serverAddr, nil)
+	log.Debug().Msgf("Starting HTTP server at: http://%s\n", listenAddr)
+	err := http.ListenAndServe(listenAddr, nil)
 	if err != nil {
 		log.Error().Err(err).Msg("error from ListenAndServe")
 	}
 }
 
+func sendOSC(path string) {
+	client := osc.NewClient(CompanionAddr, 12321) // TODO configurable port
+	msg := osc.NewMessage(path)
+	client.Send(msg)
+}
+
 func handleON(w http.ResponseWriter, r *http.Request) {
 	// TODO: only accept POST
 	log.Debug().Msg("handleON")
-	client := osc.NewClient("localhost", 12321) // TODO configurable port
-	// TODO configurable button. right now, page 20, 2nd button
-	msg := osc.NewMessage("/press/bank/20/2")
-	client.Send(msg)
+	// page 20, 2nd button
+	sendOSC("/press/bank/20/2")
 	sendAPIResponse(w, r)
 }
 
 func handleOff(w http.ResponseWriter, r *http.Request) {
 	// TODO: only accept POST
 	log.Debug().Msg("handleOff")
-
-	client := osc.NewClient("localhost", 12321)
 	// page 20, 3rd button
-	msg := osc.NewMessage("/press/bank/20/3")
-	client.Send(msg)
+	sendOSC("/press/bank/20/3")
+	sendAPIResponse(w, r)
+}
 
+func handleFTB(w http.ResponseWriter, r *http.Request) {
+	// TODO: only accept POST
+	log.Debug().Msg("handleFTB")
+	// page 20, 4th button
+	sendOSC("/press/bank/20/4")
+	sendAPIResponse(w, r)
+}
+
+func handleDSK(w http.ResponseWriter, r *http.Request) {
+	// TODO: only accept POST
+	log.Debug().Msg("handleDSK")
+	// page 20, 5th button
+	sendOSC("/press/bank/20/5")
 	sendAPIResponse(w, r)
 }
 
@@ -94,8 +111,10 @@ func sendAPIResponse(w http.ResponseWriter, _ *http.Request) {
 
 // Port to listen for HTTP.
 var ServerPort string
+var CompanionAddr string
 
 func init() {
 	lightingBridgeCmd.Flags().StringVarP(&ServerPort, "port", "p", "7007", "Port to serve website on")
+	lightingBridgeCmd.Flags().StringVarP(&CompanionAddr, "companion", "c", "127.0.0.1", "Address to send companion OSC commands")
 	rootCmd.AddCommand(lightingBridgeCmd)
 }

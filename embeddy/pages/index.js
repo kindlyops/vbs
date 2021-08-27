@@ -7,15 +7,25 @@ export default function Home() {
 
     return { data: data.results };
   };
-  const lightsOn = (event) => {
+  const sendOn = (event) => {
     event.preventDefault();
 
     sendRequest("/api/on");
   };
-  const lightsOff = (event) => {
+  const sendOff = (event) => {
     event.preventDefault();
 
     sendRequest("/api/off");
+  };
+  const sendFTB = (event) => {
+    event.preventDefault();
+
+    sendRequest("/api/ftb");
+  };
+  const sendDSK = (event) => {
+    event.preventDefault();
+
+    sendRequest("/api/dsk");
   };
   return (
     <div className="container">
@@ -30,14 +40,22 @@ export default function Home() {
         </h1>
 
         <div className="grid">
-          <a href="#on" className="card" onClick={lightsOn}>
+          <a href="#on" className="card" onClick={sendOn}>
             <h3>On &#128161;</h3>
-            <p>Turn the lights on.</p>
+            <p>light on.</p>
           </a>
 
-          <a href="#off" className="card" onClick={lightsOff}>
+          <a href="#off" className="card" onClick={sendOff}>
             <h3>Off &#128268;</h3>
-            <p>Turn the lights off.</p>
+            <p>light off.</p>
+          </a>
+          <a href="#ftb" className="card" onClick={sendFTB}>
+            <h3>FTB &#10084;</h3>
+            <p>fade to black</p>
+          </a>
+                    <a href="#off" className="card" onClick={sendDSK}>
+            <h3>DSK &#129668;</h3>
+            <p>toggle DSK.</p>
           </a>
         </div>
         <p className="description">
