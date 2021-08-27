@@ -1,2 +1,5 @@
 test --test_output=errors
 test --test_verbose_timeout_warnings
+
+build --spawn_strategy=local
+build --verbose_failures

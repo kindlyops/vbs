@@ -3,6 +3,8 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 load("//:version.bzl", "VERSION")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
+package(default_visibility = ["//visibility:public"])
+
 # gazelle:prefix github.com/kindlyops/vbs
 # gazelle:exclude dummy.go
 gazelle(
@@ -13,9 +15,9 @@ gazelle(
 go_library(
     name = "go_default_library",
     srcs = ["main.go"],
-    importpath = "github.com/kindlyops/vbs",
+    importpath = "github.com/kindlyops/vbs/embeddy",
     visibility = ["//visibility:private"],
-    deps = ["//cmd:go_default_library"],
+    deps = ["//cmd:go_default_library", "//embeddy:go_default_library"],
 )
 
 go_binary(
@@ -107,9 +109,8 @@ go_test(
         ],
         "//conditions:default": [],
     }),
-    embed = [":go_default_library"],
     rundir = ".",
-    deps = ["//vendor/github.com/bazelbuild/rules_go/go/tools/bazel:go_default_library"],
+    deps = ["//vendor/github.com/bazelbuild/rules_go/go/tools/bazel"],
 )
 
 sh_binary(

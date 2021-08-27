@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "chapters.go",
         "ivs.go",
+        "lighting.go",
         "root.go",
     ],
     importpath = "github.com/kindlyops/vbs/cmd",
@@ -21,5 +22,6 @@ go_library(
         "//vendor/github.com/rs/zerolog/log:go_default_library",
         "//vendor/github.com/spf13/cobra:go_default_library",
         "//vendor/github.com/spf13/viper:go_default_library",
+        "//embeddy:go_default_library",
     ],
 )
