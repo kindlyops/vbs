@@ -7,6 +7,12 @@
 An Open Sound Control bridge for integrating Companion, QLab, and more with
 the IVS PutMetadata API
 
+## Lighting bridge
+
+An bridge from a mobile web page to an instance of Companion for Streamdeck
+running on your local network. Now remote people can press the same buttons
+you have on your streamdeck!
+
 ## media Chapters
 
 Generate OBS scenes from chapter markers for easier setup of run lists.
