@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 type Embed struct {
@@ -18,7 +19,6 @@ type Embed struct {
 func main() {
 	output := os.Args[1]
 	srcdir := os.Args[2]
-	prefix := len(srcdir)
 	outdir := path.Dir(output)
 	outfile := path.Base(output)
 	expanded, err := filepath.Abs(path.Dir(srcdir))
@@ -29,27 +29,30 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error EvalSymlinks %s: %v", output, err)
 	}
+	srcdir += "/"
+	distdir := srcdir + "dist/"
 	outfile = path.Join(outdir, outfile)
 
 	manifest := map[string]string{}
 	data := Embed{
 		Package: path.Base(outdir),
-		Embeds:  []string{"dist/*"},
+		Embeds:  []string{},
 	}
 
-	filepath.WalkDir(srcdir+"/", func(path string, d fs.DirEntry, err error) error {
+	log.Printf("DEBUG scanning %s\n", distdir)
+
+	filepath.WalkDir(distdir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		//fmt.Printf("path=%q, isDir=%v\n", path, d.IsDir())
-		if len(path) < prefix {
-			log.Fatalf("Error walking %s, %s is too short\n", srcdir, path)
-		}
-		target := path[prefix:]
+
+		target := strings.TrimPrefix(path, srcdir)
 		if d.IsDir() {
 			os.MkdirAll(filepath.Join(outdir, target), 0755)
 		} else {
-
+			log.Printf("processing %s\n", target)
+			// stinkin https://github.com/golang/go/issues/43854
+			data.Embeds = append(data.Embeds, target)
 		}
 		manifest[target] = fmt.Sprintf("%v", d.IsDir())
 		return nil

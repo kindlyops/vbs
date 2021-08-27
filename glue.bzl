@@ -7,7 +7,7 @@ def _static_site_embedder_impl(ctx):
         inputs = ctx.files.srcs,
         arguments = args,
         outputs = [ctx.outputs.embedder],
-        progress_message = "Generating %s" % str(ctx.outputs.embedder.path),
+        progress_message = "Generating %s from %s" % (str(ctx.outputs.embedder.path), str(ctx.files.srcs)),
         executable = ctx.executable._manifester,
     )
     return [DefaultInfo(files = depset([ctx.outputs.embedder]))]
@@ -20,7 +20,7 @@ This is useful for collecting together the generated files from a static
 site build and embedding or publishing.
 """,
     attrs = {
-        "srcs": attr.label_list(),
+        "srcs": attr.label_list(allow_files = True),
         "_manifester": attr.label(
             default = Label("//sitemanifest:manifester"),
             allow_single_file = True,

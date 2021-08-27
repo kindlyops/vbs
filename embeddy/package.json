@@ -9,6 +9,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "jshint": "^2.13.1",
     "next": "^11.0.0",
     "patch-package": "^6.4.7",
     "postinstall-postinstall": "^2.1.0",

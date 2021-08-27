@@ -46,7 +46,7 @@ next(
 
 static_site_embedder(
     name = "embedder",
-    srcs = [":build"],
+    srcs = [":dist"],
 )
 
 go_library(
