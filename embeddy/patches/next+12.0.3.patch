@@ -1,0 +1,16 @@
+diff --git a/node_modules/next/dist/build/is-writeable.js b/node_modules/next/dist/build/is-writeable.js
+index 679e1e5..9cbac0e 100644
+--- a/node_modules/next/dist/build/is-writeable.js
++++ b/node_modules/next/dist/build/is-writeable.js
+@@ -14,7 +14,10 @@ async function isWriteable(directory) {
+         await _fs.default.promises.access(directory, (_fs.default.constants || _fs.default).W_OK);
+         return true;
+     } catch (err) {
+-        return false;
++      if( err.errno===-13 && err.path.includes('/bazel-out/') ) {
++        return true;
++      }
++      return false;
+     }
+ }
+ 
