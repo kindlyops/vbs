@@ -3,12 +3,12 @@ project_name: vbs
 builds:
   -
     main: dummy.go
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
+    targets:
+      - linux_amd64
+      - linux_arm64
+      - darwin_amd64
+      - darwin_arm64
+      - windows_amd64
     binary: vbs
     hooks:
       post: pwsh goreleaser-post-hook.ps1

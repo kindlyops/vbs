@@ -32,9 +32,31 @@ go_binary(
 )
 
 go_binary(
+    name = "vbs-linux-arm",
+    embed = [":go_default_library"],
+    goarch = "arm64",
+    goos = "linux",
+    visibility = ["//visibility:public"],
+    x_defs = {
+        "version": VERSION,
+    },
+)
+
+go_binary(
     name = "vbs-darwin",
     embed = [":go_default_library"],
     goarch = "amd64",
+    goos = "darwin",
+    visibility = ["//visibility:public"],
+    x_defs = {
+        "version": VERSION,
+    },
+)
+
+go_binary(
+    name = "vbs-darwin-m1",
+    embed = [":go_default_library"],
+    goarch = "arm64",
     goos = "darwin",
     visibility = ["//visibility:public"],
     x_defs = {
@@ -57,7 +79,9 @@ alias(
     name = "vbs",
     actual = select({
         "@io_bazel_rules_go//go/platform:linux_amd64": ":vbs-linux",
+        "@io_bazel_rules_go//go/platform:linux_arm64": ":vbs-linux-arm",
         "@io_bazel_rules_go//go/platform:darwin_amd64": ":vbs-darwin",
+        "@io_bazel_rules_go//go/platform:darwin_arm64": ":vbs-darwin-m1",
         "@io_bazel_rules_go//go/platform:windows_amd64": ":vbs-windows",
         "//conditions:default": ":vbs-linux",
     }),
@@ -70,9 +94,21 @@ copy_file(
 )
 
 copy_file(
+    name = "install-darwin-m1",
+    src = "//:vbs-darwin-m1",
+    out = "bdist/vbs_darwin_arm64/vbs",
+)
+
+copy_file(
     name = "install-linux",
     src = "//:vbs-linux",
     out = "bdist/vbs_linux_amd64/vbs",
+)
+
+copy_file(
+    name = "install-linux-arm",
+    src = "//:vbs-linux-arm",
+    out = "bdist/vbs_linux_arm64/vbs",
 )
 
 copy_file(
@@ -89,8 +125,14 @@ go_test(
         "@io_bazel_rules_go//go/platform:linux_amd64": [
             "$(location :vbs-linux)",
         ],
+        "@io_bazel_rules_go//go/platform:linux_arm64": [
+            "$(location :vbs-linux)",
+        ],
         "@io_bazel_rules_go//go/platform:darwin_amd64": [
             "$(location :vbs-darwin)",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin_arm64": [
+            "$(location :vbs-darwin-m1)",
         ],
         "@io_bazel_rules_go//go/platform:windows_amd64": [
             "$(location :vbs-windows)",
@@ -101,8 +143,14 @@ go_test(
         "@io_bazel_rules_go//go/platform:linux_amd64": [
             ":vbs-linux",
         ],
+        "@io_bazel_rules_go//go/platform:linux_arm64": [
+            ":vbs-linux",
+        ],
         "@io_bazel_rules_go//go/platform:darwin_amd64": [
             ":vbs-darwin",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin_arm64": [
+            ":vbs-darwin-m1",
         ],
         "@io_bazel_rules_go//go/platform:windows_amd64": [
             ":vbs-windows",
