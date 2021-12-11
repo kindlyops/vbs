@@ -126,7 +126,7 @@ go_test(
             "$(location :vbs-linux)",
         ],
         "@io_bazel_rules_go//go/platform:linux_arm64": [
-            "$(location :vbs-linux)",
+            "$(location :vbs-linux-arm)",
         ],
         "@io_bazel_rules_go//go/platform:darwin_amd64": [
             "$(location :vbs-darwin)",
@@ -144,7 +144,7 @@ go_test(
             ":vbs-linux",
         ],
         "@io_bazel_rules_go//go/platform:linux_arm64": [
-            ":vbs-linux",
+            ":vbs-linux-arm",
         ],
         "@io_bazel_rules_go//go/platform:darwin_amd64": [
             ":vbs-darwin",
