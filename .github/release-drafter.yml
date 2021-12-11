@@ -18,3 +18,9 @@ template: |
   ## Changes
 
   $CHANGES
+
+  **All Changes**: https://github.com/kindlyops/deleterious/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+  
+  ## Contributors
+  
+  $CONTRIBUTORS
