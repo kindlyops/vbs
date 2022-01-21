@@ -17,6 +17,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -72,7 +73,9 @@ func chapterSplit(cmd *cobra.Command, args []string) {
 
 	base := strings.Trim(path.Base(target), path.Ext(target))
 	targetdir := fmt.Sprintf("split_%s", base)
-	err = os.MkdirAll(targetdir, 0777)
+
+	var global fs.FileMode = 0777
+	err = os.MkdirAll(targetdir, global)
 
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create output directory")
@@ -97,13 +100,17 @@ func copyChapter(wg *sync.WaitGroup, c chapter, sourcefile, targetdir string) {
 	prefix := fmt.Sprintf("%03d_", c.ID)
 	outfile := filepath.Join(targetdir, prefix+safetitle+path.Ext(sourcefile))
 
+	// https://trac.ffmpeg.org/wiki/Seeking#Cuttingsmallsections
 	cmd := exec.Command("ffmpeg",
 		"-loglevel", "error",
-		"-i", sourcefile,
-		"-c", "copy",
-		"-map", "0",
 		"-ss", c.StartTime,
+		"-i", sourcefile,
 		"-to", c.EndTime,
+		"-c", "copy",
+		"-copyts", // do not process input timestamps
+		// "-map 0:v", // we are using automatic stream selection
+		"-y", // overwrite output files
+		"-avoid_negative_ts", "1",
 		outfile)
 
 	output, err := cmd.CombinedOutput()
