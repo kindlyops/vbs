@@ -15,9 +15,9 @@ gazelle(
 go_library(
     name = "go_default_library",
     srcs = ["main.go"],
-    importpath = "github.com/kindlyops/vbs/embeddy",
+    importpath = "github.com/kindlyops/vbs",
     visibility = ["//visibility:private"],
-    deps = ["//cmd:go_default_library", "//embeddy:go_default_library"],
+    deps = ["//cmd:go_default_library"],
 )
 
 go_binary(

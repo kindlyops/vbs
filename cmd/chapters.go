@@ -59,7 +59,7 @@ func chapterSplit(cmd *cobra.Command, args []string) {
 		log.Fatal().Err(err).Msg("Could not find ffmpeg. Please install ffmpeg.")
 	}
 
-	target := args[0]
+	target, _ := filepath.Abs(args[0])
 	_, err = os.Stat(target)
 
 	if err != nil {
