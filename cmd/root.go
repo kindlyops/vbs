@@ -17,10 +17,10 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/mattn/go-isatty"
-	homedir "github.com/mitchellh/go-homedir"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -55,6 +55,35 @@ use at your own risk.
 	//	Run: func(cmd *cobra.Command, args []string) { },
 }
 
+var configCmd = &cobra.Command{
+	Use:   "save-config",
+	Short: "Save the current config.",
+	Long:  `Save the current config after merge from files, arguments, and environment.`,
+	Run:   saveConfig,
+	Args:  cobra.NoArgs,
+}
+
+func saveConfig(cmd *cobra.Command, args []string) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatal().Stack().Err(err).Msg("Couldn't locate config dir")
+	}
+
+	configDir = filepath.Join(configDir, "vbs")
+
+	os.MkdirAll(configDir, os.ModePerm)
+
+	if err != nil {
+		log.Fatal().Stack().Err(err).Msg("Couldn't create config dir")
+	}
+
+	err = viper.SafeWriteConfig()
+
+	if err != nil {
+		log.Fatal().Err(err).Msgf("Error writing out config to %s.", viper.ConfigFileUsed())
+	}
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute(v string) {
@@ -81,27 +110,35 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vbs.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "override config file")
+	viper.BindPFlag("config_file", rootCmd.PersistentFlags().Lookup("config"))
 
 	rootCmd.PersistentFlags().BoolVarP(&Debug, "debug", "d", false, "Print debug messages while working")
+
+	rootCmd.AddCommand(configCmd)
 }
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	if cfgFile != "" {
+	viper.SetConfigType("yaml")
+
+	configFile := viper.GetString("config_file")
+
+	if configFile != "" {
 		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
+		viper.SetConfigFile(configFile)
 	} else {
-		// Find home directory.
-		home, err := homedir.Dir()
+		// Find platform appropriate config directory.
+		configDir, err := os.UserConfigDir()
 		if err != nil {
-			log.Error().Stack().Err(err).Msg("Couldn't locate home dir")
-			os.Exit(1)
+			log.Fatal().Stack().Err(err).Msg("Couldn't locate config dir")
 		}
 
+		configDir = filepath.Join(configDir, "vbs")
+
 		// Search config in home directory with name ".vbs" (without extension).
-		viper.AddConfigPath(home)
-		viper.SetConfigName(".vbs")
+		viper.AddConfigPath(configDir)
+		viper.SetConfigName("config")
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match
