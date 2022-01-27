@@ -1,5 +1,5 @@
-name-template: "v$NEXT_PATCH_VERSION  ⛴️"
-tag-template: "v$NEXT_PATCH_VERSION"
+name-template: "v$RESOLVED_VERSION ⛴️"
+tag-template: "v$RESOLVED_VERSION"
 categories:
   - title: "🎬 Features"
     labels:
@@ -20,7 +20,25 @@ template: |
   $CHANGES
 
   **All Changes**: https://github.com/kindlyops/deleterious/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
-  
+
   ## Contributors
-  
+
   $CONTRIBUTORS
+
+version-resolver:
+  major:
+    labels:
+      - 'type: breaking'
+  minor:
+    labels:
+      - 'type: feature'
+  patch:
+    labels:
+      - 'type: bug'
+      - 'type: maintenance'
+      - 'type: docs'
+      - 'type: dependencies'
+      - 'type: security'
+
+exclude-labels:
+  - 'skip-changelog'
