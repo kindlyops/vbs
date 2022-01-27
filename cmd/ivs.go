@@ -23,6 +23,7 @@ import (
 	"github.com/hypebeast/go-osc/osc"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var ivsOscBridgeCmd = &cobra.Command{
@@ -43,7 +44,7 @@ var ivsPutMetadataCmd = &cobra.Command{
 
 func ivsOscBridge(cmd *cobra.Command, args []string) {
 	arn := args[0]
-	addr := "127.0.0.1:" + Port
+	addr := "127.0.0.1:" + viper.GetString("ivs_port")
 
 	log.Debug().Msgf("Listening on port: '%s'\n", addr)
 
@@ -99,6 +100,7 @@ var Port string
 
 func init() {
 	ivsOscBridgeCmd.Flags().StringVarP(&Port, "port", "p", "4427", "Port to listen for OSC")
+	viper.BindPFlag("ivs_port", ivsOscBridgeCmd.Flags().Lookup("port"))
 	rootCmd.AddCommand(ivsOscBridgeCmd)
 	rootCmd.AddCommand(ivsPutMetadataCmd)
 }

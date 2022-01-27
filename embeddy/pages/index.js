@@ -10,22 +10,42 @@ export default function Home() {
   const sendOn = (event) => {
     event.preventDefault();
 
-    sendRequest("/api/on");
+    sendRequest("/api/lighting/keylighton");
   };
-  const sendOff = (event) => {
+  const sendGreen = (event) => {
     event.preventDefault();
 
-    sendRequest("/api/off");
+    sendRequest("/api/light/green");
+  };
+  const sendBlue = (event) => {
+    event.preventDefault();
+
+    sendRequest("/api/light/blue");
+  };
+  const sendRed = (event) => {
+    event.preventDefault();
+
+    sendRequest("/api/light/red");
+  };
+  const sendYellow = (event) => {
+    event.preventDefault();
+
+    sendRequest("/api/light/yellow");
+  };
+  const sendBackgroundOff = (event) => {
+    event.preventDefault();
+
+    sendRequest("/api/light/off");
   };
   const sendFTB = (event) => {
     event.preventDefault();
 
-    sendRequest("/api/ftb");
+    sendRequest("/api/switcher/ftb");
   };
   const sendDSK = (event) => {
     event.preventDefault();
 
-    sendRequest("/api/dsk");
+    sendRequest("/api/switcher/dsk");
   };
   return (
     <div className="container">
@@ -40,12 +60,24 @@ export default function Home() {
         </h1>
 
         <div className="grid">
-          <a href="#on" className="card" onClick={sendOn}>
+          <a href="#on" className="card" onClick={sendGreen} style={{ backgroundColor: "hsl(130, 100%, 50%)" }}>
             <h3>On &#128161;</h3>
-            <p>light on.</p>
+            <p>Green light.</p>
+          </a>
+          <a href="#on" className="card" onClick={sendBlue} style={{ backgroundColor: "hsl(210, 100%, 50%)" }}>
+            <h3>On &#128161;</h3>
+            <p>Blue light.</p>
+          </a>
+          <a href="#on" className="card" onClick={sendYellow} style={{ backgroundColor: "hsl(60, 100%, 50%)" }}>
+            <h3>On &#128161;</h3>
+            <p>Yellow light.</p>
+          </a>
+          <a href="#on" className="card" onClick={sendRed} style={{ backgroundColor: "hsl(10, 100%, 50%)" }}>
+            <h3>On &#128161;</h3>
+            <p>Red light.</p>
           </a>
 
-          <a href="#off" className="card" onClick={sendOff}>
+          <a href="#off" className="card" onClick={sendBackgroundOff}>
             <h3>Off &#128268;</h3>
             <p>light off.</p>
           </a>
@@ -53,7 +85,7 @@ export default function Home() {
             <h3>FTB &#10084;</h3>
             <p>fade to black</p>
           </a>
-                    <a href="#off" className="card" onClick={sendDSK}>
+          <a href="#off" className="card" onClick={sendDSK}>
             <h3>DSK &#129668;</h3>
             <p>toggle DSK.</p>
           </a>
@@ -61,7 +93,7 @@ export default function Home() {
         <p className="description">
           Send <code>OSC</code> commands to Companion.app
         </p>
-      </main>
+      </main >
 
       <footer>
         <a
@@ -220,6 +252,6 @@ export default function Home() {
           box-sizing: border-box;
         }
       `}</style>
-    </div>
+    </div >
   )
 }
