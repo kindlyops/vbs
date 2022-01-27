@@ -9,13 +9,15 @@ require (
 	github.com/hypebeast/go-osc v0.0.0-20200115085105-85fee7fed692
 	github.com/kennygrant/sanitize v1.2.4
 	github.com/mattn/go-isatty v0.0.13
-	github.com/mitchellh/go-homedir v1.1.0
 	github.com/rs/zerolog v1.22.0
 	github.com/spf13/cobra v0.0.7
 	github.com/spf13/viper v1.7.0
 )
 
-require github.com/charmbracelet/bubbletea v0.19.3
+require (
+	github.com/Microsoft/go-winio v0.5.1
+	github.com/charmbracelet/bubbletea v0.19.3
+)
 
 require (
 	github.com/containerd/console v1.0.2 // indirect
