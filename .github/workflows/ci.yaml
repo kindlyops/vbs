@@ -19,21 +19,21 @@ jobs:
         with:
           token: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
           ref: ${{ github.head_ref }}
-      - name: bazel build
-        run: bazel build //...
-      - name: Sync Dependencies
+    - name: Sync Dependencies
         run: bazel run //:vendor
-        if: github.actor == 'dependabot-preview[bot]'
-      - name: Test
-        run: bazel test //...
+        if: (github.actor == 'dependabot-preview[bot]') || (github.actor == 'renovate[bot]')
       - name: autocommit
-        uses: stefanzweifel/git-auto-commit-action@v3.0.0
+        uses: stefanzweifel/git-auto-commit-action@v4.13.1
         with:
           commit_message: Apply syncdeps changes
           branch: ${{ github.head_ref }}
         env:
           GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
-        if: github.actor == 'dependabot-preview[bot]'
+        if: (github.actor == 'dependabot-preview[bot]') || (github.actor == 'renovate[bot]')
+      - name: bazel build
+        run: bazel build //...
+      - name: Test
+        run: bazel test //...
       - name: Coverage
         run: |
           bazel coverage //...
