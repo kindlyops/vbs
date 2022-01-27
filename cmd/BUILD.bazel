@@ -7,6 +7,8 @@ go_library(
         "ivs.go",
         "lighting.go",
         "play.go",
+        "play_unix.go",
+        "play_windows.go",
         "root.go",
     ],
     importpath = "github.com/kindlyops/vbs/cmd",
@@ -19,11 +21,15 @@ go_library(
         "//vendor/github.com/hypebeast/go-osc/osc:go_default_library",
         "//vendor/github.com/kennygrant/sanitize:go_default_library",
         "//vendor/github.com/mattn/go-isatty:go_default_library",
-        "//vendor/github.com/mitchellh/go-homedir:go_default_library",
         "//vendor/github.com/rs/zerolog:go_default_library",
         "//vendor/github.com/rs/zerolog/log:go_default_library",
         "//vendor/github.com/spf13/cobra:go_default_library",
         "//vendor/github.com/spf13/viper:go_default_library",
-        "//embeddy:go_default_library",
-    ],
+        "//embeddy:go_default_library", # keep
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//vendor/github.com/Microsoft/go-winio:go_default_library",
+        ],
+        "//conditions:default": [],
+    }),
 )

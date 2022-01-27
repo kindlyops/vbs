@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"io/fs"
+	"net/http"
 	"strings"
 
 	"github.com/hypebeast/go-osc/osc"
@@ -23,8 +24,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-
-	"net/http"
 )
 
 var lightingBridgeCmd = &cobra.Command{

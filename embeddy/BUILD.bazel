@@ -49,6 +49,7 @@ static_site_embedder(
     srcs = [":dist"],
 )
 
+# keep
 go_library(
     name = "go_default_library",
     srcs = [":embedder"],
