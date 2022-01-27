@@ -17,7 +17,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -189,26 +188,20 @@ func play(cmd *cobra.Command, args []string) {
 
 	m := initialModel(target)
 
-	f, err := ioutil.TempFile("", "vbs-player")
-	if err != nil {
-		log.Fatal().Err(err).Msg("Could not create temp file")
-	}
+	ipcName := GetIPCName()
+	defer os.Remove(ipcName)
 
-	socketName := f.Name()
+	m.debug = ipcName
 
-	os.Remove(socketName)
-	defer os.Remove(socketName)
-
-	m.debug = socketName
-
-	go runMpvPlayer(m.outputScreen, socketName, m.currentItem)
+	go runMpvPlayer(m.outputScreen, ipcName, m.currentItem)
 
 	time.Sleep(1 * time.Second)
 
-	c, err := net.Dial("unix", socketName)
+	c, err := ConnectIPC(ipcName)
 	m.controlSocket = c
 
-	// TODO: set up an event loop and turn them into messages
+	// TODO: set up an event loop and turn them into messages so we can handle
+	// events like a file ending
 	// go responseEventReader(m.controlSocket)
 
 	if err != nil {

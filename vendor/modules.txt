@@ -1,3 +1,7 @@
+# github.com/Microsoft/go-winio v0.5.1
+## explicit; go 1.12
+github.com/Microsoft/go-winio
+github.com/Microsoft/go-winio/pkg/guid
 # github.com/aws/aws-sdk-go v1.36.28
 ## explicit; go 1.11
 github.com/aws/aws-sdk-go/aws
@@ -86,9 +90,6 @@ github.com/mattn/go-isatty
 # github.com/mattn/go-runewidth v0.0.13
 ## explicit; go 1.9
 github.com/mattn/go-runewidth
-# github.com/mitchellh/go-homedir v1.1.0
-## explicit
-github.com/mitchellh/go-homedir
 # github.com/mitchellh/mapstructure v1.1.2
 ## explicit
 github.com/mitchellh/mapstructure
