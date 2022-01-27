@@ -36,4 +36,4 @@ jobs:
         with:
             github-token: '${{ secrets.GITHUB_TOKEN }}'
             disable-reviews: true
-            valid-labels: 'bug, feature, security, maintenance, documentation'
+            valid-labels: 'bug, feature, security, maintenance, documentation, dependencies'
