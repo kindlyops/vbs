@@ -1,5 +1,11 @@
 name: fast lint checks
 on: [pull_request]
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
 jobs:
   shellcheck:
     name: runner / shellcheck
