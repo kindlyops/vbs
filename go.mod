@@ -9,7 +9,7 @@ require (
 	github.com/hypebeast/go-osc v0.0.0-20200115085105-85fee7fed692
 	github.com/kennygrant/sanitize v1.2.4
 	github.com/mattn/go-isatty v0.0.14
-	github.com/rs/zerolog v1.22.0
+	github.com/rs/zerolog v1.26.1
 	github.com/spf13/cobra v0.0.7
 	github.com/spf13/viper v1.7.0
 )
@@ -41,10 +41,10 @@ require (
 	github.com/spf13/pflag v1.0.3 // indirect
 	github.com/stretchr/testify v1.5.1 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
-	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b // indirect
-	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
+	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
+	golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e // indirect
 	golang.org/x/term v0.0.0-20210422114643-f5beecf764ed // indirect
-	golang.org/x/text v0.3.3 // indirect
+	golang.org/x/text v0.3.6 // indirect
 	gopkg.in/ini.v1 v1.51.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 )
