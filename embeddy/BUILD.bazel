@@ -29,7 +29,7 @@ next(
     name = "next_build",
     outs = [".next"],
     args = ["build $(RULEDIR)"],
-    data = [":copy_source_files"], # + NPM_DEPENDENCIES,
+    data = [":copy_source_files"],  # + NPM_DEPENDENCIES,
     tags = ["no-sandbox"],
 )
 
@@ -41,7 +41,7 @@ next(
         "-o $(@)",
     ],
     data = [":next_build"],
-    visibility = ["//visibility:public"]
+    visibility = ["//visibility:public"],
 )
 
 static_site_embedder(
@@ -57,5 +57,3 @@ go_library(
     importpath = "github.com/kindlyops/vbs/embeddy",
     visibility = ["//visibility:public"],
 )
-
-
