@@ -34,10 +34,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
         if: github.actor == 'dependabot-preview[bot]'
+      - name: Coverage
+        run: |
+          bazel coverage //...
+          echo "coverage_files=$(find bazel-out/ -name 'coverage.dat' -printf '%p, ' | sed 's/, $//')" >> $GITHUB_ENV
+      - name: Detected Coverage Files
+        run: echo ${{ env.coverage_files }}
+      - uses: codecov/codecov-action@v2
+        name: codecov upload
+        with:
+          files: ${{ env.coverage_files }}
       - name: Set up Go
         uses: actions/setup-go@master
         with:
-          go-version: 1.17.2
+          go-version: 1.17.6
       - name: dry run goreleaser
         uses: goreleaser/goreleaser-action@master
         env:
