@@ -21,9 +21,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -36,6 +42,70 @@ var playCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 }
 
+// keyMap defines a set of keybindings. To work for help it must satisfy
+// key.Map. It could also very easily be a map[string]key.Binding.
+type keyMap struct {
+	Up         key.Binding
+	Down       key.Binding
+	Left       key.Binding
+	Right      key.Binding
+	Help       key.Binding
+	Quit       key.Binding
+	Fullscreen key.Binding
+	Play       key.Binding
+}
+
+// ShortHelp returns keybindings to be shown in the mini help view. It's part
+// of the key.Map interface.
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Help, k.Quit}
+}
+
+// FullHelp returns keybindings for the expanded help view. It's part of the
+// key.Map interface.
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Up, k.Down, k.Left, k.Right}, // first column
+		{k.Help, k.Quit},                // second column
+		{k.Play, k.Fullscreen},          // third column
+	}
+}
+
+var keys = keyMap{
+	Play: key.NewBinding(
+		key.WithKeys(" ", "space", "enter"),
+		key.WithHelp("space/enter/p", "play/pause"),
+	),
+	Fullscreen: key.NewBinding(
+		key.WithKeys("F", "f"),
+		key.WithHelp("f", "fullscreen"),
+	),
+	Up: key.NewBinding(
+		key.WithKeys("up", "k"),
+		key.WithHelp("↑/k", "move up"),
+	),
+	Down: key.NewBinding(
+		key.WithKeys("down", "j"),
+		key.WithHelp("↓/j", "move down"),
+	),
+	Left: key.NewBinding(
+		key.WithKeys("left", "h"),
+		key.WithHelp("←/h", "move left"),
+	),
+	Right: key.NewBinding(
+		key.WithKeys("right", "l"),
+		key.WithHelp("→/l", "move right"),
+	),
+	Help: key.NewBinding(
+		key.WithKeys("?"),
+		key.WithHelp("?", "toggle help"),
+	),
+	Quit: key.NewBinding(
+		key.WithKeys("q", "esc", "ctrl+c"),
+		key.WithHelp("q", "quit"),
+	),
+}
+
 type model struct {
 	currentItem   string
 	remainingTime float32
@@ -44,10 +114,19 @@ type model struct {
 	playing       bool
 	debug         string
 	controlSocket net.Conn
+	sub           chan responseMsg // event channel
+	responses     int              // how many responses we've received
+	spinner       spinner.Model
+	keys          keyMap
+	help          help.Model
+	inputStyle    lipgloss.Style
+	quitting      bool
+	percent       float64
+	progress      progress.Model
 }
 
 func initialModel(file string) model {
-	return model{
+	m := model{
 		currentItem:   file,
 		fullScreen:    false,
 		remainingTime: 0,
@@ -55,27 +134,48 @@ func initialModel(file string) model {
 		playing:       false,
 		debug:         "",
 		controlSocket: nil,
+		sub:           make(chan responseMsg),
+		responses:     0,
+		spinner:       spinner.New(),
+		keys:          keys,
+		help:          help.New(),
+		inputStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("#FF75B7")),
+		quitting:      false,
+		percent:       0,
+		progress:      progress.New(progress.WithScaledGradient("#FF7CCB", "#FDFF8C")),
 	}
+	m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
+	m.spinner.Spinner = spinner.Monkey
+
+	return m
 }
 
+var (
+	appStyle   = lipgloss.NewStyle().Padding(1, 2)
+	titleStyle = func() lipgloss.Style {
+		b := lipgloss.RoundedBorder()
+		// b.Right = "├"
+
+		return lipgloss.NewStyle().BorderStyle(b).Padding(1, 2).
+			Foreground(lipgloss.Color("#FFFDF5")).
+			Background(lipgloss.Color("#25A065"))
+	}
+
+	statusMessageStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#04B575"}).
+				Render
+)
+
 func (m model) Init() tea.Cmd {
-	// Just return `nil`, which means "no I/O right now, please."
-	return nil
+	return tea.Batch(
+		tea.EnterAltScreen,
+		spinner.Tick,
+		listenForMpvEvents(m.sub, m.controlSocket), // loop read on mpv socket
+		waitForActivity(m.sub),                     // wait for mpv event to be sent on channel
+	)
 }
 
 type vbsQuit int
-
-func responseReader(c net.Conn) {
-	bufferSize := 2048
-	response := make([]byte, bufferSize)
-	count, err := c.Read(response)
-
-	if err != nil {
-		log.Fatal().Err(err).Msg("Could not read response")
-	}
-
-	log.Debug().Msgf("Response: %s", response[:count])
-}
 
 func cmdQuitMpv(m model) tea.Cmd {
 	return func() tea.Msg {
@@ -91,7 +191,7 @@ func cmdQuitMpv(m model) tea.Cmd {
 
 func cmdPlayMpv(m model) tea.Cmd {
 	return func() tea.Msg {
-		cmd := fmt.Sprintf("{ \"command\": [\"set_property\", \"pause\", %v] }\n", m.playing)
+		cmd := fmt.Sprintf("{ \"command\": [\"set_property\", \"pause\", %t] }\n", m.playing)
 		_, err := m.controlSocket.Write([]byte(cmd))
 
 		if err != nil {
@@ -122,32 +222,57 @@ func cmdFullscreenMpv(m model) tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		// If we set a width on the help menu it can it can gracefully truncate
+		// its view as needed.
+		m.help.Width = msg.Width
+		padding := 2
+		m.progress.Width = msg.Width - padding*2 - 2*padding
+		maxWidth := 80
+
+		if m.progress.Width > maxWidth {
+			m.progress.Width = maxWidth
+		}
 	case vbsQuit:
 		// we finished our cleanup, exit bubbletea
 		return m, tea.Quit
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+
+		return m, cmd
+	case responseMsg:
+		m.responses++ // record external activity
+		m.debug = msg.event
+		full := 100
+		// simulate progress bar activity by counting events until I can
+		// implement property observation for playback remaining
+		m.percent = float64((m.responses+full)%full) * float64(.01)
+
+		return m, waitForActivity(m.sub) // wait for next event
 	// Is it a key press?
 	case tea.KeyMsg:
-		// Cool, what was the actual key pressed?
-		switch msg.String() {
-		// These keys should exit the program.
-		case "ctrl+c", "q":
-			// do our internal cleanup first
-			return m, cmdQuitMpv(m)
-
-		// The "enter" key and the spacebar (a literal space) toggle
-		// the playing state
-		case "enter", " ":
+		switch {
+		case key.Matches(msg, m.keys.Play):
 			m.playing = !m.playing
 
 			return m, cmdPlayMpv(m)
-
-		case "f", "F":
+		case key.Matches(msg, m.keys.Fullscreen):
 			m.fullScreen = !m.fullScreen
 
 			return m, cmdFullscreenMpv(m)
+		case key.Matches(msg, m.keys.Up):
+		case key.Matches(msg, m.keys.Down):
+		case key.Matches(msg, m.keys.Left):
+		case key.Matches(msg, m.keys.Right):
+		case key.Matches(msg, m.keys.Help):
+			m.help.ShowAll = !m.help.ShowAll
+		case key.Matches(msg, m.keys.Quit):
+			m.quitting = true
+
+			return m, cmdQuitMpv(m)
 		}
 	}
-
 	// Return the updated model to the Bubble Tea runtime for processing.
 	// Note that we're not returning a command.
 	return m, nil
@@ -155,21 +280,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	// The header
-	s := "VBS player\n\n"
+	s := titleStyle().Render("VBS player")
 
 	// Render the row
-	s += fmt.Sprintf("Current item: %v\n", m.currentItem)
+	s += fmt.Sprintf("\nCurrent item: %v\n", m.currentItem)
 	s += fmt.Sprintf("Remaining time: %v\n", m.remainingTime)
 	s += fmt.Sprintf("Output screen: %v\n", m.outputScreen)
 	s += fmt.Sprintf("Fullscreen: %v\n", m.fullScreen)
 	s += fmt.Sprintf("Playing: %v\n\n\n", m.playing)
-	s += fmt.Sprintf("Debug: %v\n", m.debug)
+	s += fmt.Sprintf("Debug: '%v'\n", m.debug)
+	s += "-------------------------------------------------------\n"
+	s += fmt.Sprintf("\n %s Events received: %d\n\n", m.spinner.View(), m.responses)
+	s += "\n  " + m.progress.ViewAs(m.percent) + "\n\n"
+	helpView := m.help.View(m.keys)
+	s += fmt.Sprintf("%s\n", helpView)
 
 	// The footer
-	s += "\nPress q to quit. Press <space> to play. f to fullscreen\n"
+	//s += statusMessageStyle("\nPress q to quit. Press ? for help on commands\n")
 
 	// Send the UI for rendering
-	return s
+	return appStyle.Render(s)
 }
 
 func play(cmd *cobra.Command, args []string) {
@@ -200,17 +330,44 @@ func play(cmd *cobra.Command, args []string) {
 	c, err := ConnectIPC(ipcName)
 	m.controlSocket = c
 
-	// TODO: set up an event loop and turn them into messages so we can handle
-	// events like a file ending
-	// go responseEventReader(m.controlSocket)
-
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not open control socket")
 	}
 
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	if err := p.Start(); err != nil {
 		log.Fatal().Err(err).Msg("BUBBLETEA BROKED")
+	}
+}
+
+func listenForMpvEvents(sub chan responseMsg, c net.Conn) tea.Cmd {
+	return func() tea.Msg {
+		for {
+			bufferSize := 4096
+			response := make([]byte, bufferSize)
+			count, err := c.Read(response)
+
+			if err != nil {
+				log.Error().Err(err).Msg("Could not read response")
+			}
+
+			//log.Debug().Msgf("Got %v byte response: %s", count, response[:count])
+			responseEvent := string(response[:count])
+			sub <- responseMsg{
+				event: strings.Split(responseEvent, "\n")[0],
+			}
+		}
+	}
+}
+
+type responseMsg struct {
+	event string
+}
+
+// A command that waits for mpv responses.
+func waitForActivity(sub chan responseMsg) tea.Cmd {
+	return func() tea.Msg {
+		return responseMsg(<-sub)
 	}
 }
 
