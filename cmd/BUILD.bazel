@@ -18,6 +18,7 @@ go_library(
         "//vendor/github.com/aws/aws-sdk-go/aws:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/aws/session:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/service/ivs:go_default_library",
+        "//vendor/github.com/charmbracelet/bubbles/spinner:go_default_library",
         "//vendor/github.com/charmbracelet/bubbletea:go_default_library",
         "//vendor/github.com/hypebeast/go-osc/osc:go_default_library",
         "//vendor/github.com/kennygrant/sanitize:go_default_library",
