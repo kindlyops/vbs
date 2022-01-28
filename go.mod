@@ -8,7 +8,7 @@ require (
 	github.com/kennygrant/sanitize v1.2.4
 	github.com/mattn/go-isatty v0.0.14
 	github.com/rs/zerolog v1.26.1
-	github.com/spf13/cobra v0.0.7
+	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.1
 )
 
