@@ -159,7 +159,6 @@ go_test(
         "//conditions:default": [],
     }),
     rundir = ".",
-    deps = ["//vendor/github.com/bazelbuild/rules_go/go/tools/bazel"],
 )
 
 sh_binary(
