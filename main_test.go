@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/bazelbuild/rules_go/go/tools/bazel"
 )
 
 var cli = flag.String("cli", "", "The CLI binary")
@@ -20,7 +18,7 @@ func TestMain(m *testing.M) {
 func TestCLIVersion(t *testing.T) {
 	t.Parallel()
 
-	path, err := bazel.Runfile(*cli)
+	path, err := filepath.Abs(*cli)
 	if err != nil {
 		t.Fatalf("Could not find runfile %s: %q", *cli, err)
 	}
