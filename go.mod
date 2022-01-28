@@ -16,10 +16,11 @@ require (
 	github.com/Microsoft/go-winio v0.5.1
 	github.com/charmbracelet/bubbles v0.10.2
 	github.com/charmbracelet/bubbletea v0.19.3
+	github.com/charmbracelet/lipgloss v0.4.0
 )
 
 require (
-	github.com/charmbracelet/lipgloss v0.4.0 // indirect
+	github.com/charmbracelet/harmonica v0.1.0 // indirect
 	github.com/containerd/console v1.0.2 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
