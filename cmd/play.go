@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"container/list"
 	"fmt"
 	"io"
 	"net"
@@ -112,7 +113,7 @@ type model struct {
 	outputScreen  int8
 	fullScreen    bool
 	playing       bool
-	debug         string
+	debug         *list.List
 	controlSocket net.Conn
 	sub           chan responseMsg // event channel
 	responses     int              // how many responses we've received
@@ -132,7 +133,7 @@ func initialModel(file string) model {
 		remainingTime: 0,
 		outputScreen:  0,
 		playing:       false,
-		debug:         "",
+		debug:         list.New(),
 		controlSocket: nil,
 		sub:           make(chan responseMsg),
 		responses:     0,
@@ -147,7 +148,23 @@ func initialModel(file string) model {
 	m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
 	m.spinner.Spinner = spinner.Monkey
 
+	// put 10 empty messages in the debug queue so it fills up the widget
+	// and doesn't resize later
+	for i := 0; i < 10; i++ {
+		m.debug.PushBack(" ")
+	}
+
 	return m
+}
+
+func pushDebugList(m *model, msg string) {
+	debugSize := 10
+
+	m.debug.PushBack(msg)
+
+	if m.debug.Len() > debugSize {
+		m.debug.Remove(m.debug.Front())
+	}
 }
 
 var (
@@ -243,7 +260,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case responseMsg:
 		m.responses++ // record external activity
-		m.debug = msg.event
+		pushDebugList(&m, msg.event)
 		full := 100
 		// simulate progress bar activity by counting events until I can
 		// implement property observation for playback remaining
@@ -254,9 +271,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keys.Play):
+			playCmdClosure := cmdPlayMpv(m)
 			m.playing = !m.playing
 
-			return m, cmdPlayMpv(m)
+			return m, playCmdClosure
 		case key.Matches(msg, m.keys.Fullscreen):
 			m.fullScreen = !m.fullScreen
 
@@ -288,9 +306,25 @@ func (m model) View() string {
 	s += fmt.Sprintf("Output screen: %v\n", m.outputScreen)
 	s += fmt.Sprintf("Fullscreen: %v\n", m.fullScreen)
 	s += fmt.Sprintf("Playing: %v\n\n\n", m.playing)
-	s += fmt.Sprintf("Debug: '%v'\n", m.debug)
-	s += "-------------------------------------------------------\n"
-	s += fmt.Sprintf("\n %s Events received: %d\n\n", m.spinner.View(), m.responses)
+
+	// render debug messages
+	var debugStyle = lipgloss.NewStyle().
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("63")).
+		Width(40)
+
+	debugMsg := ""
+
+	for d := m.debug.Front(); d != nil; d = d.Next() {
+		entry, ok := d.Value.(string)
+		if ok {
+			debugMsg += entry + "\n"
+		}
+	}
+
+	s += debugStyle.Render(debugMsg)
+
+	s += fmt.Sprintf("\n\n %s Events received: %d\n\n", m.spinner.View(), m.responses)
 	s += "\n  " + m.progress.ViewAs(m.percent) + "\n\n"
 	helpView := m.help.View(m.keys)
 	s += fmt.Sprintf("%s\n", helpView)
@@ -321,7 +355,7 @@ func play(cmd *cobra.Command, args []string) {
 	ipcName := GetIPCName()
 	defer os.Remove(ipcName)
 
-	m.debug = ipcName
+	pushDebugList(&m, ipcName)
 
 	go runMpvPlayer(m.outputScreen, ipcName, m.currentItem)
 
@@ -379,7 +413,7 @@ func runMpvPlayer(outputScreen int8, controlSocket string, currentItem string) {
 		"--keep-open=always",
 		"--keepaspect-window=no",
 		whichScreen,
-		"--autofit=70%",
+		"--autofit=30%",
 		"--no-osc",
 		"--no-osd-bar",
 		"--osd-on-seek=no",
