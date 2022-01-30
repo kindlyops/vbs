@@ -115,46 +115,50 @@ var keys = keyMap{
 }
 
 type model struct {
-	currentItem   string
-	remainingTime float64
-	outputScreen  int8
-	fullScreen    bool
-	playing       bool
-	debug         *list.List
-	showDebug     bool
-	controlSocket net.Conn
-	sub           chan responseMsg // event channel
-	responses     int              // how many responses we've received
-	spinner       spinner.Model
-	keys          keyMap
-	help          help.Model
-	inputStyle    lipgloss.Style
-	quitting      bool
-	percent       float64
-	progress      progress.Model
-	ipcName       string
+	terminalWidth  int
+	terminalHeight int
+	currentItem    string
+	remainingTime  float64
+	outputScreen   int8
+	fullScreen     bool
+	playing        bool
+	debug          *list.List
+	showDebug      bool
+	controlSocket  net.Conn
+	sub            chan responseMsg // event channel
+	responses      int              // how many responses we've received
+	spinner        spinner.Model
+	keys           keyMap
+	help           help.Model
+	inputStyle     lipgloss.Style
+	quitting       bool
+	percent        float64
+	progress       progress.Model
+	ipcName        string
 }
 
 func initialModel(file string) model {
 	m := model{
-		currentItem:   file,
-		fullScreen:    false,
-		remainingTime: 0,
-		outputScreen:  0,
-		playing:       false,
-		debug:         list.New(),
-		showDebug:     false,
-		controlSocket: nil,
-		sub:           make(chan responseMsg),
-		responses:     0,
-		spinner:       spinner.New(),
-		keys:          keys,
-		help:          help.New(),
-		inputStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("#FF75B7")),
-		quitting:      false,
-		percent:       0,
-		ipcName:       "",
-		progress:      progress.New(progress.WithScaledGradient("#FF7CCB", "#FDFF8C")),
+		currentItem:    file,
+		terminalWidth:  0,
+		terminalHeight: 0,
+		fullScreen:     false,
+		remainingTime:  0,
+		outputScreen:   0,
+		playing:        false,
+		debug:          list.New(),
+		showDebug:      false,
+		controlSocket:  nil,
+		sub:            make(chan responseMsg),
+		responses:      0,
+		spinner:        spinner.New(),
+		keys:           keys,
+		help:           help.New(),
+		inputStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("#FF75B7")),
+		quitting:       false,
+		percent:        0,
+		ipcName:        "",
+		progress:       progress.New(progress.WithScaledGradient("#FF7CCB", "#FDFF8C")),
 	}
 	m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
 	m.spinner.Spinner = spinner.Monkey
@@ -181,7 +185,12 @@ func pushDebugList(m *model, msg string) {
 }
 
 var (
-	appStyle   = lipgloss.NewStyle().Padding(1, 2)
+	appStyle = lipgloss.NewStyle().
+		// Foreground(lipgloss.Color("226")).
+		// Background(lipgloss.Color("63")).
+		PaddingTop(2).
+		PaddingLeft(4)
+
 	titleStyle = func() lipgloss.Style {
 		b := lipgloss.RoundedBorder()
 		// b.Right = "├"
@@ -354,11 +363,13 @@ type vbsSetControlSocket struct {
 	Socket net.Conn
 }
 
-func updateModelFromEvent(m *model, event string) float64 {
-	percent := m.percent
+func updateModelFromEvent(m *model, event string) {
 	scaleFactor := float64(100.0)
 
-	// can we parse the event json?
+	// parse the json unstructured
+	// check if this is an event
+	// else does it have a request_id?
+
 	var p progressMessage
 	err := json.Unmarshal([]byte(event), &p)
 
@@ -368,8 +379,14 @@ func updateModelFromEvent(m *model, event string) float64 {
 	} else {
 		switch p.Id {
 		case Position:
-			position, _ := strconv.ParseFloat(p.Data, 64)
-			m.percent = position / scaleFactor
+			if p.Name == "percent-pos" {
+				position, _ := strconv.ParseFloat(p.Data, 64)
+				m.percent = position / scaleFactor
+				pushDebugList(m, event)
+			} else {
+				pushDebugList(m, fmt.Sprintf("Bad data match %s", event))
+			}
+
 		case PlaytimeRemaining:
 			remaining, _ := strconv.ParseFloat(p.Data, 64)
 			m.remainingTime = remaining
@@ -377,13 +394,13 @@ func updateModelFromEvent(m *model, event string) float64 {
 			pushDebugList(m, event)
 		}
 	}
-
-	return percent
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.terminalHeight = msg.Height
+		m.terminalWidth = msg.Width
 		// If we set a width on the help menu it can it can gracefully truncate
 		// its view as needed.
 		m.help.Width = msg.Width
@@ -448,15 +465,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	// The header
-	s := titleStyle().Render("VBS player")
+	h := titleStyle().Render("VBS player")
+	//h = lipgloss.PlaceHorizontal(m.terminalWidth, lipgloss.Right, h)
 
 	// Render the row
-	s += fmt.Sprintf("\nCurrent item: %v\n", m.currentItem)
+	s := fmt.Sprintf("\nCurrent item: %v\n", m.currentItem)
 	s += fmt.Sprintf("Remaining time: %v\n", m.remainingTime)
 	s += fmt.Sprintf("Output screen: %v\n", m.outputScreen)
 	s += fmt.Sprintf("Fullscreen: %v\n", m.fullScreen)
 	s += fmt.Sprintf("Playing: %v\n", m.playing)
 
+	infoStyle := lipgloss.NewStyle().
+		//BorderStyle(lipgloss.HiddenBorder()).
+		//BorderForeground(lipgloss.Color("63")).
+		Width(m.progress.Width - lipgloss.Width(h))
+
+	s = lipgloss.JoinHorizontal(lipgloss.Top, infoStyle.Render(s), h)
+	s += fmt.Sprintf("\n%s Events received: %d\n\n", m.spinner.View(), m.responses)
+	s += "\n" + m.progress.ViewAs(m.percent) + "\n\n"
 	// render debug messages
 	if m.showDebug {
 		debugHeaderStyle := lipgloss.NewStyle().
@@ -481,11 +507,11 @@ func (m model) View() string {
 			}
 		}
 
+		s += "\n"
 		s += debugStyle.Render(debugMsg)
+		s += "\n"
 	}
 
-	s += fmt.Sprintf("\n\n %s Events received: %d\n\n", m.spinner.View(), m.responses)
-	s += "\n  " + m.progress.ViewAs(m.percent) + "\n\n"
 	helpView := m.help.View(m.keys)
 	s += fmt.Sprintf("%s\n", helpView)
 
@@ -493,7 +519,10 @@ func (m model) View() string {
 	//s += statusMessageStyle("\nPress q to quit. Press ? for help on commands\n")
 
 	// Send the UI for rendering
-	return appStyle.Render(s)
+	return appStyle.Copy().
+		//Width(m.terminalWidth).
+		//Height(m.terminalHeight).
+		Render(s)
 }
 
 func play(cmd *cobra.Command, args []string) {
