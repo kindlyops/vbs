@@ -15,12 +15,15 @@
 package cmd
 
 import (
+	"container/list"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,12 +56,13 @@ type keyMap struct {
 	Quit       key.Binding
 	Fullscreen key.Binding
 	Play       key.Binding
+	Debug      key.Binding
 }
 
 // ShortHelp returns keybindings to be shown in the mini help view. It's part
 // of the key.Map interface.
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Quit}
+	return []key.Binding{k.Help, k.Quit, k.Debug}
 }
 
 // FullHelp returns keybindings for the expanded help view. It's part of the
@@ -66,7 +70,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right}, // first column
-		{k.Help, k.Quit},                // second column
+		{k.Help, k.Quit, k.Debug},       // second column
 		{k.Play, k.Fullscreen},          // third column
 	}
 }
@@ -76,25 +80,29 @@ var keys = keyMap{
 		key.WithKeys(" ", "space", "enter"),
 		key.WithHelp("space/enter/p", "play/pause"),
 	),
+	Debug: key.NewBinding(
+		key.WithKeys("d"),
+		key.WithHelp("d", "toggle debug view"),
+	),
 	Fullscreen: key.NewBinding(
 		key.WithKeys("F", "f"),
 		key.WithHelp("f", "fullscreen"),
 	),
 	Up: key.NewBinding(
 		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "move up"),
+		key.WithHelp("↑/k", "forward 5 seconds"),
 	),
 	Down: key.NewBinding(
 		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "move down"),
+		key.WithHelp("↓/j", "back 5 seconds"),
 	),
 	Left: key.NewBinding(
 		key.WithKeys("left", "h"),
-		key.WithHelp("←/h", "move left"),
+		key.WithHelp("←/h", "back one frame"),
 	),
 	Right: key.NewBinding(
 		key.WithKeys("right", "l"),
-		key.WithHelp("→/l", "move right"),
+		key.WithHelp("→/l", "forward one frame"),
 	),
 	Help: key.NewBinding(
 		key.WithKeys("?"),
@@ -107,51 +115,82 @@ var keys = keyMap{
 }
 
 type model struct {
-	currentItem   string
-	remainingTime float32
-	outputScreen  int8
-	fullScreen    bool
-	playing       bool
-	debug         string
-	controlSocket net.Conn
-	sub           chan responseMsg // event channel
-	responses     int              // how many responses we've received
-	spinner       spinner.Model
-	keys          keyMap
-	help          help.Model
-	inputStyle    lipgloss.Style
-	quitting      bool
-	percent       float64
-	progress      progress.Model
+	terminalWidth  int
+	terminalHeight int
+	currentItem    string
+	remainingTime  float64
+	outputScreen   int8
+	fullScreen     bool
+	playing        bool
+	debug          *list.List
+	showDebug      bool
+	controlSocket  net.Conn
+	sub            chan responseMsg // event channel
+	responses      int              // how many responses we've received
+	spinner        spinner.Model
+	keys           keyMap
+	help           help.Model
+	inputStyle     lipgloss.Style
+	quitting       bool
+	percent        float64
+	progress       progress.Model
+	ipcName        string
 }
 
 func initialModel(file string) model {
 	m := model{
-		currentItem:   file,
-		fullScreen:    false,
-		remainingTime: 0,
-		outputScreen:  0,
-		playing:       false,
-		debug:         "",
-		controlSocket: nil,
-		sub:           make(chan responseMsg),
-		responses:     0,
-		spinner:       spinner.New(),
-		keys:          keys,
-		help:          help.New(),
-		inputStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("#FF75B7")),
-		quitting:      false,
-		percent:       0,
-		progress:      progress.New(progress.WithScaledGradient("#FF7CCB", "#FDFF8C")),
+		currentItem:    file,
+		terminalWidth:  0,
+		terminalHeight: 0,
+		fullScreen:     false,
+		remainingTime:  0,
+		outputScreen:   0,
+		playing:        false,
+		debug:          list.New(),
+		showDebug:      false,
+		controlSocket:  nil,
+		sub:            make(chan responseMsg),
+		responses:      0,
+		spinner:        spinner.New(),
+		keys:           keys,
+		help:           help.New(),
+		inputStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("#FF75B7")),
+		quitting:       false,
+		percent:        0,
+		ipcName:        "",
+		progress:       progress.New(progress.WithScaledGradient("#FF7CCB", "#FDFF8C")),
 	}
 	m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
 	m.spinner.Spinner = spinner.Monkey
 
+	// put debugSize empty messages in the debug queue so it fills up the widget
+	// and doesn't resize later
+	for i := 0; i < debugSize; i++ {
+		m.debug.PushBack(" ")
+	}
+
 	return m
 }
 
+var debugSize = 20
+
+func pushDebugList(m *model, msg string) {
+	if m.showDebug {
+		m.debug.PushBack(msg)
+
+		if m.debug.Len() > debugSize {
+			m.debug.Remove(m.debug.Front())
+		}
+	}
+}
+
 var (
-	appStyle   = lipgloss.NewStyle().Padding(1, 2)
+	appStyle = lipgloss.NewStyle().
+		// Foreground(lipgloss.Color("226")).
+		// Background(lipgloss.Color("63")).
+		PaddingTop(2).
+		PaddingLeft(4)
+
 	titleStyle = func() lipgloss.Style {
 		b := lipgloss.RoundedBorder()
 		// b.Right = "├"
@@ -170,59 +209,198 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		tea.EnterAltScreen,
 		spinner.Tick,
-		listenForMpvEvents(m.sub, m.controlSocket), // loop read on mpv socket
-		waitForActivity(m.sub),                     // wait for mpv event to be sent on channel
+		cmdInitializeControlSocket(&m),
+		waitForActivity(m.sub), // wait for mpv event to be sent on channel
 	)
 }
 
 type vbsQuit int
 
-func cmdQuitMpv(m model) tea.Cmd {
-	return func() tea.Msg {
-		_, err := m.controlSocket.Write([]byte("{ \"command\": [\"quit\"] }\n"))
+func writeMpvSocket(m model, msg string) {
+	_, err := m.controlSocket.Write([]byte(msg))
 
-		if err != nil {
-			log.Fatal().Err(err).Msg("Could not write quit command")
+	if err != nil {
+		log.Fatal().Err(err).Msgf("Could not send %s command", msg)
+	}
+}
+
+func genericMpvCommand(m model, command string, id int, msg tea.Msg, args ...string) tea.Cmd {
+	return func() tea.Msg {
+		cmd := fmt.Sprintf("{ \"command\": [\"%s\"", command)
+		if id != 0 {
+			cmd += fmt.Sprintf(", %d", id)
 		}
 
-		return vbsQuit(0)
+		for _, arg := range args {
+			cmd += fmt.Sprintf(", \"%s\"", arg)
+		}
+
+		cmd += "] }\n"
+		pushDebugList(&m, cmd)
+		writeMpvSocket(m, cmd)
+
+		return msg
 	}
+}
+
+func cmdQuitMpv(m model) tea.Cmd {
+	return genericMpvCommand(m, "quit", 0, vbsQuit(0))
+}
+
+func cmdObserveTimeRemainingMpv(m model) tea.Cmd {
+	return genericMpvCommand(m, "observe_property_string", 1, nil, "percent-pos")
+}
+
+func cmdBackOneFrameMpv(m model) tea.Cmd {
+	if m.playing {
+		// discard frame step during playback
+		return nil
+	}
+
+	return genericMpvCommand(m, "frame-back-step", 0, nil)
+}
+
+func cmdForwardOneFrameMpv(m model) tea.Cmd {
+	if m.playing {
+		// discard frame step during playback
+		return nil
+	}
+
+	return genericMpvCommand(m, "frame-step", 0, nil)
+}
+
+func cmdForwardFiveSecondsMpv(m model) tea.Cmd {
+	return genericMpvCommand(m, "seek", 5, nil)
+}
+
+func cmdBackwardFiveSecondsMpv(m model) tea.Cmd {
+	return genericMpvCommand(m, "seek", -5, nil)
 }
 
 func cmdPlayMpv(m model) tea.Cmd {
 	return func() tea.Msg {
 		cmd := fmt.Sprintf("{ \"command\": [\"set_property\", \"pause\", %t] }\n", m.playing)
-		_, err := m.controlSocket.Write([]byte(cmd))
-
-		if err != nil {
-			log.Fatal().Err(err).Msg("Could not send pause state command")
-		}
+		writeMpvSocket(m, cmd)
 
 		return nil
 	}
 }
 
-func cmdFullscreenMpv(m model) tea.Cmd {
-	return func() tea.Msg {
-		fullScreen := "no"
-		if m.fullScreen {
-			fullScreen = "yes"
-		}
+type MpvCommandId int
 
-		cmd := fmt.Sprintf("{ \"command\": [\"set_property\", \"fullscreen\", \"%v\"] }\n", fullScreen)
-		_, err := m.controlSocket.Write([]byte(cmd))
+const (
+	Position MpvCommandId = iota
+	PlaytimeRemaining
+)
+
+func cmdInitializeControlSocket(m *model) tea.Cmd {
+	return func() tea.Msg {
+		i := 0
+		c, err := ConnectIPC(m.ipcName)
+
+		for ; err != nil; i++ {
+			time.Sleep(100 * time.Millisecond)
+
+			c, err = ConnectIPC(m.ipcName)
+			if err == nil {
+				break
+			}
+		}
 
 		if err != nil {
-			log.Fatal().Err(err).Msg("Could not send fullscreen state command")
+			pushDebugList(m, fmt.Sprintf("Could not connect to mpv: %s", err))
+		} else {
+			pushDebugList(m, "Connected to mpv")
+			m.controlSocket = c
 		}
 
-		return nil
+		go func() {
+			for {
+				bufferSize := 4096
+				response := make([]byte, bufferSize)
+				count, err := c.Read(response)
+
+				if err != nil {
+					log.Error().Err(err).Msg("Could not read response")
+				}
+
+				//log.Debug().Msgf("Got %v byte response: %s", count, response[:count])
+				responseEvent := string(response[:count])
+				m.sub <- responseMsg{
+					event: strings.Split(responseEvent, "\n")[0],
+				}
+			}
+		}()
+
+		// request notification of percent remaining events
+		cmd := fmt.Sprintf("{ \"command\": [\"observe_property_string\", %d, \"percent-pos\"]}\n", Position)
+		writeMpvSocket(*m, cmd)
+		// request notification of time-remaining events
+		cmd = fmt.Sprintf("{ \"command\": [\"observe_property_string\", %d, \"time-remaining\"]}\n", PlaytimeRemaining)
+		writeMpvSocket(*m, cmd)
+
+		return vbsSetControlSocket{Socket: c}
+	}
+}
+
+func cmdFullscreenMpv(m model) tea.Cmd {
+	fullScreen := "no"
+	if m.fullScreen {
+		fullScreen = "yes"
+	}
+
+	return genericMpvCommand(m, "set_property", 0, nil, "fullscreen", fullScreen)
+}
+
+type progressMessage struct {
+	Event string
+	Id    MpvCommandId
+	Name  string
+	Data  string
+}
+
+type vbsSetControlSocket struct {
+	Socket net.Conn
+}
+
+func updateModelFromEvent(m *model, event string) {
+	scaleFactor := float64(100.0)
+
+	// parse the json unstructured
+	// check if this is an event
+	// else does it have a request_id?
+
+	var p progressMessage
+	err := json.Unmarshal([]byte(event), &p)
+
+	if err != nil {
+		// if not, lets log the message
+		pushDebugList(m, event)
+	} else {
+		switch p.Id {
+		case Position:
+			if p.Name == "percent-pos" {
+				position, _ := strconv.ParseFloat(p.Data, 64)
+				m.percent = position / scaleFactor
+				pushDebugList(m, event)
+			} else {
+				pushDebugList(m, fmt.Sprintf("Bad data match %s", event))
+			}
+
+		case PlaytimeRemaining:
+			remaining, _ := strconv.ParseFloat(p.Data, 64)
+			m.remainingTime = remaining
+		default:
+			pushDebugList(m, event)
+		}
 	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.terminalHeight = msg.Height
+		m.terminalWidth = msg.Width
 		// If we set a width on the help menu it can it can gracefully truncate
 		// its view as needed.
 		m.help.Width = msg.Width
@@ -236,6 +414,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case vbsQuit:
 		// we finished our cleanup, exit bubbletea
 		return m, tea.Quit
+
+	case vbsSetControlSocket:
+		m.controlSocket = msg.Socket
+
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -243,34 +425,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case responseMsg:
 		m.responses++ // record external activity
-		m.debug = msg.event
-		full := 100
-		// simulate progress bar activity by counting events until I can
-		// implement property observation for playback remaining
-		m.percent = float64((m.responses+full)%full) * float64(.01)
+		updateModelFromEvent(&m, msg.event)
 
 		return m, waitForActivity(m.sub) // wait for next event
 	// Is it a key press?
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keys.Play):
+			playCmdClosure := cmdPlayMpv(m)
 			m.playing = !m.playing
 
-			return m, cmdPlayMpv(m)
+			return m, playCmdClosure
 		case key.Matches(msg, m.keys.Fullscreen):
 			m.fullScreen = !m.fullScreen
 
 			return m, cmdFullscreenMpv(m)
 		case key.Matches(msg, m.keys.Up):
+			return m, cmdForwardFiveSecondsMpv(m)
 		case key.Matches(msg, m.keys.Down):
+			return m, cmdBackwardFiveSecondsMpv(m)
 		case key.Matches(msg, m.keys.Left):
+			return m, cmdBackOneFrameMpv(m)
 		case key.Matches(msg, m.keys.Right):
+			return m, cmdForwardOneFrameMpv(m)
 		case key.Matches(msg, m.keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
 		case key.Matches(msg, m.keys.Quit):
 			m.quitting = true
 
 			return m, cmdQuitMpv(m)
+		case key.Matches(msg, m.keys.Debug):
+			m.showDebug = !m.showDebug
 		}
 	}
 	// Return the updated model to the Bubble Tea runtime for processing.
@@ -280,18 +465,53 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	// The header
-	s := titleStyle().Render("VBS player")
+	h := titleStyle().Render("VBS player")
+	//h = lipgloss.PlaceHorizontal(m.terminalWidth, lipgloss.Right, h)
 
 	// Render the row
-	s += fmt.Sprintf("\nCurrent item: %v\n", m.currentItem)
+	s := fmt.Sprintf("\nCurrent item: %v\n", m.currentItem)
 	s += fmt.Sprintf("Remaining time: %v\n", m.remainingTime)
 	s += fmt.Sprintf("Output screen: %v\n", m.outputScreen)
 	s += fmt.Sprintf("Fullscreen: %v\n", m.fullScreen)
-	s += fmt.Sprintf("Playing: %v\n\n\n", m.playing)
-	s += fmt.Sprintf("Debug: '%v'\n", m.debug)
-	s += "-------------------------------------------------------\n"
-	s += fmt.Sprintf("\n %s Events received: %d\n\n", m.spinner.View(), m.responses)
-	s += "\n  " + m.progress.ViewAs(m.percent) + "\n\n"
+	s += fmt.Sprintf("Playing: %v\n", m.playing)
+
+	infoStyle := lipgloss.NewStyle().
+		//BorderStyle(lipgloss.HiddenBorder()).
+		//BorderForeground(lipgloss.Color("63")).
+		Width(m.progress.Width - lipgloss.Width(h))
+
+	s = lipgloss.JoinHorizontal(lipgloss.Top, infoStyle.Render(s), h)
+	s += fmt.Sprintf("\n%s Events received: %d\n\n", m.spinner.View(), m.responses)
+	s += "\n" + m.progress.ViewAs(m.percent) + "\n\n"
+	// render debug messages
+	if m.showDebug {
+		debugHeaderStyle := lipgloss.NewStyle().
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("63")).
+			//Padding(1, 1, 1, 1).
+			Align(lipgloss.Right)
+		s += debugHeaderStyle.Render("Debug messages") + "\n"
+
+		debugWidth := m.progress.Width // cheat and use the same width as progress bar
+		debugStyle := lipgloss.NewStyle().
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("63")).
+			Width(debugWidth)
+
+		debugMsg := ""
+
+		for d := m.debug.Front(); d != nil; d = d.Next() {
+			entry, ok := d.Value.(string)
+			if ok {
+				debugMsg += entry + "\n"
+			}
+		}
+
+		s += "\n"
+		s += debugStyle.Render(debugMsg)
+		s += "\n"
+	}
+
 	helpView := m.help.View(m.keys)
 	s += fmt.Sprintf("%s\n", helpView)
 
@@ -299,7 +519,10 @@ func (m model) View() string {
 	//s += statusMessageStyle("\nPress q to quit. Press ? for help on commands\n")
 
 	// Send the UI for rendering
-	return appStyle.Render(s)
+	return appStyle.Copy().
+		//Width(m.terminalWidth).
+		//Height(m.terminalHeight).
+		Render(s)
 }
 
 func play(cmd *cobra.Command, args []string) {
@@ -318,21 +541,13 @@ func play(cmd *cobra.Command, args []string) {
 
 	m := initialModel(target)
 
-	ipcName := GetIPCName()
-	defer os.Remove(ipcName)
+	m.ipcName = GetIPCName()
 
-	m.debug = ipcName
+	defer os.Remove(m.ipcName)
 
-	go runMpvPlayer(m.outputScreen, ipcName, m.currentItem)
+	pushDebugList(&m, m.ipcName)
 
-	time.Sleep(1 * time.Second)
-
-	c, err := ConnectIPC(ipcName)
-	m.controlSocket = c
-
-	if err != nil {
-		log.Fatal().Err(err).Msg("Could not open control socket")
-	}
+	go runMpvPlayer(m.outputScreen, m.ipcName, m.currentItem)
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if err := p.Start(); err != nil {
@@ -351,10 +566,11 @@ func listenForMpvEvents(sub chan responseMsg, c net.Conn) tea.Cmd {
 				log.Error().Err(err).Msg("Could not read response")
 			}
 
-			//log.Debug().Msgf("Got %v byte response: %s", count, response[:count])
 			responseEvent := string(response[:count])
-			sub <- responseMsg{
-				event: strings.Split(responseEvent, "\n")[0],
+			for _, eventLine := range strings.Split(responseEvent, "\n") {
+				sub <- responseMsg{
+					event: eventLine,
+				}
 			}
 		}
 	}
@@ -366,6 +582,8 @@ type responseMsg struct {
 
 // A command that waits for mpv responses.
 func waitForActivity(sub chan responseMsg) tea.Cmd {
+	// TODO: This extra indirection of using a channel is probably unneeded.
+	// refactor this to use the socket directly.
 	return func() tea.Msg {
 		return responseMsg(<-sub)
 	}
@@ -379,7 +597,7 @@ func runMpvPlayer(outputScreen int8, controlSocket string, currentItem string) {
 		"--keep-open=always",
 		"--keepaspect-window=no",
 		whichScreen,
-		"--autofit=70%",
+		"--autofit=30%",
 		"--no-osc",
 		"--no-osd-bar",
 		"--osd-on-seek=no",
