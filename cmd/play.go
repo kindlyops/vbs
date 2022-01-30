@@ -116,7 +116,7 @@ var keys = keyMap{
 
 type model struct {
 	currentItem   string
-	remainingTime float32
+	remainingTime float64
 	outputScreen  int8
 	fullScreen    bool
 	playing       bool
@@ -277,6 +277,13 @@ func cmdPlayMpv(m model) tea.Cmd {
 	}
 }
 
+type MpvCommandId int
+
+const (
+	Position MpvCommandId = iota
+	PlaytimeRemaining
+)
+
 func cmdInitializeControlSocket(m *model) tea.Cmd {
 	return func() tea.Msg {
 		i := 0
@@ -316,7 +323,11 @@ func cmdInitializeControlSocket(m *model) tea.Cmd {
 			}
 		}()
 
-		cmd := fmt.Sprintf("{ \"command\": [\"observe_property_string\", 1, \"percent-pos\"]}\n")
+		// request notification of percent remaining events
+		cmd := fmt.Sprintf("{ \"command\": [\"observe_property_string\", %d, \"percent-pos\"]}\n", Position)
+		writeMpvSocket(*m, cmd)
+		// request notification of time-remaining events
+		cmd = fmt.Sprintf("{ \"command\": [\"observe_property_string\", %d, \"time-remaining\"]}\n", PlaytimeRemaining)
 		writeMpvSocket(*m, cmd)
 
 		return vbsSetControlSocket{Socket: c}
@@ -334,7 +345,7 @@ func cmdFullscreenMpv(m model) tea.Cmd {
 
 type progressMessage struct {
 	Event string
-	Id    int
+	Id    MpvCommandId
 	Name  string
 	Data  string
 }
@@ -343,7 +354,7 @@ type vbsSetControlSocket struct {
 	Socket net.Conn
 }
 
-func calculatePercentageRemaining(m *model, event string) float64 {
+func updateModelFromEvent(m *model, event string) float64 {
 	percent := m.percent
 	scaleFactor := float64(100.0)
 
@@ -355,11 +366,14 @@ func calculatePercentageRemaining(m *model, event string) float64 {
 		// if not, lets log the message
 		pushDebugList(m, event)
 	} else {
-		if p.Id == 1 && p.Name == "percent-pos" {
+		switch p.Id {
+		case Position:
 			position, _ := strconv.ParseFloat(p.Data, 64)
-			percent = position / scaleFactor
-			pushDebugList(m, event)
-		} else {
+			m.percent = position / scaleFactor
+		case PlaytimeRemaining:
+			remaining, _ := strconv.ParseFloat(p.Data, 64)
+			m.remainingTime = remaining
+		default:
 			pushDebugList(m, event)
 		}
 	}
@@ -394,7 +408,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case responseMsg:
 		m.responses++ // record external activity
-		m.percent = calculatePercentageRemaining(&m, msg.event)
+		updateModelFromEvent(&m, msg.event)
 
 		return m, waitForActivity(m.sub) // wait for next event
 	// Is it a key press?
