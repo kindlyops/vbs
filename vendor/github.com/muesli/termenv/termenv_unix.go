@@ -1,3 +1,4 @@
+//go:build darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris
 // +build darwin dragonfly freebsd linux netbsd openbsd solaris
 
 package termenv
@@ -7,9 +8,24 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
+
+const (
+	// timeout for OSC queries
+	OSCTimeout = 5 * time.Second
+)
+
+func isForeground(fd int) bool {
+	pgrp, err := unix.IoctlGetInt(fd, unix.TIOCGPGRP)
+	if err != nil {
+		return false
+	}
+
+	return pgrp == unix.Getpgrp()
+}
 
 func colorProfile() Profile {
 	term := os.Getenv("TERM")
@@ -29,10 +45,20 @@ func colorProfile() Profile {
 		return ANSI256
 	}
 
+	switch term {
+	case "xterm-kitty":
+		return TrueColor
+	case "linux":
+		return ANSI
+	}
+
 	if strings.Contains(term, "256color") {
 		return ANSI256
 	}
 	if strings.Contains(term, "color") {
+		return ANSI
+	}
+	if strings.Contains(term, "ansi") {
 		return ANSI
 	}
 
@@ -73,7 +99,7 @@ func backgroundColor() Color {
 	colorFGBG := os.Getenv("COLORFGBG")
 	if strings.Contains(colorFGBG, ";") {
 		c := strings.Split(colorFGBG, ";")
-		i, err := strconv.Atoi(c[1])
+		i, err := strconv.Atoi(c[len(c)-1])
 		if err == nil {
 			return ANSIColor(i)
 		}
@@ -83,7 +109,34 @@ func backgroundColor() Color {
 	return ANSIColor(0)
 }
 
+func waitForData(fd uintptr, timeout time.Duration) error {
+	tv := unix.NsecToTimeval(int64(timeout))
+	var readfds unix.FdSet
+	readfds.Set(int(fd))
+
+	for {
+		n, err := unix.Select(int(fd)+1, &readfds, nil, nil, &tv)
+		if err == unix.EINTR {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("timeout")
+		}
+
+		break
+	}
+
+	return nil
+}
+
 func readNextByte(f *os.File) (byte, error) {
+	if err := waitForData(f.Fd(), OSCTimeout); err != nil {
+		return 0, err
+	}
+
 	var b [1]byte
 	n, err := f.Read(b[:])
 	if err != nil {
@@ -106,18 +159,12 @@ func readNextResponse(fd *os.File) (response string, isOSC bool, err error) {
 		return "", false, err
 	}
 
-	// if we encounter a backslash, this is a left-over from the previous OSC
-	// response, which can be terminated by an optional backslash
-	if start == '\\' {
+	// first byte must be ESC
+	for start != '\033' {
 		start, err = readNextByte(fd)
 		if err != nil {
 			return "", false, err
 		}
-	}
-
-	// first byte must be ESC
-	if start != '\033' {
-		return "", false, ErrStatusReport
 	}
 
 	response += string(start)
@@ -177,11 +224,16 @@ func termStatusReport(sequence int) (string, error) {
 		return "", ErrStatusReport
 	}
 
+	// if in background, we can't control the terminal
+	if !isForeground(unix.Stdout) {
+		return "", ErrStatusReport
+	}
+
 	t, err := unix.IoctlGetTermios(unix.Stdout, tcgetattr)
 	if err != nil {
 		return "", ErrStatusReport
 	}
-	defer unix.IoctlSetTermios(unix.Stdout, tcsetattr, t)
+	defer unix.IoctlSetTermios(unix.Stdout, tcsetattr, t) //nolint:errcheck
 
 	noecho := *t
 	noecho.Lflag = noecho.Lflag &^ unix.ECHO
