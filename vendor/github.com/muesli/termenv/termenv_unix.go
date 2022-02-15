@@ -18,15 +18,6 @@ const (
 	OSCTimeout = 5 * time.Second
 )
 
-func isForeground(fd int) bool {
-	pgrp, err := unix.IoctlGetInt(fd, unix.TIOCGPGRP)
-	if err != nil {
-		return false
-	}
-
-	return pgrp == unix.Getpgrp()
-}
-
 func colorProfile() Profile {
 	term := os.Getenv("TERM")
 	colorTerm := os.Getenv("COLORTERM")
@@ -35,10 +26,13 @@ func colorProfile() Profile {
 	case "24bit":
 		fallthrough
 	case "truecolor":
-		if term == "screen" || !strings.HasPrefix(term, "screen") {
-			// enable TrueColor in tmux, but not for old-school screen
-			return TrueColor
+		if strings.HasPrefix(term, "screen") {
+			// tmux supports TrueColor, screen only ANSI256
+			if os.Getenv("TERM_PROGRAM") != "tmux" {
+				return ANSI256
+			}
 		}
+		return TrueColor
 	case "yes":
 		fallthrough
 	case "true":
