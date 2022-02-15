@@ -30,12 +30,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
         if: (github.actor == 'dependabot-preview[bot]') || (github.actor == 'renovate[bot]')
-      - name: bazel build
-        run: bazel build //...
       - name: Test
-        run: bazel test //...
-      - name: Coverage
         run: |
+          # build and run unit tests with coverage reporting
+          # running everything from the coverage command because our nextjs embedding is slow and doesn't
+          # have proper build artifact detection so it always re-runs, so this is faster than multiple
+          # bazel commands in CI
           bazel coverage //...
           echo "coverage_files=$(find bazel-out/ -name 'coverage.dat' -printf '%p, ' | sed 's/, $//')" >> $GITHUB_ENV
       - name: Detected Coverage Files
