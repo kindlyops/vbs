@@ -13,6 +13,8 @@ go_library(
         "templatehelper.go",
         "termenv.go",
         "termenv_js.go",
+        "termenv_posix.go",
+        "termenv_solaris.go",
         "termenv_unix.go",
         "termenv_windows.go",
     ],
