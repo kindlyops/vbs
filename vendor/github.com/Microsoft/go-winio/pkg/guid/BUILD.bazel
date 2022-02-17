@@ -2,7 +2,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "go_default_library",
-    srcs = ["guid.go"],
+    srcs = [
+        "guid.go",
+        "guid_nonwindows.go",
+        "guid_windows.go",
+    ],
     importmap = "github.com/kindlyops/vbs/vendor/github.com/Microsoft/go-winio/pkg/guid",
     importpath = "github.com/Microsoft/go-winio/pkg/guid",
     visibility = ["//visibility:public"],
