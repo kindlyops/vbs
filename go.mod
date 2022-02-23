@@ -3,7 +3,7 @@ module github.com/kindlyops/vbs
 go 1.17
 
 require (
-	github.com/aws/aws-sdk-go v1.43.4
+	github.com/aws/aws-sdk-go v1.43.5
 	github.com/hypebeast/go-osc v0.0.0-20210408213458-3287e1838f40
 	github.com/kennygrant/sanitize v1.2.4
 	github.com/mattn/go-isatty v0.0.14
@@ -40,9 +40,9 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
-	golang.org/x/net v0.0.0-20211216030914-fe4d6282115f // indirect
-	golang.org/x/sys v0.0.0-20211210111614-af8b64212486 // indirect
-	golang.org/x/term v0.0.0-20210422114643-f5beecf764ed // indirect
+	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd // indirect
+	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect
+	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	gopkg.in/ini.v1 v1.66.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
