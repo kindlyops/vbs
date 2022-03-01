@@ -37,6 +37,11 @@ export default function Home() {
 
     sendRequest("/api/light/off");
   };
+  const sendBRB = (event) => {
+    event.preventDefault();
+
+    sendRequest("/api/switcher/brb");
+  };
   const sendFTB = (event) => {
     event.preventDefault();
 
