@@ -34,7 +34,7 @@ next(
 )
 
 next(
-    name = "build",
+    name = "next_export",
     outs = ["dist"],
     args = [
         "export $(RULEDIR)",
@@ -53,7 +53,7 @@ static_site_embedder(
 go_library(
     name = "go_default_library",
     srcs = [":embedder"],
-    embedsrcs = [":build"],
+    embedsrcs = [":next_export"],
     importpath = "github.com/kindlyops/vbs/embeddy",
     visibility = ["//visibility:public"],
 )
