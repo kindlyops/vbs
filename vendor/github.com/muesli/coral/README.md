@@ -1,3 +1,39 @@
+# Coral Preamble
+
+I love [Cobra](https://github.com/spf13/cobra) and I love [Viper](https://github.com/spf13/viper).
+They are great projects, incredibly useful and outstandingly important for the
+Go community. But sometimes, just sometimes, don't you wish you could use Cobra
+without the entire dependency chain Viper drags in?
+
+This is what `Coral` is: a Cobra fork without any of the Viper dependencies and
+features. This will hopefully be a soft fork with only the minimal changes
+required to decouple Viper from Cobra. The aim is to follow upstream Cobra
+development as closely as possible.
+
+Coral has only four direct dependencies:
+
+- github.com/spf13/pflag
+- github.com/cpuguy83/go-md2man/v2
+- github.com/inconshreveable/mousetrap
+- gopkg.in/yaml.v2
+
+# Migrating existing projects to Coral
+
+It's easy to use Coral as a drop-in replacement for Cobra in existing projects,
+just let `gofmt` do the heavy lifting for you:
+
+```sh
+ gofmt -w -r '"github.com/spf13/cobra" -> "github.com/muesli/coral"' .
+ gofmt -w -r '"github.com/spf13/cobra/doc" -> "github.com/muesli/coral/doc"' .
+ gofmt -w -r 'cobra -> coral' .
+ go mod tidy
+ ```
+
+As a result, you should typically see a lot of indirect dependencies removed
+from the project's `go.mod` and `go.sum` files.
+
+# Upstream Cobra README
+
 ![cobra logo](https://cloud.githubusercontent.com/assets/173412/10886352/ad566232-814f-11e5-9cd0-aa101788c117.png)
 
 Cobra is both a library for creating powerful modern CLI applications as well as a program to generate applications and command files.

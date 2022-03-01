@@ -16,8 +16,8 @@ go_library(
         "shell_completions.go",
         "zsh_completions.go",
     ],
-    importmap = "github.com/kindlyops/vbs/vendor/github.com/spf13/cobra",
-    importpath = "github.com/spf13/cobra",
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/muesli/coral",
+    importpath = "github.com/muesli/coral",
     visibility = ["//visibility:public"],
     deps = [
         "//vendor/github.com/spf13/pflag:go_default_library",

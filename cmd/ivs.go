@@ -21,28 +21,28 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ivs"
 	"github.com/hypebeast/go-osc/osc"
+	"github.com/muesli/coral"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-var ivsOscBridgeCmd = &cobra.Command{
+var ivsOscBridgeCmd = &coral.Command{
 	Use:   "ivs-bridge <ivs-stream-arn>",
 	Short: "Connect OSC commands to IVS PutMetadata.",
 	Long:  `Use OSC to send messages to IVS using PutMetadata API.`,
 	Run:   ivsOscBridge,
-	Args:  cobra.ExactArgs(1),
+	Args:  coral.ExactArgs(1),
 }
 
-var ivsPutMetadataCmd = &cobra.Command{
+var ivsPutMetadataCmd = &coral.Command{
 	Use:   "ivs-put <ivs-stream-arn> <data payload>",
 	Short: "Send payload to IVS PutMetadata.",
 	Long:  `Send messages to IVS using PutMetadata API.`,
 	Run:   ivsPutMetadata,
-	Args:  cobra.ExactArgs(2), //nolint:gomnd // this is an appropriate magic number
+	Args:  coral.ExactArgs(2), //nolint:gomnd // this is an appropriate magic number
 }
 
-func ivsOscBridge(cmd *cobra.Command, args []string) {
+func ivsOscBridge(cmd *coral.Command, args []string) {
 	arn := args[0]
 	addr := "127.0.0.1:" + viper.GetString("ivs_port")
 
@@ -76,7 +76,7 @@ func ivsOscBridge(cmd *cobra.Command, args []string) {
 	}
 }
 
-func ivsPutMetadata(cmd *cobra.Command, args []string) {
+func ivsPutMetadata(cmd *coral.Command, args []string) {
 	arn := args[0]
 	data := args[1]
 
