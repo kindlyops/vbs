@@ -26,27 +26,27 @@ import (
 	"sync"
 
 	"github.com/kennygrant/sanitize"
+	"github.com/muesli/coral"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
 )
 
-var chapterListCmd = &cobra.Command{
+var chapterListCmd = &coral.Command{
 	Use:   "chapterlist <videofile.mp4>",
 	Short: "List chapters in a video container.",
 	Long:  `Use ffprobe to discover all chapter metadata in a video file container.`,
 	Run:   chapterList,
-	Args:  cobra.ExactArgs(1),
+	Args:  coral.ExactArgs(1),
 }
 
-var chapterSplitCmd = &cobra.Command{
+var chapterSplitCmd = &coral.Command{
 	Use:   "chaptersplit <videofile.mp4>",
 	Short: "Split video file into separate files per chapter.",
 	Long:  `Use ffmpeg to copy each chapter from a video file into it's own file.`,
 	Run:   chapterSplit,
-	Args:  cobra.ExactArgs(1),
+	Args:  coral.ExactArgs(1),
 }
 
-func chapterSplit(cmd *cobra.Command, args []string) {
+func chapterSplit(cmd *coral.Command, args []string) {
 	_, err := exec.LookPath("ffprobe")
 
 	if err != nil {
@@ -175,7 +175,7 @@ func getChapters(target string) (ffmprobeResponse, error) {
 	return response, nil
 }
 
-func chapterList(cmd *cobra.Command, args []string) {
+func chapterList(cmd *coral.Command, args []string) {
 	_, err := exec.LookPath("ffprobe")
 
 	if err != nil {

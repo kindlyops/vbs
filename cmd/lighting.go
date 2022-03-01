@@ -21,20 +21,20 @@ import (
 
 	"github.com/hypebeast/go-osc/osc"
 	"github.com/kindlyops/vbs/embeddy"
+	"github.com/muesli/coral"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-var lightingBridgeCmd = &cobra.Command{
+var lightingBridgeCmd = &coral.Command{
 	Use:   "lighting-bridge <companion-ip>",
 	Short: "Serve embedded lighting control page",
 	Long:  `Use OSC to send messages to Companion API for lighting control.`,
 	Run:   lightingBridge,
-	Args:  cobra.NoArgs,
+	Args:  coral.NoArgs,
 }
 
-func lightingBridge(cmd *cobra.Command, args []string) {
+func lightingBridge(cmd *coral.Command, args []string) {
 	listenAddr := "127.0.0.1:" + viper.GetString("lighting_port")
 	dist, _ := fs.Sub(embeddy.GetNextFS(), "dist")
 

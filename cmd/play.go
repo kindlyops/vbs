@@ -33,16 +33,16 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/coral"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
 )
 
-var playCmd = &cobra.Command{
+var playCmd = &coral.Command{
 	Use:   "play <videofile.mp4>",
 	Short: "Play a videofile fullscreen with mpv player.",
 	Long:  `Use mpv video player to play a video file fullscreen on the designated display.`,
 	Run:   play,
-	Args:  cobra.ExactArgs(1),
+	Args:  coral.ExactArgs(1),
 }
 
 // keyMap defines a set of keybindings. To work for help it must satisfy
@@ -525,7 +525,7 @@ func (m model) View() string {
 		Render(s)
 }
 
-func play(cmd *cobra.Command, args []string) {
+func play(cmd *coral.Command, args []string) {
 	_, err := exec.LookPath("mpv")
 
 	if err != nil {

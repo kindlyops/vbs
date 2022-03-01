@@ -21,9 +21,9 @@ import (
 	"time"
 
 	"github.com/mattn/go-isatty"
+	"github.com/muesli/coral"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
@@ -33,7 +33,7 @@ var cfgFile string
 var Debug bool
 
 // rootCmd represents the base command when called without any subcommands.
-var rootCmd = &cobra.Command{
+var rootCmd = &coral.Command{
 	Version: "dev",
 	Use:     "vbs",
 	Short:   "video broadcasting stuff",
@@ -55,15 +55,15 @@ use at your own risk.
 	//	Run: func(cmd *cobra.Command, args []string) { },
 }
 
-var configCmd = &cobra.Command{
+var configCmd = &coral.Command{
 	Use:   "save-config",
 	Short: "Save the current config.",
 	Long:  `Save the current config after merge from files, arguments, and environment.`,
 	Run:   saveConfig,
-	Args:  cobra.NoArgs,
+	Args:  coral.NoArgs,
 }
 
-func saveConfig(cmd *cobra.Command, args []string) {
+func saveConfig(cmd *coral.Command, args []string) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Couldn't locate config dir")
@@ -105,7 +105,7 @@ func init() {
 		log.Logger = log.With().Caller().Logger()
 	}
 
-	cobra.OnInitialize(initConfig)
+	coral.OnInitialize(initConfig)
 
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
