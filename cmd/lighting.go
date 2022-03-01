@@ -130,8 +130,8 @@ func init() {
 		"off":         "/press/bank/20/14",
 		"ftb":         "/press/bank/20/4",
 		"dsk":         "/press/bank/20/5",
-		"keylighton":  "/press/bank/20/2",
-		"keylightoff": "/press/bank/20/3",
+		"keylighton":  "/press/bank/20/18",
+		"keylightoff": "/press/bank/20/19",
 	})
 
 	rootCmd.AddCommand(lightingBridgeCmd)
