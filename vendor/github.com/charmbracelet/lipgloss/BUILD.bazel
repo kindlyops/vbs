@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "align.go",
+        "ansi_unix.go",
+        "ansi_windows.go",
+        "borders.go",
+        "color.go",
+        "get.go",
+        "join.go",
+        "position.go",
+        "runes.go",
+        "set.go",
+        "size.go",
+        "style.go",
+        "unset.go",
+        "whitespace.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/charmbracelet/lipgloss",
+    importpath = "github.com/charmbracelet/lipgloss",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/lucasb-eyer/go-colorful:go_default_library",
+        "//vendor/github.com/mattn/go-runewidth:go_default_library",
+        "//vendor/github.com/muesli/reflow/ansi:go_default_library",
+        "//vendor/github.com/muesli/reflow/truncate:go_default_library",
+        "//vendor/github.com/muesli/reflow/wordwrap:go_default_library",
+        "//vendor/github.com/muesli/reflow/wrap:go_default_library",
+        "//vendor/github.com/muesli/termenv:go_default_library",
+    ],
+)
