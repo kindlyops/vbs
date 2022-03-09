@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/aws/aws-sdk-go v1.43.14
-	github.com/hypebeast/go-osc v0.0.0-20220306225357-49b74755c17b
+	github.com/hypebeast/go-osc v0.0.0-20220308234300-cec5a8a1e5f5
 	github.com/kennygrant/sanitize v1.2.4
 	github.com/mattn/go-isatty v0.0.14
 	github.com/rs/zerolog v1.26.1
