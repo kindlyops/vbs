@@ -90,8 +90,6 @@ github.com/jmespath/go-jmespath
 # github.com/kennygrant/sanitize v1.2.4
 ## explicit
 github.com/kennygrant/sanitize
-# github.com/kr/pretty v0.3.0
-## explicit; go 1.12
 # github.com/lucasb-eyer/go-colorful v1.2.0
 ## explicit; go 1.12
 github.com/lucasb-eyer/go-colorful
