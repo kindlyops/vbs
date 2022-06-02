@@ -37,8 +37,6 @@ const (
 	defaultDamping   = 1.0
 )
 
-var color func(string) termenv.Color = termenv.ColorProfile().Color
-
 // Option is used to set options in NewModel. For example:
 //
 //     progress := NewModel(
@@ -110,6 +108,13 @@ func WithSpringOptions(frequency, damping float64) Option {
 	}
 }
 
+// WithColorProfile sets the color profile to use for the progress bar.
+func WithColorProfile(p termenv.Profile) Option {
+	return func(m *Model) {
+		m.colorProfile = p
+	}
+}
+
 // FrameMsg indicates that an animation step should occur.
 type FrameMsg struct {
 	id  int
@@ -144,8 +149,8 @@ type Model struct {
 	// Members for animated transitions.
 	spring           harmonica.Spring
 	springCustomized bool
-	percent          float64
-	targetPercent    float64
+	percentShown     float64 // percent currently displaying
+	targetPercent    float64 // percent to which we're animating
 	velocity         float64
 
 	// Gradient settings
@@ -157,6 +162,9 @@ type Model struct {
 	// of the progress bar. When false, the width of the gradient will be set
 	// to the full width of the progress bar.
 	scaleRamp bool
+
+	// Color profile for the progress bar.
+	colorProfile termenv.Profile
 }
 
 // New returns a model with default values.
@@ -170,6 +178,7 @@ func New(opts ...Option) Model {
 		EmptyColor:     "#606060",
 		ShowPercentage: true,
 		PercentFormat:  " %3.0f%%",
+		colorProfile:   termenv.ColorProfile(),
 	}
 	if !m.springCustomized {
 		m.SetSpringOptions(defaultFrequency, defaultDamping)
@@ -203,12 +212,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// If we've more or less reached equilibrium, stop updating.
-		dist := math.Abs(m.percent - m.targetPercent)
+		dist := math.Abs(m.percentShown - m.targetPercent)
 		if dist < 0.001 && m.velocity < 0.01 {
 			return m, nil
 		}
 
-		m.percent, m.velocity = m.spring.Update(m.percent, m.velocity, m.targetPercent)
+		m.percentShown, m.velocity = m.spring.Update(m.percentShown, m.velocity, m.targetPercent)
 		return m, m.nextFrame()
 
 	default:
@@ -224,7 +233,7 @@ func (m *Model) SetSpringOptions(frequency, damping float64) {
 	m.spring = harmonica.NewSpring(harmonica.FPS(fps), frequency, damping)
 }
 
-// Percent returns the current percentage state of the model. This is only
+// Percent returns the current visible percentage on the model. This is only
 // relevant when you're animating the progress bar.
 //
 // If you're rendering with ViewAs you won't need this.
@@ -261,7 +270,7 @@ func (m *Model) DecrPercent(v float64) tea.Cmd {
 // View renders the an animated progress bar in its current state. To render
 // a static progress bar based on your own calculations use ViewAs instead.
 func (m Model) View() string {
-	return m.ViewAs(m.percent)
+	return m.ViewAs(m.percentShown)
 }
 
 // ViewAs renders the progress bar with a given percentage.
@@ -299,18 +308,18 @@ func (m Model) barView(b *strings.Builder, percent float64, textWidth int) {
 			c := m.rampColorA.BlendLuv(m.rampColorB, p).Hex()
 			b.WriteString(termenv.
 				String(string(m.Full)).
-				Foreground(color(c)).
+				Foreground(m.color(c)).
 				String(),
 			)
 		}
 	} else {
 		// Solid fill
-		s := termenv.String(string(m.Full)).Foreground(color(m.FullColor)).String()
+		s := termenv.String(string(m.Full)).Foreground(m.color(m.FullColor)).String()
 		b.WriteString(strings.Repeat(s, fw))
 	}
 
 	// Empty fill
-	e := termenv.String(string(m.Empty)).Foreground(color(m.EmptyColor)).String()
+	e := termenv.String(string(m.Empty)).Foreground(m.color(m.EmptyColor)).String()
 	n := max(0, tw-fw)
 	b.WriteString(strings.Repeat(e, n))
 }
@@ -336,6 +345,10 @@ func (m *Model) setRamp(colorA, colorB string, scaled bool) {
 	m.scaleRamp = scaled
 	m.rampColorA = a
 	m.rampColorB = b
+}
+
+func (m Model) color(c string) termenv.Color {
+	return m.colorProfile.Color(c)
 }
 
 func max(a, b int) int {

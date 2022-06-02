@@ -2,7 +2,7 @@ Harmonica
 =========
 
 <p>
-    <img src="https://stuff.charm.sh/harmonica/harmonica-readme.png" alt="Harmonica Image" width="325"><br>
+    <a href="https://stuff.charm.sh/harmonica/harmonica-art.png"><img src="https://stuff.charm.sh/harmonica/harmonica-readme.png" alt="Harmonica Image" width="325"></a><br>
     <a href="https://github.com/charmbracelet/harmonica/releases"><img src="https://img.shields.io/github/release/charmbracelet/harmonica.svg" alt="Latest Release"></a>
     <a href="https://pkg.go.dev/github.com/charmbracelet/harmonica?tab=doc"><img src="https://godoc.org/github.com/golang/gddo?status.svg" alt="GoDoc"></a>
     <a href="https://github.com/charmbracelet/harmonica/actions"><img src="https://github.com/charmbracelet/harmonica/workflows/build/badge.svg" alt="Build Status"></a>
@@ -43,8 +43,8 @@ spring := harmonica.NewSpring(harmonica.FPS(60), 6.0, 0.5)
 
 // Animate!
 for {
-    sprite.x, sprite.xVelocity = spring.Update(&sprite.x, &sprite.xVelocity, targetX)
-    sprite.y, sprite.yVelocity = spring.Update(&sprite.y, &sprite.yVelocity, targetY)
+    sprite.x, sprite.xVelocity = spring.Update(sprite.x, sprite.xVelocity, targetX)
+    sprite.y, sprite.yVelocity = spring.Update(sprite.y, sprite.yVelocity, targetY)
     time.Sleep(time.Second/60)
 }
 ```
@@ -93,7 +93,7 @@ a critically damped spring.
 ## Acknowledgements
 
 This library is a fairly straightforward port of [Ryan Juckett][juckett]’s
-excellent damped simple harmonic oscillator originally writen in C++ in 2008
+excellent damped simple harmonic oscillator originally written in C++ in 2008
 and published in 2012. [Ryan’s writeup][writeup] on the subject is fantastic.
 
 [juckett]: https://www.ryanjuckett.com/

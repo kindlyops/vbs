@@ -9,6 +9,5 @@ go_library(
     deps = [
         "//vendor/github.com/charmbracelet/bubbletea:go_default_library",
         "//vendor/github.com/charmbracelet/lipgloss:go_default_library",
-        "//vendor/github.com/muesli/reflow/ansi:go_default_library",
     ],
 )
