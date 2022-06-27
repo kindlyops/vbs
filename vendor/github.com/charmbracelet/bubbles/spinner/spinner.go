@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Internal ID management for text inputs. Necessary for blink integrity when
-// multiple text inputs are involved.
+// Internal ID management. Used during animating to ensure that frame messages
+// are received only by spinner components that sent them.
 var (
 	lastID int
 	idMtx  sync.Mutex
@@ -67,6 +67,22 @@ var (
 		Frames: []string{"🙈", "🙉", "🙊"},
 		FPS:    time.Second / 3, //nolint:gomnd
 	}
+	Meter = Spinner{
+		Frames: []string{
+			"▱▱▱",
+			"▰▱▱",
+			"▰▰▱",
+			"▰▰▰",
+			"▰▰▱",
+			"▰▱▱",
+			"▱▱▱",
+		},
+		FPS: time.Second / 7, //nolint:gomnd
+	}
+	Hamburger = Spinner{
+		Frames: []string{"☱", "☲", "☴", "☲"},
+		FPS:    time.Second / 3, //nolint:gomnd
+	}
 )
 
 // Model contains the state for the spinner. Use NewModel to create new models
@@ -112,9 +128,7 @@ type TickMsg struct {
 	ID   int
 }
 
-// Update is the Tea update function. This will advance the spinner one frame
-// every time it's called, regardless the message passed, so be sure the logic
-// is setup so as not to call this Update needlessly.
+// Update is the Tea update function.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case TickMsg:
