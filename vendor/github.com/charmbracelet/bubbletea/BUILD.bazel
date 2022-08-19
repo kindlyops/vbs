@@ -26,6 +26,7 @@ go_library(
     deps = [
         "//vendor/github.com/containerd/console:go_default_library",
         "//vendor/github.com/mattn/go-isatty:go_default_library",
+        "//vendor/github.com/mattn/go-localereader:go_default_library",
         "//vendor/github.com/muesli/ansi/compressor:go_default_library",
         "//vendor/github.com/muesli/cancelreader:go_default_library",
         "//vendor/github.com/muesli/reflow/truncate:go_default_library",

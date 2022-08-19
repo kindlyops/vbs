@@ -51,7 +51,7 @@ github.com/charmbracelet/bubbles/help
 github.com/charmbracelet/bubbles/key
 github.com/charmbracelet/bubbles/progress
 github.com/charmbracelet/bubbles/spinner
-# github.com/charmbracelet/bubbletea v0.22.0
+# github.com/charmbracelet/bubbletea v0.22.1
 ## explicit; go 1.13
 github.com/charmbracelet/bubbletea
 # github.com/charmbracelet/harmonica v0.2.0
@@ -102,6 +102,9 @@ github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.16
 ## explicit; go 1.15
 github.com/mattn/go-isatty
+# github.com/mattn/go-localereader v0.0.1
+## explicit
+github.com/mattn/go-localereader
 # github.com/mattn/go-runewidth v0.0.13
 ## explicit; go 1.9
 github.com/mattn/go-runewidth
@@ -112,7 +115,7 @@ github.com/mitchellh/mapstructure
 ## explicit; go 1.17
 github.com/muesli/ansi
 github.com/muesli/ansi/compressor
-# github.com/muesli/cancelreader v0.2.1
+# github.com/muesli/cancelreader v0.2.2
 ## explicit; go 1.17
 github.com/muesli/cancelreader
 # github.com/muesli/coral v1.0.0
