@@ -106,7 +106,7 @@ func (b Binding) Help() Help {
 // keybindings won't be activated and won't show up in help. Keybindings are
 // enabled by default.
 func (b Binding) Enabled() bool {
-	return !b.disabled
+	return !b.disabled && b.keys != nil
 }
 
 // SetEnabled enables or disables the keybinding.
@@ -130,9 +130,10 @@ type Help struct {
 
 // Matches checks if the given KeyMsg matches the given bindings.
 func Matches(k tea.KeyMsg, b ...Binding) bool {
+	keys := k.String()
 	for _, binding := range b {
 		for _, v := range binding.keys {
-			if k.String() == v && binding.Enabled() {
+			if keys == v && binding.Enabled() {
 				return true
 			}
 		}
