@@ -22,7 +22,6 @@ go_library(
     importpath = "github.com/charmbracelet/lipgloss",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/lucasb-eyer/go-colorful:go_default_library",
         "//vendor/github.com/mattn/go-runewidth:go_default_library",
         "//vendor/github.com/muesli/reflow/ansi:go_default_library",
         "//vendor/github.com/muesli/reflow/truncate:go_default_library",
