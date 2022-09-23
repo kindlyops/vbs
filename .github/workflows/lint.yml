@@ -1,18 +1,22 @@
 name: fast lint checks
-on: 
+on:
     pull_request:
         types: [opened, reopened, labeled, unlabeled, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   shellcheck:
     name: runner / shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: shellcheck
         uses: reviewdog/action-shellcheck@v1
         with:
-          github_token: ${{ secrets.github_token }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review # Change reporter.
           path: "." # Optional.
           pattern: "*.sh" # Optional.
@@ -24,12 +28,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: golangci-lint
         uses: reviewdog/action-golangci-lint@v2
         with:
           reporter: github-pr-review
-          github_token: ${{ secrets.github_token }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           golangci_lint_flags: "--config=.golangci.yml"
   verify-labels:
     name: verify labels

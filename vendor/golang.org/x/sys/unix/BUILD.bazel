@@ -182,6 +182,7 @@ go_library(
         "zsyscall_openbsd_amd64.go",
         "zsyscall_openbsd_amd64.s",
         "zsyscall_openbsd_arm.go",
+        "zsyscall_openbsd_arm.s",
         "zsyscall_openbsd_arm64.go",
         "zsyscall_openbsd_arm64.s",
         "zsyscall_solaris_amd64.go",
