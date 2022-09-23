@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//:glue.bzl", "static_site_embedder")
+
+filegroup(
+    name = "static",
+    srcs = glob(["dist/**/*"]),
+)
+
+static_site_embedder(
+    name = "embedder",
+    srcs = ["dist"],
+)
+
+go_library(
+    name = "go_default_library",
+    embedsrcs = [":static"],
+    srcs = [":embedder"],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/ui",
+    importpath = "github.com/pocketbase/pocketbase/ui",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/labstack/echo/v5:go_default_library"],
+)

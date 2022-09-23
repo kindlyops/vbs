@@ -16,28 +16,37 @@ package cmd
 
 import (
 	"github.com/muesli/coral"
+	"github.com/pocketbase/pocketbase"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
 var flyServerCmd = &coral.Command{
-	Use:   "fly",
-	Short: "Run http server for fly.io",
-	Long:  `Serve web requests in fly.io.`,
+	Use:   "serve",
+	Short: "Run pocketbase http server",
+	Long:  `Serve pocketbase web requests.`,
 	Run:   flyServer,
 	Args:  coral.ExactArgs(0),
 }
 
 func flyServer(cmd *coral.Command, args []string) {
-	addr := "127.0.0.1:" + viper.GetString("port")
+	_ = "127.0.0.1:" + viper.GetString("port")
 
-	log.Debug().Msgf("Listening on port: '%s'\n", addr)
-	//app := pocketbase.New()
+	log.Debug().Msgf("running pocketbase\n")
+	app := pocketbase.New()
+	if err := app.Start(); err != nil {
+		log.Fatal().Err(err).Msg("error starting pocketbase")
+	}
 
-	// if err := app.Start(); err != nil {
-	// 	log.Fatal(err)
-	// }
-
+	// app.RootCmd.AddCommand(&cobra.Command{
+	// 	Use: "fly",
+	// 	Run: func(command *cobra.Command, args []string) {
+	// 		log.Debug().Msgf("Pocketbase interceptor no-op")
+	// 		if err := app.Execute(); err != nil {
+	// 			log.Fatal().Err(err).Msg("error starting pocketbase")
+	// 		}
+	// 	},
+	// })
 }
 
 // Port to listen for HTTP requests.
