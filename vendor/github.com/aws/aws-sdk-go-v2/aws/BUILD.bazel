@@ -28,6 +28,7 @@ go_library(
         "//vendor/github.com/aws/aws-sdk-go-v2/internal/rand:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go-v2/internal/sdk:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go-v2/internal/sync/singleflight:go_default_library",
+        "//vendor/github.com/aws/smithy-go/auth/bearer:go_default_library",
         "//vendor/github.com/aws/smithy-go/logging:go_default_library",
         "//vendor/github.com/aws/smithy-go/middleware:go_default_library",
         "//vendor/github.com/aws/smithy-go/ptr:go_default_library",

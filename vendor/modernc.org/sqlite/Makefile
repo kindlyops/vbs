@@ -45,6 +45,10 @@ build_all_targets:
 	GOOS=freebsd GOARCH=amd64 go test -c -o /dev/null
 	GOOS=freebsd GOARCH=386 go build -v ./...
 	GOOS=freebsd GOARCH=386 go test -c -o /dev/null
+	GOOS=freebsd GOARCH=arm go build -v ./...
+	GOOS=freebsd GOARCH=arm go test -c -o /dev/null
+	GOOS=freebsd GOARCH=arm64 go build -v ./...
+	GOOS=freebsd GOARCH=arm64 go test -c -o /dev/null
 	GOOS=linux GOARCH=386 go build -v ./...
 	GOOS=linux GOARCH=386 go test -c -o /dev/null
 	GOOS=linux GOARCH=amd64 go build -v ./...
@@ -114,6 +118,12 @@ freebsd_amd64:
 # 3900x/qemu
 freebsd_386:
 	@echo "Should be executed only on freebsd/386."
+	go generate 2>&1 | tee log-generate
+	go build -v ./...
+
+# 3900x/qemu
+freebsd_arm:
+	@echo "Should be executed only on freebsd/arm."
 	go generate 2>&1 | tee log-generate
 	go build -v ./...
 
