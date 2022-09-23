@@ -13,7 +13,7 @@ cd "$BUILD_WORKSPACE_DIRECTORY"
 
 go mod tidy -compat=1.18
 go mod vendor
-$gazelle
+$gazelle # -exclude vendor/github.com/pocketbase/pocketbase/ui/embed.go
 
 # apply patches to generated BUILD files
-# patch -p1 <cobra.BUILD.patch
+patch -p1 <pocketbase.BUILD.patch
