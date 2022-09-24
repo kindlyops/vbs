@@ -16,7 +16,7 @@ jobs:
       - name: shellcheck
         uses: reviewdog/action-shellcheck@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
           reporter: github-pr-review # Change reporter.
           path: "." # Optional.
           pattern: "*.sh" # Optional.
@@ -33,7 +33,7 @@ jobs:
         uses: reviewdog/action-golangci-lint@v2
         with:
           reporter: github-pr-review
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
           golangci_lint_flags: "--config=.golangci.yml"
   verify-labels:
     name: verify labels
