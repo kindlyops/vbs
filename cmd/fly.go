@@ -21,7 +21,6 @@ import (
 	"github.com/muesli/coral"
 	"github.com/pocketbase/pocketbase"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 var flyServerCmd = &coral.Command{
@@ -33,8 +32,6 @@ var flyServerCmd = &coral.Command{
 }
 
 func flyServer(cmd *coral.Command, args []string) {
-	_ = "127.0.0.1:" + viper.GetString("port")
-
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Couldn't locate config dir")
@@ -65,10 +62,10 @@ func flyServer(cmd *coral.Command, args []string) {
 }
 
 // Port to listen for HTTP requests.
-var FlyPort string
+var httpTarget string
 
 func init() {
-	flyServerCmd.Flags().StringVarP(&FlyPort, "port", "p", "8080", "Port to listen for HTTP requests")
-	viper.BindPFlag("port", flyServerCmd.Flags().Lookup("port"))
+	flyServerCmd.Flags().StringVarP(&httpTarget, "http", "a", "0.0.0.0:8090", "Address & port to listen for HTTP requests")
+	//viper.BindPFlag("port", flyServerCmd.Flags().Lookup("port"))
 	rootCmd.AddCommand(flyServerCmd)
 }

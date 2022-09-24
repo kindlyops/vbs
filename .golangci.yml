@@ -42,7 +42,25 @@ linters:
     - ifshort
     - gofumpt
     - tagliatelle
+    - structcheck
+    - staticcheck
+    - unparam
+    - wastedassign
+    - noctx
+    - nilerr
+    - bodyclose
+    - contextcheck
+    - stylecheck
+    - gosimple
+    - golint
+    - sqlclosecheck
+    - rowserrcheck
+    - tparallel
+    - unused
 
 run:
+  skip-dirs:
+    - vendor
+    - external
   skip-files:
     - dummy.go

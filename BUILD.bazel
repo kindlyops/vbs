@@ -2,6 +2,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("//:version.bzl", "VERSION")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@io_bazel_rules_docker//go:image.bzl", "go_image")
+load("@io_bazel_rules_docker//container:container.bzl", "container_image", "container_push")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -74,6 +76,40 @@ go_binary(
     x_defs = {
         "version": VERSION,
     },
+)
+
+DEFAULT_BASE = select({
+    "@io_bazel_rules_docker//:debug": "@go_debug_image_base//image",
+    "@io_bazel_rules_docker//:fastbuild": "@go_image_base//image",
+    "@io_bazel_rules_docker//:optimized": "@go_image_base//image",
+    "//conditions:default": "@go_image_base//image",
+})
+
+# using container_image since go_image is not forwarding
+# the labels to the underlying container_image
+container_image(
+    name = "vbs_base",
+    base = DEFAULT_BASE,
+    labels = {
+        "org.opencontainers.image.source" : "https://github.com/kindlyops/vbs",
+    },
+)
+
+# see https://github.com/bazelbuild/rules_docker/pull/2087 for pending multi-arch
+go_image(
+    base = ":vbs_base",
+    name = "vbs_image",
+    binary = ":vbs-linux",
+)
+
+container_push(
+    name = "push_image",
+    format = "Docker",
+    image = ":vbs_image",
+    registry = "ghcr.io",
+    repository = "kindlyops/vbs",
+    tag = "$(IMAGE_TAG)",
+    tags=["manual"],
 )
 
 alias(

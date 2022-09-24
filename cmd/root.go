@@ -20,7 +20,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mattn/go-isatty"
+	isatty "github.com/mattn/go-isatty"
 	"github.com/muesli/coral"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
