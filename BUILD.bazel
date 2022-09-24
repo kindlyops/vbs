@@ -109,6 +109,7 @@ container_push(
     registry = "ghcr.io",
     repository = "kindlyops/vbs",
     tag = "$(IMAGE_TAG)",
+    tags=["manual"],
 )
 
 alias(
