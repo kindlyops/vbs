@@ -41,7 +41,7 @@ func flyServer(cmd *coral.Command, args []string) {
 
 	os.MkdirAll(configDir, os.ModePerm)
 
-	log.Debug().Msgf("running pocketbase\n")
+	log.Debug().Msgf("running pocketbase with data dir %s\n", configDir)
 	app := pocketbase.NewWithConfig(pocketbase.Config{
 		DefaultDataDir: configDir,
 	})
@@ -65,7 +65,7 @@ func flyServer(cmd *coral.Command, args []string) {
 var httpTarget string
 
 func init() {
-	flyServerCmd.Flags().StringVarP(&httpTarget, "http", "a", "0.0.0.0:8090", "Address & port to listen for HTTP requests")
+	flyServerCmd.Flags().StringVarP(&httpTarget, "http", "a", "0.0.0.0:8080", "Address & port to listen for HTTP requests")
 	//viper.BindPFlag("port", flyServerCmd.Flags().Lookup("port"))
 	rootCmd.AddCommand(flyServerCmd)
 }
