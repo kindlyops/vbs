@@ -15,6 +15,9 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/muesli/coral"
 	"github.com/pocketbase/pocketbase"
 	"github.com/rs/zerolog/log"
@@ -32,8 +35,20 @@ var flyServerCmd = &coral.Command{
 func flyServer(cmd *coral.Command, args []string) {
 	_ = "127.0.0.1:" + viper.GetString("port")
 
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatal().Stack().Err(err).Msg("Couldn't locate config dir")
+	}
+
+	configDir = filepath.Join(configDir, "vbs")
+
+	os.MkdirAll(configDir, os.ModePerm)
+
 	log.Debug().Msgf("running pocketbase\n")
-	app := pocketbase.New()
+	app := pocketbase.NewWithConfig(pocketbase.Config{
+		DefaultDataDir: configDir,
+	})
+
 	if err := app.Start(); err != nil {
 		log.Fatal().Err(err).Msg("error starting pocketbase")
 	}
