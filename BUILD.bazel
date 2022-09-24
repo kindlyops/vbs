@@ -78,28 +78,24 @@ go_binary(
     },
 )
 
-DEFAULT_BASE = select({
-    "@io_bazel_rules_docker//:debug": "@go_debug_image_base//image",
-    "@io_bazel_rules_docker//:fastbuild": "@go_image_base//image",
-    "@io_bazel_rules_docker//:optimized": "@go_image_base//image",
-    "//conditions:default": "@go_image_base//image",
-})
+# see https://github.com/bazelbuild/rules_docker/pull/2087 for pending multi-arch
+go_image(
+    name = "vbs_intermediate",
+    binary = ":vbs-linux",
+)
 
 # using container_image since go_image is not forwarding
 # the labels to the underlying container_image
 container_image(
-    name = "vbs_base",
-    base = DEFAULT_BASE,
-    labels = {
-        "org.opencontainers.image.source": "https://github.com/kindlyops/vbs",
-    },
-)
-
-# see https://github.com/bazelbuild/rules_docker/pull/2087 for pending multi-arch
-go_image(
     name = "vbs_image",
-    base = ":vbs_base",
-    binary = ":vbs-linux",
+    base = ":vbs_intermediate",
+    cmd = ["serve", "--http=0.0.0.0:8080"],
+    ports = ["8080"],
+    legacy_run_behavior = False,
+    labels = {
+        "org.opencontainers.image.source" : "https://github.com/kindlyops/vbs",
+        "org.opencontainers.image.description" : "Tools for video broadcast production",
+    },
 )
 
 container_push(
