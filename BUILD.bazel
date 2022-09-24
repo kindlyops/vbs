@@ -91,14 +91,14 @@ container_image(
     name = "vbs_base",
     base = DEFAULT_BASE,
     labels = {
-        "org.opencontainers.image.source" : "https://github.com/kindlyops/vbs",
+        "org.opencontainers.image.source": "https://github.com/kindlyops/vbs",
     },
 )
 
 # see https://github.com/bazelbuild/rules_docker/pull/2087 for pending multi-arch
 go_image(
-    base = ":vbs_base",
     name = "vbs_image",
+    base = ":vbs_base",
     binary = ":vbs-linux",
 )
 
@@ -109,7 +109,7 @@ container_push(
     registry = "ghcr.io",
     repository = "kindlyops/vbs",
     tag = "$(IMAGE_TAG)",
-    tags=["manual"],
+    tags = ["manual"],
 )
 
 alias(
