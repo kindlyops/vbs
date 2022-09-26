@@ -89,13 +89,16 @@ go_image(
 container_image(
     name = "vbs_image",
     base = ":vbs_intermediate",
-    cmd = ["serve", "--http=0.0.0.0:8080"],
-    ports = ["8080"],
-    legacy_run_behavior = False,
+    cmd = [
+        "serve",
+        "--http=0.0.0.0:8080",
+    ],
     labels = {
-        "org.opencontainers.image.source" : "https://github.com/kindlyops/vbs",
-        "org.opencontainers.image.description" : "Tools for video broadcast production",
+        "org.opencontainers.image.source": "https://github.com/kindlyops/vbs",
+        "org.opencontainers.image.description": "Tools for video broadcast production",
     },
+    legacy_run_behavior = False,
+    ports = ["8080"],
 )
 
 container_push(
