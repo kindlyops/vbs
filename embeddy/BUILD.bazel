@@ -1,5 +1,4 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-
 load("//:glue.bzl", "embed_nextjs")
 
 filegroup(
@@ -31,4 +30,5 @@ go_library(
     embedsrcs = [":next_export"],
     importpath = "github.com/kindlyops/vbs/embeddy",
     visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/labstack/echo/v5:go_default_library"],
 )

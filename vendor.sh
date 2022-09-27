@@ -11,9 +11,9 @@ echo "$gazelle"
 
 cd "$BUILD_WORKSPACE_DIRECTORY"
 
-go mod tidy -compat=1.17
+go mod tidy -compat=1.18
 go mod vendor
 $gazelle
 
 # apply patches to generated BUILD files
-# patch -p1 <cobra.BUILD.patch
+patch -p1 <pocketbase.BUILD.patch

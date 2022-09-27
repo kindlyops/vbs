@@ -70,3 +70,20 @@ Want to help add features or fix bugs? Awesome! vbs is build using bazel.
 To run goreleaser locally to test changes to the release process configuration:
 
     goreleaser release --snapshot --skip-publish --rm-dist
+
+### Running container image locally
+
+To run the container image locally to test changes to the container:
+
+    bazel run vbs_image -- --publish=8090:8090 -- serve
+
+To inspect the contents of the container using the dive utility
+
+    bazel run vbs_image -- --norun
+    dive bazel:vbs_image
+
+### pushing an experimental version of the image to github container registry
+
+To push a locally built image to github container registry:
+
+    bazel run --define=IMAGE_TAG=experimental --stamp //:push_image

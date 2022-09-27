@@ -11,7 +11,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@master
         with:
-          go-version: 1.17.2
+          go-version: 1.18.4
       - name: Install bazelisk
         run: |
           sudo wget -O /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.3.0/bazelisk-linux-amd64
@@ -33,6 +33,14 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | \
           sh -s -- -b /usr/local/bin v0.32.0
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push vbs image to ghcr.io
+        run: bazel run --define=IMAGE_TAG=${{ github.ref_name }} --stamp //:push_image
       - name: Run goreleaser
         uses: goreleaser/goreleaser-action@master
         env:
