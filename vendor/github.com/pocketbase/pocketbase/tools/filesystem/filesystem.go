@@ -216,17 +216,22 @@ func (s *System) Serve(response http.ResponseWriter, fileKey string, name string
 		disposition = "inline"
 	}
 
-	// make an exception for specific content types and force a
-	// custom content type to send in the response so that it can be loaded directly.
+	// make an exception for specific content types and force a custom
+	// content type to send in the response so that it can be loaded directly
 	extContentType := realContentType
 	if ct, found := manualExtensionContentTypes[filepath.Ext(name)]; found && extContentType != ct {
 		extContentType = ct
 	}
 
+	// clickjacking shouldn't be a concern when serving uploaded files,
+	// so it safe to unset the global X-Frame-Options to allow files embedding
+	// (see https://github.com/pocketbase/pocketbase/issues/677)
+	response.Header().Del("X-Frame-Options")
+
 	response.Header().Set("Content-Disposition", disposition+"; filename="+name)
 	response.Header().Set("Content-Type", extContentType)
 	response.Header().Set("Content-Length", strconv.FormatInt(r.Size(), 10))
-	response.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+	response.Header().Set("Content-Security-Policy", "default-src 'none'; media-src 'self'; style-src 'unsafe-inline'; sandbox")
 
 	// All HTTP date/time stamps MUST be represented in Greenwich Mean Time (GMT)
 	// (see https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1)
