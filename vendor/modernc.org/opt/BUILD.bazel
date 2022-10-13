@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["opt.go"],
+    importmap = "github.com/kindlyops/vbs/vendor/modernc.org/opt",
+    importpath = "modernc.org/opt",
+    visibility = ["//visibility:public"],
+)
