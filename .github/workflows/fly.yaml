@@ -19,7 +19,7 @@ jobs:
             sudo wget -O /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.7.4/bazelisk-linux-amd64
             sudo chmod +x /usr/local/bin/bazel
         - name: Login to GitHub Container Registry
-          uses: docker/login-action@v1
+          uses: docker/login-action@v2
           with:
             registry: ghcr.io
             username: ${{ github.actor }}
