@@ -8,10 +8,11 @@ gazelle="$PWD/$1"
 echo "Using these commands"
 command -v go
 echo "$gazelle"
+echo "workspace directory is $BUILD_WORKSPACE_DIRECTORY"
 
 cd "$BUILD_WORKSPACE_DIRECTORY"
 
-go mod tidy -compat=1.18
+go mod tidy
 go mod vendor
 $gazelle
 
