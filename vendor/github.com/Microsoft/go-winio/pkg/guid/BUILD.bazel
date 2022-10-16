@@ -6,6 +6,7 @@ go_library(
         "guid.go",
         "guid_nonwindows.go",
         "guid_windows.go",
+        "variant_string.go",
     ],
     importmap = "github.com/kindlyops/vbs/vendor/github.com/Microsoft/go-winio/pkg/guid",
     importpath = "github.com/Microsoft/go-winio/pkg/guid",
