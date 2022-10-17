@@ -57,33 +57,34 @@ load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
 bazel_skylib_workspace()
 
 http_archive(
-    name = "build_bazel_rules_nodejs",
-    sha256 = "6f15d75f9e99c19d9291ff8e64e4eb594a6b7d25517760a75ad3621a7a48c2df",
-    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/4.7.0/rules_nodejs-4.7.0.tar.gz"],
+    name = "aspect_rules_js",
+    sha256 = "b9fde0f20de6324ad443500ae738bda00facbd73900a12b417ce794856e01407",
+    strip_prefix = "rules_js-1.5.0",
+    url = "https://github.com/aspect-build/rules_js/archive/refs/tags/v1.5.0.tar.gz",
 )
 
+load("@aspect_rules_js//js:repositories.bzl", "rules_js_dependencies")
 
-load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "yarn_install")
-# NOTE: this rule installs nodejs, npm, and yarn, but does NOT install
-# your npm dependencies into your node_modules folder.
-# You must still run the package manager to do this.
-# M1 Macs require Node 16+
-node_repositories(
-    package_json = ["//embeddy:package.json"],
-    node_version = "16.13.0",
+rules_js_dependencies()
+
+load("@rules_nodejs//nodejs:repositories.bzl", "DEFAULT_NODE_VERSION", "nodejs_register_toolchains")
+
+nodejs_register_toolchains(
+    name = "nodejs",
+    node_version = DEFAULT_NODE_VERSION,
 )
 
-# Setup Bazel managed npm dependencies with the `yarn_install` rule.
-# The name of this rule should be set to `npm` so that `ts_library` and `ts_web_test_suite`
-# can find your npm dependencies by default in the `@npm` workspace. You may
-# also use the `npm_install` rule with a `package-lock.json` file if you prefer.
-# See https://github.com/bazelbuild/rules_nodejs#dependencies for more info.
-yarn_install(
-  name = "npm",
-  package_json = "//embeddy:package.json",
-  quiet = False,
-  yarn_lock = "//embeddy:yarn.lock",
+load("@aspect_rules_js//npm:npm_import.bzl", "npm_translate_lock")
+
+npm_translate_lock(
+    name = "npm",
+    pnpm_lock = "//embeddy:pnpm-lock.yaml",
+    verify_node_modules_ignored = "//:.bazelignore",
 )
+
+load("@npm//:repositories.bzl", "npm_repositories")
+
+npm_repositories()
 
 http_archive(
     name = "io_bazel_rules_docker",

@@ -1,5 +1,14 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("//:glue.bzl", "embed_nextjs")
+load("@aspect_bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
+load("//:glue.bzl", "static_site_embedder")
+load("@npm//embeddy:next/package_json.bzl", next_bin = "bin")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@aspect_rules_js//js:defs.bzl", "js_run_binary", "js_binary")
+npm_link_all_packages(name = "node_modules")
+
+# helpful example of how to use rules_js with next.js is here:
+# https://github.com/aspect-build/bazel-examples/blob/main/next.js/BUILD.bazel
+# TODO: set up typescript compilation of pages folder
 
 filegroup(
     name = "source_files",
@@ -8,19 +17,43 @@ filegroup(
         "pages/*",
         "styles/*",
     ]) + [
-        #"tsconfig.json",
-        #"next.config.js",
-        #"next-env.d.ts",
         "package.json",
-        "yarn.lock",
-        #"postcss.config.js",
-        #"tailwind.config.js",
     ],
 )
 
-embed_nextjs(
-    name = "embedder",
+copy_to_bin(
+    name = "copy_source_files",
     srcs = [":source_files"],
+    visibility = ["//visibility:private"],
+)
+
+js_run_binary(
+    name = "build",
+    srcs = [
+        ":node_modules",
+        ":source_files",
+    ],
+    outs = [".next/build-manifest.json"],
+    args = ["build"],
+    tool = ":next_bin",
+    chdir = package_name(),
+)
+
+next_bin.next(
+    name = "next_export",
+    srcs = [
+        ":source_files",
+        ":.next/build-manifest.json",
+        ":node_modules",
+    ],
+    outs = ["dist"],
+    chdir = package_name(),
+    args = ["export", "-o", "dist"],
+)
+
+static_site_embedder(
+    name = "embedder",
+    srcs = [":dist"],
 )
 
 # keep
@@ -31,4 +64,16 @@ go_library(
     importpath = "github.com/kindlyops/vbs/embeddy",
     visibility = ["//visibility:public"],
     deps = ["//vendor/github.com/labstack/echo/v5:go_default_library"],
+)
+
+# FROM https://github.com/aspect-build/bazel-examples/blob/main/next.js/BUILD.bazel
+# This custom next js_binary is needed since next is very sensitive to it being found in two
+# `node_modules` trees. With the standard generated `bin.next` build rule loaded from
+# `@npm//:next/package_json.bzl`, next is found both in the binary's runfiles `node_modules` and in
+# the execroot's `:node_modules` tree. This breaks the build. The work-around here is to have this
+# `next_bin` `js_binary` be an empty shim without any `node_modules` and re-direct from it to run
+# next from its execroot `:node_modules/next/dist/bin/next` entry point.
+js_binary(
+    name = "next_bin",
+    entry_point = ":next_entry.js",
 )

@@ -65,6 +65,10 @@ Want to help add features or fix bugs? Awesome! vbs is build using bazel.
     grab the source code from github
     `bazel run vbs` to compile and run the locally compiled version
 
+### Running bazel managed version of pnpm for nextjs updates
+
+    bazel run -- @pnpm//:pnpm --dir $PWD
+
 ### Testing release process
 
 To run goreleaser locally to test changes to the release process configuration:
