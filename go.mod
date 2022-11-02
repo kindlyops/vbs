@@ -3,7 +3,7 @@ module github.com/kindlyops/vbs
 go 1.18
 
 require (
-	github.com/aws/aws-sdk-go v1.44.128
+	github.com/aws/aws-sdk-go v1.44.129
 	github.com/hypebeast/go-osc v0.0.0-20220308234300-cec5a8a1e5f5
 	github.com/kennygrant/sanitize v1.2.4
 	github.com/mattn/go-isatty v0.0.16
