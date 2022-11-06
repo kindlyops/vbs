@@ -4,6 +4,7 @@ go_library(
     name = "go_default_library",
     srcs = [
         "call_option.go",
+        "content_type.go",
         "gax.go",
         "header.go",
         "invoke.go",
