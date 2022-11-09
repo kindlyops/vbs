@@ -32,10 +32,5 @@ go_library(
         "//vendor/github.com/muesli/reflow/truncate:go_default_library",
         "//vendor/github.com/muesli/termenv:go_default_library",
         "//vendor/golang.org/x/term:go_default_library",
-    ] + select({
-        "@io_bazel_rules_go//go/platform:windows": [
-            "//vendor/golang.org/x/sys/windows:go_default_library",
-        ],
-        "//conditions:default": [],
-    }),
+    ],
 )
