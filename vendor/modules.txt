@@ -190,7 +190,7 @@ github.com/charmbracelet/bubbles/help
 github.com/charmbracelet/bubbles/key
 github.com/charmbracelet/bubbles/progress
 github.com/charmbracelet/bubbles/spinner
-# github.com/charmbracelet/bubbletea v0.23.0
+# github.com/charmbracelet/bubbletea v0.23.1
 ## explicit; go 1.16
 github.com/charmbracelet/bubbletea
 # github.com/charmbracelet/harmonica v0.2.0
