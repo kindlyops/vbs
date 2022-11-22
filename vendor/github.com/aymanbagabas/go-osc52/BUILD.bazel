@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["osc52.go"],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/aymanbagabas/go-osc52",
+    importpath = "github.com/aymanbagabas/go-osc52",
+    visibility = ["//visibility:public"],
+)
