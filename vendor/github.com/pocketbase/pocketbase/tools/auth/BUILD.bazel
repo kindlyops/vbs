@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "auth.go",
+        "base_provider.go",
+        "discord.go",
+        "facebook.go",
+        "github.go",
+        "gitlab.go",
+        "google.go",
+        "twitter.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/auth",
+    importpath = "github.com/pocketbase/pocketbase/tools/auth",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/golang.org/x/oauth2:go_default_library"],
+)
