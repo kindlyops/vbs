@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["wrap.go"],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/muesli/reflow/wrap",
+    importpath = "github.com/muesli/reflow/wrap",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/mattn/go-runewidth:go_default_library",
+        "//vendor/github.com/muesli/reflow/ansi:go_default_library",
+    ],
+)
