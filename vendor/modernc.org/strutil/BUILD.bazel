@@ -1,9 +1,0 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
-
-go_library(
-    name = "go_default_library",
-    srcs = ["strutil.go"],
-    importmap = "github.com/kindlyops/vbs/vendor/modernc.org/strutil",
-    importpath = "modernc.org/strutil",
-    visibility = ["//visibility:public"],
-)
