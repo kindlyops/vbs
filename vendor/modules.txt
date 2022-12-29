@@ -293,7 +293,7 @@ github.com/magiconair/properties
 # github.com/mattn/go-colorable v0.1.13
 ## explicit; go 1.15
 github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.16
+# github.com/mattn/go-isatty v0.0.17
 ## explicit; go 1.15
 github.com/mattn/go-isatty
 # github.com/mattn/go-localereader v0.0.1
