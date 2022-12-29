@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["pocketbase.go"],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase",
+    importpath = "github.com/pocketbase/pocketbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/pocketbase/pocketbase/cmd:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/core:go_default_library",
+        "//vendor/github.com/spf13/cobra:go_default_library",
+    ],
+)
