@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "list.go",
+        "runner.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/migrate",
+    importpath = "github.com/pocketbase/pocketbase/tools/migrate",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/AlecAivazis/survey/v2:go_default_library",
+        "//vendor/github.com/fatih/color:go_default_library",
+        "//vendor/github.com/pocketbase/dbx:go_default_library",
+        "//vendor/github.com/spf13/cast:go_default_library",
+    ],
+)
