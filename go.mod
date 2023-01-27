@@ -7,7 +7,7 @@ require (
 	github.com/hypebeast/go-osc v0.0.0-20220308234300-cec5a8a1e5f5
 	github.com/kennygrant/sanitize v1.2.4
 	github.com/mattn/go-isatty v0.0.17
-	github.com/rs/zerolog v1.28.0
+	github.com/rs/zerolog v1.29.0
 	github.com/spf13/viper v1.15.0
 )
 
