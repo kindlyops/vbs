@@ -14,7 +14,7 @@ require (
 require (
 	github.com/Microsoft/go-winio v0.6.0
 	github.com/charmbracelet/bubbles v0.15.0
-	github.com/charmbracelet/bubbletea v0.23.1
+	github.com/charmbracelet/bubbletea v0.23.2
 	github.com/charmbracelet/lipgloss v0.6.0
 	github.com/muesli/coral v1.0.0
 	github.com/pocketbase/pocketbase v0.7.10
@@ -42,7 +42,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.13.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.16.19 // indirect
 	github.com/aws/smithy-go v1.13.3 // indirect
-	github.com/aymanbagabas/go-osc52 v1.0.3 // indirect
+	github.com/aymanbagabas/go-osc52 v1.2.1 // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/disintegration/imaging v1.6.2 // indirect
@@ -74,7 +74,7 @@ require (
 	github.com/muesli/ansi v0.0.0-20211018074035-2e021307bc4b // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
-	github.com/muesli/termenv v0.13.0 // indirect
+	github.com/muesli/termenv v0.14.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
 	github.com/pocketbase/dbx v1.6.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
@@ -94,6 +94,7 @@ require (
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/net v0.4.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783 // indirect
+	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.3.0 // indirect
 	golang.org/x/term v0.3.0 // indirect
 	golang.org/x/text v0.5.0 // indirect

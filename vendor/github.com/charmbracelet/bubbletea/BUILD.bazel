@@ -31,6 +31,7 @@ go_library(
         "//vendor/github.com/muesli/cancelreader:go_default_library",
         "//vendor/github.com/muesli/reflow/truncate:go_default_library",
         "//vendor/github.com/muesli/termenv:go_default_library",
+        "//vendor/golang.org/x/sync/errgroup:go_default_library",
         "//vendor/golang.org/x/term:go_default_library",
     ],
 )

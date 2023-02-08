@@ -10,6 +10,7 @@ go_library(
         "constants_unix.go",
         "copy.go",
         "hyperlink.go",
+        "notification.go",
         "output.go",
         "profile.go",
         "screen.go",
