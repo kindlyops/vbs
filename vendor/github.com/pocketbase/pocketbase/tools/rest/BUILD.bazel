@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "api_error.go",
+        "multi_binder.go",
+        "uploaded_file.go",
+        "url.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/rest",
+    importpath = "github.com/pocketbase/pocketbase/tools/rest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/go-ozzo/ozzo-validation/v4:go_default_library",
+        "//vendor/github.com/labstack/echo/v5:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/inflector:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/security:go_default_library",
+    ],
+)
