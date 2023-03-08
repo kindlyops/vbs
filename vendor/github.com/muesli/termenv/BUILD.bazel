@@ -27,7 +27,7 @@ go_library(
     importpath = "github.com/muesli/termenv",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/aymanbagabas/go-osc52:go_default_library",
+        "//vendor/github.com/aymanbagabas/go-osc52/v2:go_default_library",
         "//vendor/github.com/lucasb-eyer/go-colorful:go_default_library",
         "//vendor/github.com/mattn/go-isatty:go_default_library",
         "//vendor/github.com/mattn/go-runewidth:go_default_library",
