@@ -183,7 +183,9 @@ github.com/aws/smithy-go/transport/http/internal/io
 github.com/aws/smithy-go/waiter
 # github.com/aymanbagabas/go-osc52 v1.2.1
 ## explicit; go 1.16
-github.com/aymanbagabas/go-osc52
+# github.com/aymanbagabas/go-osc52/v2 v2.0.1
+## explicit; go 1.16
+github.com/aymanbagabas/go-osc52/v2
 # github.com/charmbracelet/bubbles v0.15.0
 ## explicit; go 1.13
 github.com/charmbracelet/bubbles/help
@@ -196,8 +198,8 @@ github.com/charmbracelet/bubbletea
 # github.com/charmbracelet/harmonica v0.2.0
 ## explicit; go 1.16
 github.com/charmbracelet/harmonica
-# github.com/charmbracelet/lipgloss v0.6.0
-## explicit; go 1.15
+# github.com/charmbracelet/lipgloss v0.7.0
+## explicit; go 1.17
 github.com/charmbracelet/lipgloss
 # github.com/containerd/console v1.0.3
 ## explicit; go 1.13
@@ -327,8 +329,8 @@ github.com/muesli/reflow/ansi
 github.com/muesli/reflow/truncate
 github.com/muesli/reflow/wordwrap
 github.com/muesli/reflow/wrap
-# github.com/muesli/termenv v0.14.0
-## explicit; go 1.13
+# github.com/muesli/termenv v0.15.0
+## explicit; go 1.17
 github.com/muesli/termenv
 # github.com/pelletier/go-toml/v2 v2.0.6
 ## explicit; go 1.16
@@ -485,7 +487,7 @@ golang.org/x/oauth2/internal
 # golang.org/x/sync v0.1.0
 ## explicit
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.3.0
+# golang.org/x/sys v0.6.0
 ## explicit; go 1.17
 golang.org/x/sys/execabs
 golang.org/x/sys/internal/unsafeheader
