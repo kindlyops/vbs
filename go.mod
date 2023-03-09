@@ -15,7 +15,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.0
 	github.com/charmbracelet/bubbles v0.15.0
 	github.com/charmbracelet/bubbletea v0.23.2
-	github.com/charmbracelet/lipgloss v0.7.0
+	github.com/charmbracelet/lipgloss v0.7.1
 	github.com/muesli/coral v1.0.0
 	github.com/pocketbase/pocketbase v0.7.10
 )
@@ -74,7 +74,7 @@ require (
 	github.com/muesli/ansi v0.0.0-20211018074035-2e021307bc4b // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
-	github.com/muesli/termenv v0.15.0 // indirect
+	github.com/muesli/termenv v0.15.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
 	github.com/pocketbase/dbx v1.6.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
