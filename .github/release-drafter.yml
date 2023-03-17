@@ -19,7 +19,7 @@ template: |
 
   $CHANGES
 
-  **All Changes**: https://github.com/kindlyops/deleterious/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+  **All Changes**: https://github.com/kindlyops/vbs/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
 
   ## Contributors
 
