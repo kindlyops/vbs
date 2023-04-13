@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "admin.go",
+        "base.go",
+        "collection.go",
+        "external_auth.go",
+        "param.go",
+        "record.go",
+        "record_expand.go",
+        "request.go",
+        "table.go",
+        "user.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/daos",
+    importpath = "github.com/pocketbase/pocketbase/daos",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/pocketbase/dbx:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/models:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/models/schema:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/list:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/security:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/types:go_default_library",
+    ],
+)
