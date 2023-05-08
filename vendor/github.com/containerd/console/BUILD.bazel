@@ -17,8 +17,6 @@ go_library(
         "tc_netbsd.go",
         "tc_openbsd_cgo.go",
         "tc_openbsd_nocgo.go",
-        "tc_solaris_cgo.go",
-        "tc_solaris_nocgo.go",
         "tc_unix.go",
         "tc_zos.go",
     ],
