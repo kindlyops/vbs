@@ -21,7 +21,7 @@ type KeyMap interface {
 	// which the help items are returned here.
 	ShortHelp() []key.Binding
 
-	// MoreHelp returns an extended group of help items, grouped by columns.
+	// FullHelp returns an extended group of help items, grouped by columns.
 	// The help bubble will render the help in the order in which the help
 	// items are returned here.
 	FullHelp() [][]key.Binding
@@ -96,7 +96,7 @@ func New() Model {
 var NewModel = New
 
 // Update helps satisfy the Bubble Tea Model interface. It's a no-op.
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m Model) Update(_ tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
