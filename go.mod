@@ -14,7 +14,7 @@ require (
 require (
 	github.com/Microsoft/go-winio v0.6.1
 	github.com/charmbracelet/bubbles v0.16.1
-	github.com/charmbracelet/bubbletea v0.24.1
+	github.com/charmbracelet/bubbletea v0.24.2
 	github.com/charmbracelet/lipgloss v0.7.1
 	github.com/muesli/coral v1.0.0
 	github.com/pocketbase/pocketbase v0.7.10
