@@ -1,16 +1,16 @@
 package pocketbase
 
 import (
-	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 
+	"github.com/fatih/color"
 	"github.com/pocketbase/pocketbase/cmd"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/list"
 	"github.com/spf13/cobra"
 )
 
@@ -49,6 +49,12 @@ type Config struct {
 
 	// hide the default console server info on app startup
 	HideStartBanner bool
+
+	// optional DB configurations
+	DataMaxOpenConns int // default to core.DefaultDataMaxOpenConns
+	DataMaxIdleConns int // default to core.DefaultDataMaxIdleConns
+	LogsMaxOpenConns int // default to core.DefaultLogsMaxOpenConns
+	LogsMaxIdleConns int // default to core.DefaultLogsMaxIdleConns
 }
 
 // New creates a new PocketBase instance with the default configuration.
@@ -62,7 +68,7 @@ type Config struct {
 func New() *PocketBase {
 	_, isUsingGoRun := inspectRuntime()
 
-	return NewWithConfig(Config{
+	return NewWithConfig(&Config{
 		DefaultDebug: isUsingGoRun,
 	})
 }
@@ -74,7 +80,11 @@ func New() *PocketBase {
 // Everything will be initialized when [Start()] is executed.
 // If you want to initialize the application before calling [Start()],
 // then you'll have to manually call [Bootstrap()].
-func NewWithConfig(config Config) *PocketBase {
+func NewWithConfig(config *Config) *PocketBase {
+	if config == nil {
+		panic("missing config")
+	}
+
 	// initialize a default data directory based on the executable baseDir
 	if config.DefaultDataDir == "" {
 		baseDir, _ := inspectRuntime()
@@ -83,7 +93,7 @@ func NewWithConfig(config Config) *PocketBase {
 
 	pb := &PocketBase{
 		RootCmd: &cobra.Command{
-			Use:     "pocketbase",
+			Use:     filepath.Base(os.Args[0]),
 			Short:   "PocketBase CLI",
 			Version: Version,
 			FParseErrWhitelist: cobra.FParseErrWhitelist{
@@ -105,19 +115,18 @@ func NewWithConfig(config Config) *PocketBase {
 	pb.eagerParseFlags(config)
 
 	// initialize the app instance
-	pb.appWrapper = &appWrapper{core.NewBaseApp(
-		pb.dataDirFlag,
-		pb.encryptionEnvFlag,
-		pb.debugFlag,
-	)}
+	pb.appWrapper = &appWrapper{core.NewBaseApp(&core.BaseAppConfig{
+		DataDir:          pb.dataDirFlag,
+		EncryptionEnv:    pb.encryptionEnvFlag,
+		IsDebug:          pb.debugFlag,
+		DataMaxOpenConns: config.DataMaxOpenConns,
+		DataMaxIdleConns: config.DataMaxIdleConns,
+		LogsMaxOpenConns: config.LogsMaxOpenConns,
+		LogsMaxIdleConns: config.LogsMaxIdleConns,
+	})}
 
 	// hide the default help command (allow only `--help` flag)
 	pb.RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-
-	// hook the bootstrap process
-	pb.RootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		return pb.Bootstrap()
-	}
 
 	return pb
 }
@@ -126,8 +135,8 @@ func NewWithConfig(config Config) *PocketBase {
 // commands (serve, migrate, version) and executes pb.RootCmd.
 func (pb *PocketBase) Start() error {
 	// register system commands
+	pb.RootCmd.AddCommand(cmd.NewAdminCommand(pb))
 	pb.RootCmd.AddCommand(cmd.NewServeCommand(pb, !pb.hideStartBanner))
-	pb.RootCmd.AddCommand(cmd.NewMigrateCommand(pb))
 
 	return pb.Execute()
 }
@@ -138,40 +147,44 @@ func (pb *PocketBase) Start() error {
 // This method differs from pb.Start() by not registering the default
 // system commands!
 func (pb *PocketBase) Execute() error {
-	var wg sync.WaitGroup
+	if !pb.skipBootstrap() {
+		if err := pb.Bootstrap(); err != nil {
+			return err
+		}
+	}
 
-	wg.Add(1)
+	done := make(chan bool, 1)
 
-	// wait for interrupt signal to gracefully shutdown the application
+	// listen for interrupt signal to gracefully shutdown the application
 	go func() {
-		defer wg.Done()
-		quit := make(chan os.Signal, 1) // we need to reserve to buffer size 1, so the notifier are not blocked
-		signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-		<-quit
+		sigch := make(chan os.Signal, 1)
+		signal.Notify(sigch, os.Interrupt, syscall.SIGTERM)
+		<-sigch
+		done <- true
 	}()
 
 	// execute the root command
 	go func() {
-		defer wg.Done()
 		if err := pb.RootCmd.Execute(); err != nil {
-			log.Println(err)
+			// @todo replace with db log once generalized logs are added
+			// (note may need to update the existing commands to not silence errors)
+			color.Red(err.Error())
 		}
+
+		done <- true
 	}()
 
-	wg.Wait()
+	<-done
 
-	// cleanup
-	return pb.onTerminate()
-}
-
-// onTerminate tries to release the app resources on app termination.
-func (pb *PocketBase) onTerminate() error {
-	return pb.ResetBootstrapState()
+	// trigger app cleanups
+	return pb.OnTerminate().Trigger(&core.TerminateEvent{
+		App: pb,
+	})
 }
 
 // eagerParseFlags parses the global app flags before calling pb.RootCmd.Execute().
 // so we can have all PocketBase flags ready for use on initialization.
-func (pb *PocketBase) eagerParseFlags(config Config) error {
+func (pb *PocketBase) eagerParseFlags(config *Config) error {
 	pb.RootCmd.PersistentFlags().StringVar(
 		&pb.dataDirFlag,
 		"dir",
@@ -196,7 +209,50 @@ func (pb *PocketBase) eagerParseFlags(config Config) error {
 	return pb.RootCmd.ParseFlags(os.Args[1:])
 }
 
-// tries to find the base executable directory and how it was run
+// skipBootstrap eagerly checks if the app should skip the bootstrap process:
+// - already bootstrapped
+// - is unknown command
+// - is the default help command
+// - is the default version command
+//
+// https://github.com/pocketbase/pocketbase/issues/404
+// https://github.com/pocketbase/pocketbase/discussions/1267
+func (pb *PocketBase) skipBootstrap() bool {
+	flags := []string{
+		"-h",
+		"--help",
+		"-v",
+		"--version",
+	}
+
+	if pb.IsBootstrapped() {
+		return true // already bootstrapped
+	}
+
+	cmd, _, err := pb.RootCmd.Find(os.Args[1:])
+	if err != nil {
+		return true // unknown command
+	}
+
+	for _, arg := range os.Args {
+		if !list.ExistInSlice(arg, flags) {
+			continue
+		}
+
+		// ensure that there is no user defined flag with the same name/shorthand
+		trimmed := strings.TrimLeft(arg, "-")
+		if len(trimmed) > 1 && cmd.Flags().Lookup(trimmed) == nil {
+			return true
+		}
+		if len(trimmed) == 1 && cmd.Flags().ShorthandLookup(trimmed) == nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+// inspectRuntime tries to find the base executable directory and how it was run.
 func inspectRuntime() (baseDir string, withGoRun bool) {
 	if strings.HasPrefix(os.Args[0], os.TempDir()) {
 		// probably ran with go run

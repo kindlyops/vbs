@@ -1,21 +1,12 @@
 package cmd
 
 import (
-	"crypto/tls"
 	"log"
-	"net"
 	"net/http"
-	"path/filepath"
-	"time"
 
-	"github.com/fatih/color"
-	"github.com/labstack/echo/v5/middleware"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/migrate"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/acme"
-	"golang.org/x/crypto/acme/autocert"
 )
 
 // NewServeCommand creates and returns new command responsible for
@@ -29,86 +20,15 @@ func NewServeCommand(app core.App, showStartBanner bool) *cobra.Command {
 		Use:   "serve",
 		Short: "Starts the web server (default to 127.0.0.1:8090)",
 		Run: func(command *cobra.Command, args []string) {
-			// ensure that the latest migrations are applied before starting the server
-			if err := runMigrations(app); err != nil {
-				panic(err)
-			}
+			err := apis.Serve(app, &apis.ServeOptions{
+				HttpAddr:        httpAddr,
+				HttpsAddr:       httpsAddr,
+				ShowStartBanner: showStartBanner,
+				AllowedOrigins:  allowedOrigins,
+			})
 
-			// reload app settings in case a new default value was set with a migration
-			// (or if this is the first time the init migration was executed)
-			if err := app.RefreshSettings(); err != nil {
-				color.Yellow("=====================================")
-				color.Yellow("WARNING - Settings load error! \n%v", err)
-				color.Yellow("Fallback to the application defaults.")
-				color.Yellow("=====================================")
-			}
-
-			router, err := apis.InitApi(app)
-			if err != nil {
-				panic(err)
-			}
-
-			// configure cors
-			router.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-				Skipper:      middleware.DefaultSkipper,
-				AllowOrigins: allowedOrigins,
-				AllowMethods: []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodPatch, http.MethodPost, http.MethodDelete},
-			}))
-
-			// start http server
-			// ---
-			mainAddr := httpAddr
-			if httpsAddr != "" {
-				mainAddr = httpsAddr
-			}
-
-			mainHost, _, _ := net.SplitHostPort(mainAddr)
-
-			certManager := autocert.Manager{
-				Prompt:     autocert.AcceptTOS,
-				Cache:      autocert.DirCache(filepath.Join(app.DataDir(), ".autocert_cache")),
-				HostPolicy: autocert.HostWhitelist(mainHost, "www."+mainHost),
-			}
-
-			serverConfig := &http.Server{
-				TLSConfig: &tls.Config{
-					GetCertificate: certManager.GetCertificate,
-					NextProtos:     []string{acme.ALPNProto},
-				},
-				ReadTimeout: 60 * time.Second,
-				// WriteTimeout: 60 * time.Second, // breaks sse!
-				Handler: router,
-				Addr:    mainAddr,
-			}
-
-			if showStartBanner {
-				schema := "http"
-				if httpsAddr != "" {
-					schema = "https"
-				}
-				regular := color.New()
-				bold := color.New(color.Bold).Add(color.FgGreen)
-				bold.Printf("> Server started at: %s\n", color.CyanString("%s://%s", schema, serverConfig.Addr))
-				regular.Printf("  - REST API: %s\n", color.CyanString("%s://%s/api/", schema, serverConfig.Addr))
-				regular.Printf("  - Admin UI: %s\n", color.CyanString("%s://%s/_/", schema, serverConfig.Addr))
-			}
-
-			var serveErr error
-			if httpsAddr != "" {
-				// if httpAddr is set, start an HTTP server to redirect the traffic to the HTTPS version
-				if httpAddr != "" {
-					go http.ListenAndServe(httpAddr, certManager.HTTPHandler(nil))
-				}
-
-				// start HTTPS server
-				serveErr = serverConfig.ListenAndServeTLS("", "")
-			} else {
-				// start HTTP server
-				serveErr = serverConfig.ListenAndServe()
-			}
-
-			if serveErr != http.ErrServerClosed {
-				log.Fatalln(serveErr)
+			if err != http.ErrServerClosed {
+				log.Fatalln(err)
 			}
 		},
 	}
@@ -135,21 +55,4 @@ func NewServeCommand(app core.App, showStartBanner bool) *cobra.Command {
 	)
 
 	return command
-}
-
-func runMigrations(app core.App) error {
-	connections := migrationsConnectionsMap(app)
-
-	for _, c := range connections {
-		runner, err := migrate.NewRunner(c.DB, c.MigrationsList)
-		if err != nil {
-			return err
-		}
-
-		if _, err := runner.Up(); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

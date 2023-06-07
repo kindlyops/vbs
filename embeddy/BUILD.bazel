@@ -23,13 +23,13 @@ filegroup(
     name = "test_files",
     srcs = glob([
         "tests/*.spec.ts",
-    ])
+    ]),
 )
 
 playwright_test(
-    args = ["test"],
     name = "e2e_test",
-    data = [":test_files"]
+    args = ["test"],
+    data = [":test_files"],
 )
 
 embed_nextjs(

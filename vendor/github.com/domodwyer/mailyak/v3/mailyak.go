@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
+	"net/mail"
 	"net/smtp"
 	"regexp"
 	"strings"
@@ -15,6 +16,7 @@ type MailYak struct {
 	html  BodyPart
 	plain BodyPart
 
+	localName      string
 	toAddrs        []string
 	ccAddrs        []string
 	bccAddrs       []string
@@ -22,7 +24,7 @@ type MailYak struct {
 	fromAddr       string
 	fromName       string
 	replyTo        string
-	headers        map[string]string // arbitrary headers
+	headers        map[string][]string // arbitrary headers
 	attachments    []attachment
 	trimRegex      *regexp.Regexp
 	auth           smtp.Auth
@@ -52,7 +54,7 @@ const mailDateFormat = time.RFC1123Z
 // connection, or to provide a custom tls.Config, use NewWithTLS() instead.
 func New(host string, auth smtp.Auth) *MailYak {
 	return &MailYak{
-		headers:        map[string]string{},
+		headers:        map[string][]string{},
 		host:           host,
 		auth:           auth,
 		sender:         newSenderWithStartTLS(host),
@@ -169,6 +171,12 @@ func (m *MailYak) Plain() *BodyPart {
 	return &m.plain
 }
 
+// getLocalName should return the sender domain to be used in the EHLO/HELO
+// command.
+func (m *MailYak) getLocalName() string {
+	return m.localName
+}
+
 // getToAddrs should return a slice of email addresses to be added to the
 // RCPT TO command.
 func (m *MailYak) getToAddrs() []string {
@@ -177,9 +185,9 @@ func (m *MailYak) getToAddrs() []string {
 	addrs := len(m.toAddrs) + len(m.ccAddrs) + len(m.bccAddrs)
 	out := make([]string, 0, addrs)
 
-	out = append(out, m.toAddrs...)
-	out = append(out, m.ccAddrs...)
-	out = append(out, m.bccAddrs...)
+	out = append(out, stripNames(m.toAddrs)...)
+	out = append(out, stripNames(m.ccAddrs)...)
+	out = append(out, stripNames(m.bccAddrs)...)
 
 	return out
 }
@@ -193,4 +201,30 @@ func (m *MailYak) getFromAddr() string {
 // getAuth should return the smtp.Auth if configured, nil if not.
 func (m *MailYak) getAuth() smtp.Auth {
 	return m.auth
+}
+
+// stripNames returns a new slice with only the email parts from the RFC 5322 addresses.
+//
+// Or in other words, converts:
+// ["a@example.com", "John <b@example.com>", "invalid"]
+// to
+// ["a@example.com", "b@example.com", "invalid"].
+//
+// Note that invalid addresses are kept as they are.
+func stripNames(addresses []string) []string {
+	result := make([]string, 0, len(addresses))
+
+	for _, original := range addresses {
+		addr, err := mail.ParseAddress(original)
+
+		if err != nil {
+			// add as it is
+			result = append(result, original)
+		} else {
+			// add only the email part
+			result = append(result, addr.Address)
+		}
+	}
+
+	return result
 }

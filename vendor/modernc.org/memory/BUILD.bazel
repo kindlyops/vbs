@@ -9,6 +9,7 @@ go_library(
         "mmap_darwin.go",
         "mmap_freebsd_32.go",
         "mmap_freebsd_64.go",
+        "mmap_illumos_amd64.go",
         "mmap_linux_32.go",
         "mmap_linux_64.go",
         "mmap_linux_s390x.go",

@@ -17,6 +17,7 @@ go_library(
         "sqlite3_load_extension.go",
         "sqlite3_opt_preupdate.go",
         "sqlite3_opt_preupdate_omit.go",
+        "sqlite3_opt_serialize.go",
         "sqlite3_opt_unlock_notify.c",
         "sqlite3_opt_userauth_omit.go",
         "sqlite3_other.go",
@@ -40,9 +41,6 @@ go_library(
         ],
         "@io_bazel_rules_go//go/platform:solaris": [
             "-lc",
-        ],
-        "@io_bazel_rules_go//go/platform:windows": [
-            "-lmingwex -lmingw32",
         ],
         "//conditions:default": [],
     }) + select({

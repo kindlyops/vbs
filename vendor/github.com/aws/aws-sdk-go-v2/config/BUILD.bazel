@@ -31,6 +31,7 @@ go_library(
         "//vendor/github.com/aws/aws-sdk-go-v2/credentials/stscreds:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go-v2/feature/ec2/imds:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go-v2/internal/ini:go_default_library",
+        "//vendor/github.com/aws/aws-sdk-go-v2/internal/shareddefaults:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go-v2/service/sso:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go-v2/service/ssooidc:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go-v2/service/sts:go_default_library",

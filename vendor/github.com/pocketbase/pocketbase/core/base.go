@@ -3,23 +3,36 @@ package core
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/daos"
 	"github.com/pocketbase/pocketbase/models"
+	"github.com/pocketbase/pocketbase/models/settings"
 	"github.com/pocketbase/pocketbase/tools/filesystem"
 	"github.com/pocketbase/pocketbase/tools/hook"
 	"github.com/pocketbase/pocketbase/tools/mailer"
-	"github.com/pocketbase/pocketbase/tools/security"
+	"github.com/pocketbase/pocketbase/tools/routine"
 	"github.com/pocketbase/pocketbase/tools/store"
 	"github.com/pocketbase/pocketbase/tools/subscriptions"
+)
+
+const (
+	DefaultDataMaxOpenConns int = 120
+	DefaultDataMaxIdleConns int = 20
+	DefaultLogsMaxOpenConns int = 10
+	DefaultLogsMaxIdleConns int = 2
+
+	LocalStorageDirName string = "storage"
+	LocalBackupsDirName string = "backups"
+	LocalTempDirName    string = ".pb_temp_to_delete" // temp pb_data sub directory that will be deleted on each app.Bootstrap()
 )
 
 var _ App = (*BaseApp)(nil)
@@ -27,21 +40,28 @@ var _ App = (*BaseApp)(nil)
 // BaseApp implements core.App and defines the base PocketBase app structure.
 type BaseApp struct {
 	// configurable parameters
-	isDebug       bool
-	dataDir       string
-	encryptionEnv string
+	isDebug          bool
+	dataDir          string
+	encryptionEnv    string
+	dataMaxOpenConns int
+	dataMaxIdleConns int
+	logsMaxOpenConns int
+	logsMaxIdleConns int
 
 	// internals
 	cache               *store.Store[any]
-	settings            *Settings
-	db                  *dbx.DB
+	settings            *settings.Settings
 	dao                 *daos.Dao
-	logsDB              *dbx.DB
 	logsDao             *daos.Dao
 	subscriptionsBroker *subscriptions.Broker
 
-	// serve event hooks
-	onBeforeServe *hook.Hook[*ServeEvent]
+	// app event hooks
+	onBeforeBootstrap *hook.Hook[*BootstrapEvent]
+	onAfterBootstrap  *hook.Hook[*BootstrapEvent]
+	onBeforeServe     *hook.Hook[*ServeEvent]
+	onBeforeApiError  *hook.Hook[*ApiErrorEvent]
+	onAfterApiError   *hook.Hook[*ApiErrorEvent]
+	onTerminate       *hook.Hook[*TerminateEvent]
 
 	// dao event hooks
 	onModelBeforeCreate *hook.Hook[*ModelEvent]
@@ -52,17 +72,20 @@ type BaseApp struct {
 	onModelAfterDelete  *hook.Hook[*ModelEvent]
 
 	// mailer event hooks
-	onMailerBeforeAdminResetPasswordSend *hook.Hook[*MailerAdminEvent]
-	onMailerAfterAdminResetPasswordSend  *hook.Hook[*MailerAdminEvent]
-	onMailerBeforeUserResetPasswordSend  *hook.Hook[*MailerUserEvent]
-	onMailerAfterUserResetPasswordSend   *hook.Hook[*MailerUserEvent]
-	onMailerBeforeUserVerificationSend   *hook.Hook[*MailerUserEvent]
-	onMailerAfterUserVerificationSend    *hook.Hook[*MailerUserEvent]
-	onMailerBeforeUserChangeEmailSend    *hook.Hook[*MailerUserEvent]
-	onMailerAfterUserChangeEmailSend     *hook.Hook[*MailerUserEvent]
+	onMailerBeforeAdminResetPasswordSend  *hook.Hook[*MailerAdminEvent]
+	onMailerAfterAdminResetPasswordSend   *hook.Hook[*MailerAdminEvent]
+	onMailerBeforeRecordResetPasswordSend *hook.Hook[*MailerRecordEvent]
+	onMailerAfterRecordResetPasswordSend  *hook.Hook[*MailerRecordEvent]
+	onMailerBeforeRecordVerificationSend  *hook.Hook[*MailerRecordEvent]
+	onMailerAfterRecordVerificationSend   *hook.Hook[*MailerRecordEvent]
+	onMailerBeforeRecordChangeEmailSend   *hook.Hook[*MailerRecordEvent]
+	onMailerAfterRecordChangeEmailSend    *hook.Hook[*MailerRecordEvent]
 
 	// realtime api event hooks
 	onRealtimeConnectRequest         *hook.Hook[*RealtimeConnectEvent]
+	onRealtimeDisconnectRequest      *hook.Hook[*RealtimeDisconnectEvent]
+	onRealtimeBeforeMessageSend      *hook.Hook[*RealtimeMessageEvent]
+	onRealtimeAfterMessageSend       *hook.Hook[*RealtimeMessageEvent]
 	onRealtimeBeforeSubscribeRequest *hook.Hook[*RealtimeSubscribeEvent]
 	onRealtimeAfterSubscribeRequest  *hook.Hook[*RealtimeSubscribeEvent]
 
@@ -72,34 +95,54 @@ type BaseApp struct {
 	onSettingsAfterUpdateRequest  *hook.Hook[*SettingsUpdateEvent]
 
 	// file api event hooks
-	onFileDownloadRequest *hook.Hook[*FileDownloadEvent]
+	onFileDownloadRequest    *hook.Hook[*FileDownloadEvent]
+	onFileBeforeTokenRequest *hook.Hook[*FileTokenEvent]
+	onFileAfterTokenRequest  *hook.Hook[*FileTokenEvent]
 
 	// admin api event hooks
-	onAdminsListRequest        *hook.Hook[*AdminsListEvent]
-	onAdminViewRequest         *hook.Hook[*AdminViewEvent]
-	onAdminBeforeCreateRequest *hook.Hook[*AdminCreateEvent]
-	onAdminAfterCreateRequest  *hook.Hook[*AdminCreateEvent]
-	onAdminBeforeUpdateRequest *hook.Hook[*AdminUpdateEvent]
-	onAdminAfterUpdateRequest  *hook.Hook[*AdminUpdateEvent]
-	onAdminBeforeDeleteRequest *hook.Hook[*AdminDeleteEvent]
-	onAdminAfterDeleteRequest  *hook.Hook[*AdminDeleteEvent]
-	onAdminAuthRequest         *hook.Hook[*AdminAuthEvent]
+	onAdminsListRequest                      *hook.Hook[*AdminsListEvent]
+	onAdminViewRequest                       *hook.Hook[*AdminViewEvent]
+	onAdminBeforeCreateRequest               *hook.Hook[*AdminCreateEvent]
+	onAdminAfterCreateRequest                *hook.Hook[*AdminCreateEvent]
+	onAdminBeforeUpdateRequest               *hook.Hook[*AdminUpdateEvent]
+	onAdminAfterUpdateRequest                *hook.Hook[*AdminUpdateEvent]
+	onAdminBeforeDeleteRequest               *hook.Hook[*AdminDeleteEvent]
+	onAdminAfterDeleteRequest                *hook.Hook[*AdminDeleteEvent]
+	onAdminAuthRequest                       *hook.Hook[*AdminAuthEvent]
+	onAdminBeforeAuthWithPasswordRequest     *hook.Hook[*AdminAuthWithPasswordEvent]
+	onAdminAfterAuthWithPasswordRequest      *hook.Hook[*AdminAuthWithPasswordEvent]
+	onAdminBeforeAuthRefreshRequest          *hook.Hook[*AdminAuthRefreshEvent]
+	onAdminAfterAuthRefreshRequest           *hook.Hook[*AdminAuthRefreshEvent]
+	onAdminBeforeRequestPasswordResetRequest *hook.Hook[*AdminRequestPasswordResetEvent]
+	onAdminAfterRequestPasswordResetRequest  *hook.Hook[*AdminRequestPasswordResetEvent]
+	onAdminBeforeConfirmPasswordResetRequest *hook.Hook[*AdminConfirmPasswordResetEvent]
+	onAdminAfterConfirmPasswordResetRequest  *hook.Hook[*AdminConfirmPasswordResetEvent]
 
-	//                                    user api event hooks
-	onUsersListRequest                    *hook.Hook[*UsersListEvent]
-	onUserViewRequest                     *hook.Hook[*UserViewEvent]
-	onUserBeforeCreateRequest             *hook.Hook[*UserCreateEvent]
-	onUserAfterCreateRequest              *hook.Hook[*UserCreateEvent]
-	onUserBeforeUpdateRequest             *hook.Hook[*UserUpdateEvent]
-	onUserAfterUpdateRequest              *hook.Hook[*UserUpdateEvent]
-	onUserBeforeDeleteRequest             *hook.Hook[*UserDeleteEvent]
-	onUserAfterDeleteRequest              *hook.Hook[*UserDeleteEvent]
-	onUserAuthRequest                     *hook.Hook[*UserAuthEvent]
-	onUserListExternalAuths               *hook.Hook[*UserListExternalAuthsEvent]
-	onUserBeforeUnlinkExternalAuthRequest *hook.Hook[*UserUnlinkExternalAuthEvent]
-	onUserAfterUnlinkExternalAuthRequest  *hook.Hook[*UserUnlinkExternalAuthEvent]
+	// record auth API event hooks
+	onRecordAuthRequest                       *hook.Hook[*RecordAuthEvent]
+	onRecordBeforeAuthWithPasswordRequest     *hook.Hook[*RecordAuthWithPasswordEvent]
+	onRecordAfterAuthWithPasswordRequest      *hook.Hook[*RecordAuthWithPasswordEvent]
+	onRecordBeforeAuthWithOAuth2Request       *hook.Hook[*RecordAuthWithOAuth2Event]
+	onRecordAfterAuthWithOAuth2Request        *hook.Hook[*RecordAuthWithOAuth2Event]
+	onRecordBeforeAuthRefreshRequest          *hook.Hook[*RecordAuthRefreshEvent]
+	onRecordAfterAuthRefreshRequest           *hook.Hook[*RecordAuthRefreshEvent]
+	onRecordBeforeRequestPasswordResetRequest *hook.Hook[*RecordRequestPasswordResetEvent]
+	onRecordAfterRequestPasswordResetRequest  *hook.Hook[*RecordRequestPasswordResetEvent]
+	onRecordBeforeConfirmPasswordResetRequest *hook.Hook[*RecordConfirmPasswordResetEvent]
+	onRecordAfterConfirmPasswordResetRequest  *hook.Hook[*RecordConfirmPasswordResetEvent]
+	onRecordBeforeRequestVerificationRequest  *hook.Hook[*RecordRequestVerificationEvent]
+	onRecordAfterRequestVerificationRequest   *hook.Hook[*RecordRequestVerificationEvent]
+	onRecordBeforeConfirmVerificationRequest  *hook.Hook[*RecordConfirmVerificationEvent]
+	onRecordAfterConfirmVerificationRequest   *hook.Hook[*RecordConfirmVerificationEvent]
+	onRecordBeforeRequestEmailChangeRequest   *hook.Hook[*RecordRequestEmailChangeEvent]
+	onRecordAfterRequestEmailChangeRequest    *hook.Hook[*RecordRequestEmailChangeEvent]
+	onRecordBeforeConfirmEmailChangeRequest   *hook.Hook[*RecordConfirmEmailChangeEvent]
+	onRecordAfterConfirmEmailChangeRequest    *hook.Hook[*RecordConfirmEmailChangeEvent]
+	onRecordListExternalAuthsRequest          *hook.Hook[*RecordListExternalAuthsEvent]
+	onRecordBeforeUnlinkExternalAuthRequest   *hook.Hook[*RecordUnlinkExternalAuthEvent]
+	onRecordAfterUnlinkExternalAuthRequest    *hook.Hook[*RecordUnlinkExternalAuthEvent]
 
-	// record api event hooks
+	// record crud API event hooks
 	onRecordsListRequest        *hook.Hook[*RecordsListEvent]
 	onRecordViewRequest         *hook.Hook[*RecordViewEvent]
 	onRecordBeforeCreateRequest *hook.Hook[*RecordCreateEvent]
@@ -109,7 +152,7 @@ type BaseApp struct {
 	onRecordBeforeDeleteRequest *hook.Hook[*RecordDeleteEvent]
 	onRecordAfterDeleteRequest  *hook.Hook[*RecordDeleteEvent]
 
-	// collection api event hooks
+	// collection API event hooks
 	onCollectionsListRequest         *hook.Hook[*CollectionsListEvent]
 	onCollectionViewRequest          *hook.Hook[*CollectionViewEvent]
 	onCollectionBeforeCreateRequest  *hook.Hook[*CollectionCreateEvent]
@@ -122,21 +165,41 @@ type BaseApp struct {
 	onCollectionsAfterImportRequest  *hook.Hook[*CollectionsImportEvent]
 }
 
+// BaseAppConfig defines a BaseApp configuration option
+type BaseAppConfig struct {
+	DataDir          string
+	EncryptionEnv    string
+	IsDebug          bool
+	DataMaxOpenConns int // default to 500
+	DataMaxIdleConns int // default 20
+	LogsMaxOpenConns int // default to 100
+	LogsMaxIdleConns int // default to 5
+}
+
 // NewBaseApp creates and returns a new BaseApp instance
 // configured with the provided arguments.
 //
 // To initialize the app, you need to call `app.Bootstrap()`.
-func NewBaseApp(dataDir string, encryptionEnv string, isDebug bool) *BaseApp {
+func NewBaseApp(config *BaseAppConfig) *BaseApp {
 	app := &BaseApp{
-		dataDir:             dataDir,
-		isDebug:             isDebug,
-		encryptionEnv:       encryptionEnv,
+		dataDir:             config.DataDir,
+		isDebug:             config.IsDebug,
+		encryptionEnv:       config.EncryptionEnv,
+		dataMaxOpenConns:    config.DataMaxOpenConns,
+		dataMaxIdleConns:    config.DataMaxIdleConns,
+		logsMaxOpenConns:    config.LogsMaxOpenConns,
+		logsMaxIdleConns:    config.LogsMaxIdleConns,
 		cache:               store.New[any](nil),
-		settings:            NewSettings(),
+		settings:            settings.New(),
 		subscriptionsBroker: subscriptions.NewBroker(),
 
-		// serve event hooks
-		onBeforeServe: &hook.Hook[*ServeEvent]{},
+		// app event hooks
+		onBeforeBootstrap: &hook.Hook[*BootstrapEvent]{},
+		onAfterBootstrap:  &hook.Hook[*BootstrapEvent]{},
+		onBeforeServe:     &hook.Hook[*ServeEvent]{},
+		onBeforeApiError:  &hook.Hook[*ApiErrorEvent]{},
+		onAfterApiError:   &hook.Hook[*ApiErrorEvent]{},
+		onTerminate:       &hook.Hook[*TerminateEvent]{},
 
 		// dao event hooks
 		onModelBeforeCreate: &hook.Hook[*ModelEvent]{},
@@ -147,17 +210,20 @@ func NewBaseApp(dataDir string, encryptionEnv string, isDebug bool) *BaseApp {
 		onModelAfterDelete:  &hook.Hook[*ModelEvent]{},
 
 		// mailer event hooks
-		onMailerBeforeAdminResetPasswordSend: &hook.Hook[*MailerAdminEvent]{},
-		onMailerAfterAdminResetPasswordSend:  &hook.Hook[*MailerAdminEvent]{},
-		onMailerBeforeUserResetPasswordSend:  &hook.Hook[*MailerUserEvent]{},
-		onMailerAfterUserResetPasswordSend:   &hook.Hook[*MailerUserEvent]{},
-		onMailerBeforeUserVerificationSend:   &hook.Hook[*MailerUserEvent]{},
-		onMailerAfterUserVerificationSend:    &hook.Hook[*MailerUserEvent]{},
-		onMailerBeforeUserChangeEmailSend:    &hook.Hook[*MailerUserEvent]{},
-		onMailerAfterUserChangeEmailSend:     &hook.Hook[*MailerUserEvent]{},
+		onMailerBeforeAdminResetPasswordSend:  &hook.Hook[*MailerAdminEvent]{},
+		onMailerAfterAdminResetPasswordSend:   &hook.Hook[*MailerAdminEvent]{},
+		onMailerBeforeRecordResetPasswordSend: &hook.Hook[*MailerRecordEvent]{},
+		onMailerAfterRecordResetPasswordSend:  &hook.Hook[*MailerRecordEvent]{},
+		onMailerBeforeRecordVerificationSend:  &hook.Hook[*MailerRecordEvent]{},
+		onMailerAfterRecordVerificationSend:   &hook.Hook[*MailerRecordEvent]{},
+		onMailerBeforeRecordChangeEmailSend:   &hook.Hook[*MailerRecordEvent]{},
+		onMailerAfterRecordChangeEmailSend:    &hook.Hook[*MailerRecordEvent]{},
 
 		// realtime API event hooks
 		onRealtimeConnectRequest:         &hook.Hook[*RealtimeConnectEvent]{},
+		onRealtimeDisconnectRequest:      &hook.Hook[*RealtimeDisconnectEvent]{},
+		onRealtimeBeforeMessageSend:      &hook.Hook[*RealtimeMessageEvent]{},
+		onRealtimeAfterMessageSend:       &hook.Hook[*RealtimeMessageEvent]{},
 		onRealtimeBeforeSubscribeRequest: &hook.Hook[*RealtimeSubscribeEvent]{},
 		onRealtimeAfterSubscribeRequest:  &hook.Hook[*RealtimeSubscribeEvent]{},
 
@@ -167,34 +233,54 @@ func NewBaseApp(dataDir string, encryptionEnv string, isDebug bool) *BaseApp {
 		onSettingsAfterUpdateRequest:  &hook.Hook[*SettingsUpdateEvent]{},
 
 		// file API event hooks
-		onFileDownloadRequest: &hook.Hook[*FileDownloadEvent]{},
+		onFileDownloadRequest:    &hook.Hook[*FileDownloadEvent]{},
+		onFileBeforeTokenRequest: &hook.Hook[*FileTokenEvent]{},
+		onFileAfterTokenRequest:  &hook.Hook[*FileTokenEvent]{},
 
 		// admin API event hooks
-		onAdminsListRequest:        &hook.Hook[*AdminsListEvent]{},
-		onAdminViewRequest:         &hook.Hook[*AdminViewEvent]{},
-		onAdminBeforeCreateRequest: &hook.Hook[*AdminCreateEvent]{},
-		onAdminAfterCreateRequest:  &hook.Hook[*AdminCreateEvent]{},
-		onAdminBeforeUpdateRequest: &hook.Hook[*AdminUpdateEvent]{},
-		onAdminAfterUpdateRequest:  &hook.Hook[*AdminUpdateEvent]{},
-		onAdminBeforeDeleteRequest: &hook.Hook[*AdminDeleteEvent]{},
-		onAdminAfterDeleteRequest:  &hook.Hook[*AdminDeleteEvent]{},
-		onAdminAuthRequest:         &hook.Hook[*AdminAuthEvent]{},
+		onAdminsListRequest:                      &hook.Hook[*AdminsListEvent]{},
+		onAdminViewRequest:                       &hook.Hook[*AdminViewEvent]{},
+		onAdminBeforeCreateRequest:               &hook.Hook[*AdminCreateEvent]{},
+		onAdminAfterCreateRequest:                &hook.Hook[*AdminCreateEvent]{},
+		onAdminBeforeUpdateRequest:               &hook.Hook[*AdminUpdateEvent]{},
+		onAdminAfterUpdateRequest:                &hook.Hook[*AdminUpdateEvent]{},
+		onAdminBeforeDeleteRequest:               &hook.Hook[*AdminDeleteEvent]{},
+		onAdminAfterDeleteRequest:                &hook.Hook[*AdminDeleteEvent]{},
+		onAdminAuthRequest:                       &hook.Hook[*AdminAuthEvent]{},
+		onAdminBeforeAuthWithPasswordRequest:     &hook.Hook[*AdminAuthWithPasswordEvent]{},
+		onAdminAfterAuthWithPasswordRequest:      &hook.Hook[*AdminAuthWithPasswordEvent]{},
+		onAdminBeforeAuthRefreshRequest:          &hook.Hook[*AdminAuthRefreshEvent]{},
+		onAdminAfterAuthRefreshRequest:           &hook.Hook[*AdminAuthRefreshEvent]{},
+		onAdminBeforeRequestPasswordResetRequest: &hook.Hook[*AdminRequestPasswordResetEvent]{},
+		onAdminAfterRequestPasswordResetRequest:  &hook.Hook[*AdminRequestPasswordResetEvent]{},
+		onAdminBeforeConfirmPasswordResetRequest: &hook.Hook[*AdminConfirmPasswordResetEvent]{},
+		onAdminAfterConfirmPasswordResetRequest:  &hook.Hook[*AdminConfirmPasswordResetEvent]{},
 
-		// user API event hooks
-		onUsersListRequest:                    &hook.Hook[*UsersListEvent]{},
-		onUserViewRequest:                     &hook.Hook[*UserViewEvent]{},
-		onUserBeforeCreateRequest:             &hook.Hook[*UserCreateEvent]{},
-		onUserAfterCreateRequest:              &hook.Hook[*UserCreateEvent]{},
-		onUserBeforeUpdateRequest:             &hook.Hook[*UserUpdateEvent]{},
-		onUserAfterUpdateRequest:              &hook.Hook[*UserUpdateEvent]{},
-		onUserBeforeDeleteRequest:             &hook.Hook[*UserDeleteEvent]{},
-		onUserAfterDeleteRequest:              &hook.Hook[*UserDeleteEvent]{},
-		onUserAuthRequest:                     &hook.Hook[*UserAuthEvent]{},
-		onUserListExternalAuths:               &hook.Hook[*UserListExternalAuthsEvent]{},
-		onUserBeforeUnlinkExternalAuthRequest: &hook.Hook[*UserUnlinkExternalAuthEvent]{},
-		onUserAfterUnlinkExternalAuthRequest:  &hook.Hook[*UserUnlinkExternalAuthEvent]{},
+		// record auth API event hooks
+		onRecordAuthRequest:                       &hook.Hook[*RecordAuthEvent]{},
+		onRecordBeforeAuthWithPasswordRequest:     &hook.Hook[*RecordAuthWithPasswordEvent]{},
+		onRecordAfterAuthWithPasswordRequest:      &hook.Hook[*RecordAuthWithPasswordEvent]{},
+		onRecordBeforeAuthWithOAuth2Request:       &hook.Hook[*RecordAuthWithOAuth2Event]{},
+		onRecordAfterAuthWithOAuth2Request:        &hook.Hook[*RecordAuthWithOAuth2Event]{},
+		onRecordBeforeAuthRefreshRequest:          &hook.Hook[*RecordAuthRefreshEvent]{},
+		onRecordAfterAuthRefreshRequest:           &hook.Hook[*RecordAuthRefreshEvent]{},
+		onRecordBeforeRequestPasswordResetRequest: &hook.Hook[*RecordRequestPasswordResetEvent]{},
+		onRecordAfterRequestPasswordResetRequest:  &hook.Hook[*RecordRequestPasswordResetEvent]{},
+		onRecordBeforeConfirmPasswordResetRequest: &hook.Hook[*RecordConfirmPasswordResetEvent]{},
+		onRecordAfterConfirmPasswordResetRequest:  &hook.Hook[*RecordConfirmPasswordResetEvent]{},
+		onRecordBeforeRequestVerificationRequest:  &hook.Hook[*RecordRequestVerificationEvent]{},
+		onRecordAfterRequestVerificationRequest:   &hook.Hook[*RecordRequestVerificationEvent]{},
+		onRecordBeforeConfirmVerificationRequest:  &hook.Hook[*RecordConfirmVerificationEvent]{},
+		onRecordAfterConfirmVerificationRequest:   &hook.Hook[*RecordConfirmVerificationEvent]{},
+		onRecordBeforeRequestEmailChangeRequest:   &hook.Hook[*RecordRequestEmailChangeEvent]{},
+		onRecordAfterRequestEmailChangeRequest:    &hook.Hook[*RecordRequestEmailChangeEvent]{},
+		onRecordBeforeConfirmEmailChangeRequest:   &hook.Hook[*RecordConfirmEmailChangeEvent]{},
+		onRecordAfterConfirmEmailChangeRequest:    &hook.Hook[*RecordConfirmEmailChangeEvent]{},
+		onRecordListExternalAuthsRequest:          &hook.Hook[*RecordListExternalAuthsEvent]{},
+		onRecordBeforeUnlinkExternalAuthRequest:   &hook.Hook[*RecordUnlinkExternalAuthEvent]{},
+		onRecordAfterUnlinkExternalAuthRequest:    &hook.Hook[*RecordUnlinkExternalAuthEvent]{},
 
-		// record API event hooks
+		// record crud API event hooks
 		onRecordsListRequest:        &hook.Hook[*RecordsListEvent]{},
 		onRecordViewRequest:         &hook.Hook[*RecordViewEvent]{},
 		onRecordBeforeCreateRequest: &hook.Hook[*RecordCreateEvent]{},
@@ -222,9 +308,23 @@ func NewBaseApp(dataDir string, encryptionEnv string, isDebug bool) *BaseApp {
 	return app
 }
 
+// IsBootstrapped checks if the application was initialized
+// (aka. whether Bootstrap() was called).
+func (app *BaseApp) IsBootstrapped() bool {
+	return app.dao != nil && app.logsDao != nil && app.settings != nil
+}
+
 // Bootstrap initializes the application
-// (aka. create data dir, open db connections, load settings, etc.)
+// (aka. create data dir, open db connections, load settings, etc.).
+//
+// It will call ResetBootstrapState() if the application was already bootstrapped.
 func (app *BaseApp) Bootstrap() error {
+	event := &BootstrapEvent{app}
+
+	if err := app.OnBeforeBootstrap().Trigger(event); err != nil {
+		return err
+	}
+
 	// clear resources of previous core state (if any)
 	if err := app.ResetBootstrapState(); err != nil {
 		return err
@@ -243,9 +343,15 @@ func (app *BaseApp) Bootstrap() error {
 		return err
 	}
 
-	// we don't check for an error because the db migrations may
-	// have not been executed yet.
+	// we don't check for an error because the db migrations may have not been executed yet
 	app.RefreshSettings()
+
+	// cleanup the pb_data temp directory (if any)
+	os.RemoveAll(filepath.Join(app.DataDir(), LocalTempDirName))
+
+	if err := app.OnAfterBootstrap().Trigger(event); err != nil && app.IsDebug() {
+		log.Println(err)
+	}
 
 	return nil
 }
@@ -253,14 +359,20 @@ func (app *BaseApp) Bootstrap() error {
 // ResetBootstrapState takes care for releasing initialized app resources
 // (eg. closing db connections).
 func (app *BaseApp) ResetBootstrapState() error {
-	if app.db != nil {
-		if err := app.db.Close(); err != nil {
+	if app.Dao() != nil {
+		if err := app.Dao().ConcurrentDB().(*dbx.DB).Close(); err != nil {
+			return err
+		}
+		if err := app.Dao().NonconcurrentDB().(*dbx.DB).Close(); err != nil {
 			return err
 		}
 	}
 
-	if app.logsDB != nil {
-		if err := app.logsDB.Close(); err != nil {
+	if app.LogsDao() != nil {
+		if err := app.LogsDao().ConcurrentDB().(*dbx.DB).Close(); err != nil {
+			return err
+		}
+		if err := app.LogsDao().NonconcurrentDB().(*dbx.DB).Close(); err != nil {
 			return err
 		}
 	}
@@ -272,9 +384,23 @@ func (app *BaseApp) ResetBootstrapState() error {
 	return nil
 }
 
+// Deprecated:
+// This method may get removed in the near future.
+// It is recommended to access the db instance from app.Dao().DB() or
+// if you want more flexibility - app.Dao().ConcurrentDB() and app.Dao().NonconcurrentDB().
+//
 // DB returns the default app database instance.
 func (app *BaseApp) DB() *dbx.DB {
-	return app.db
+	if app.Dao() == nil {
+		return nil
+	}
+
+	db, ok := app.Dao().DB().(*dbx.DB)
+	if !ok {
+		return nil
+	}
+
+	return db
 }
 
 // Dao returns the default app Dao instance.
@@ -282,9 +408,23 @@ func (app *BaseApp) Dao() *daos.Dao {
 	return app.dao
 }
 
+// Deprecated:
+// This method may get removed in the near future.
+// It is recommended to access the logs db instance from app.LogsDao().DB() or
+// if you want more flexibility - app.LogsDao().ConcurrentDB() and app.LogsDao().NonconcurrentDB().
+//
 // LogsDB returns the app logs database instance.
 func (app *BaseApp) LogsDB() *dbx.DB {
-	return app.logsDB
+	if app.LogsDao() == nil {
+		return nil
+	}
+
+	db, ok := app.LogsDao().DB().(*dbx.DB)
+	if !ok {
+		return nil
+	}
+
+	return db
 }
 
 // LogsDao returns the app logs Dao instance.
@@ -310,7 +450,7 @@ func (app *BaseApp) IsDebug() bool {
 }
 
 // Settings returns the loaded app settings.
-func (app *BaseApp) Settings() *Settings {
+func (app *BaseApp) Settings() *settings.Settings {
 	return app.settings
 }
 
@@ -328,25 +468,27 @@ func (app *BaseApp) SubscriptionsBroker() *subscriptions.Broker {
 // based on the current app settings.
 func (app *BaseApp) NewMailClient() mailer.Mailer {
 	if app.Settings().Smtp.Enabled {
-		return mailer.NewSmtpClient(
-			app.Settings().Smtp.Host,
-			app.Settings().Smtp.Port,
-			app.Settings().Smtp.Username,
-			app.Settings().Smtp.Password,
-			app.Settings().Smtp.Tls,
-		)
+		return &mailer.SmtpClient{
+			Host:       app.Settings().Smtp.Host,
+			Port:       app.Settings().Smtp.Port,
+			Username:   app.Settings().Smtp.Username,
+			Password:   app.Settings().Smtp.Password,
+			Tls:        app.Settings().Smtp.Tls,
+			AuthMethod: app.Settings().Smtp.AuthMethod,
+		}
 	}
 
 	return &mailer.Sendmail{}
 }
 
 // NewFilesystem creates a new local or S3 filesystem instance
+// for managing regular app files (eg. collection uploads)
 // based on the current app settings.
 //
 // NB! Make sure to call `Close()` on the returned result
 // after you are done working with it.
 func (app *BaseApp) NewFilesystem() (*filesystem.System, error) {
-	if app.settings.S3.Enabled {
+	if app.settings != nil && app.settings.S3.Enabled {
 		return filesystem.NewS3(
 			app.settings.S3.Bucket,
 			app.settings.S3.Region,
@@ -358,103 +500,136 @@ func (app *BaseApp) NewFilesystem() (*filesystem.System, error) {
 	}
 
 	// fallback to local filesystem
-	return filesystem.NewLocal(filepath.Join(app.DataDir(), "storage"))
+	return filesystem.NewLocal(filepath.Join(app.DataDir(), LocalStorageDirName))
+}
+
+// NewFilesystem creates a new local or S3 filesystem instance
+// for managing app backups based on the current app settings.
+//
+// NB! Make sure to call `Close()` on the returned result
+// after you are done working with it.
+func (app *BaseApp) NewBackupsFilesystem() (*filesystem.System, error) {
+	if app.settings != nil && app.settings.Backups.S3.Enabled {
+		return filesystem.NewS3(
+			app.settings.Backups.S3.Bucket,
+			app.settings.Backups.S3.Region,
+			app.settings.Backups.S3.Endpoint,
+			app.settings.Backups.S3.AccessKey,
+			app.settings.Backups.S3.Secret,
+			app.settings.Backups.S3.ForcePathStyle,
+		)
+	}
+
+	// fallback to local filesystem
+	return filesystem.NewLocal(filepath.Join(app.DataDir(), LocalBackupsDirName))
+}
+
+// Restart restarts (aka. replaces) the current running application process.
+//
+// NB! It relies on execve which is supported only on UNIX based systems.
+func (app *BaseApp) Restart() error {
+	if runtime.GOOS == "windows" {
+		return errors.New("restart is not supported on windows")
+	}
+
+	execPath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	// optimistically reset the app bootstrap state
+	app.ResetBootstrapState()
+
+	if err := syscall.Exec(execPath, os.Args, os.Environ()); err != nil {
+		// restart the app bootstrap state
+		app.Bootstrap()
+
+		return err
+	}
+
+	return nil
 }
 
 // RefreshSettings reinitializes and reloads the stored application settings.
 func (app *BaseApp) RefreshSettings() error {
 	if app.settings == nil {
-		app.settings = NewSettings()
+		app.settings = settings.New()
 	}
 
 	encryptionKey := os.Getenv(app.EncryptionEnv())
 
-	param, err := app.Dao().FindParamByKey(models.ParamAppSettings)
+	storedSettings, err := app.Dao().FindSettings(encryptionKey)
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
 
-	if param == nil {
-		// no settings were previously stored
-		return app.Dao().SaveParam(models.ParamAppSettings, app.settings, encryptionKey)
+	// no settings were previously stored
+	if storedSettings == nil {
+		return app.Dao().SaveSettings(app.settings, encryptionKey)
 	}
 
 	// load the settings from the stored param into the app ones
-	// ---
-	newSettings := NewSettings()
-
-	// try first without decryption
-	plainDecodeErr := json.Unmarshal(param.Value, newSettings)
-
-	// failed, try to decrypt
-	if plainDecodeErr != nil {
-		// load without decrypt has failed and there is no encryption key to use for decrypt
-		if encryptionKey == "" {
-			return errors.New("Failed to load the stored app settings (missing or invalid encryption key).")
-		}
-
-		// decrypt
-		decrypted, decryptErr := security.Decrypt(string(param.Value), encryptionKey)
-		if decryptErr != nil {
-			return decryptErr
-		}
-
-		// decode again
-		decryptedDecodeErr := json.Unmarshal(decrypted, newSettings)
-		if decryptedDecodeErr != nil {
-			return decryptedDecodeErr
-		}
-	}
-
-	if err := app.settings.Merge(newSettings); err != nil {
+	if err := app.settings.Merge(storedSettings); err != nil {
 		return err
-	}
-
-	if plainDecodeErr == nil && encryptionKey != "" {
-		// save because previously the settings weren't stored encrypted
-		saveErr := app.Dao().SaveParam(models.ParamAppSettings, app.settings, encryptionKey)
-		if saveErr != nil {
-			return saveErr
-		}
 	}
 
 	return nil
 }
 
 // -------------------------------------------------------------------
-// Serve event hooks
+// App event hooks
 // -------------------------------------------------------------------
+
+func (app *BaseApp) OnBeforeBootstrap() *hook.Hook[*BootstrapEvent] {
+	return app.onBeforeBootstrap
+}
+
+func (app *BaseApp) OnAfterBootstrap() *hook.Hook[*BootstrapEvent] {
+	return app.onAfterBootstrap
+}
 
 func (app *BaseApp) OnBeforeServe() *hook.Hook[*ServeEvent] {
 	return app.onBeforeServe
+}
+
+func (app *BaseApp) OnBeforeApiError() *hook.Hook[*ApiErrorEvent] {
+	return app.onBeforeApiError
+}
+
+func (app *BaseApp) OnAfterApiError() *hook.Hook[*ApiErrorEvent] {
+	return app.onAfterApiError
+}
+
+func (app *BaseApp) OnTerminate() *hook.Hook[*TerminateEvent] {
+	return app.onTerminate
 }
 
 // -------------------------------------------------------------------
 // Dao event hooks
 // -------------------------------------------------------------------
 
-func (app *BaseApp) OnModelBeforeCreate() *hook.Hook[*ModelEvent] {
-	return app.onModelBeforeCreate
+func (app *BaseApp) OnModelBeforeCreate(tags ...string) *hook.TaggedHook[*ModelEvent] {
+	return hook.NewTaggedHook(app.onModelBeforeCreate, tags...)
 }
 
-func (app *BaseApp) OnModelAfterCreate() *hook.Hook[*ModelEvent] {
-	return app.onModelAfterCreate
+func (app *BaseApp) OnModelAfterCreate(tags ...string) *hook.TaggedHook[*ModelEvent] {
+	return hook.NewTaggedHook(app.onModelAfterCreate, tags...)
 }
 
-func (app *BaseApp) OnModelBeforeUpdate() *hook.Hook[*ModelEvent] {
-	return app.onModelBeforeUpdate
+func (app *BaseApp) OnModelBeforeUpdate(tags ...string) *hook.TaggedHook[*ModelEvent] {
+	return hook.NewTaggedHook(app.onModelBeforeUpdate, tags...)
 }
 
-func (app *BaseApp) OnModelAfterUpdate() *hook.Hook[*ModelEvent] {
-	return app.onModelAfterUpdate
+func (app *BaseApp) OnModelAfterUpdate(tags ...string) *hook.TaggedHook[*ModelEvent] {
+	return hook.NewTaggedHook(app.onModelAfterUpdate, tags...)
 }
 
-func (app *BaseApp) OnModelBeforeDelete() *hook.Hook[*ModelEvent] {
-	return app.onModelBeforeDelete
+func (app *BaseApp) OnModelBeforeDelete(tags ...string) *hook.TaggedHook[*ModelEvent] {
+	return hook.NewTaggedHook(app.onModelBeforeDelete, tags...)
 }
 
-func (app *BaseApp) OnModelAfterDelete() *hook.Hook[*ModelEvent] {
-	return app.onModelAfterDelete
+func (app *BaseApp) OnModelAfterDelete(tags ...string) *hook.TaggedHook[*ModelEvent] {
+	return hook.NewTaggedHook(app.onModelAfterDelete, tags...)
 }
 
 // -------------------------------------------------------------------
@@ -469,28 +644,28 @@ func (app *BaseApp) OnMailerAfterAdminResetPasswordSend() *hook.Hook[*MailerAdmi
 	return app.onMailerAfterAdminResetPasswordSend
 }
 
-func (app *BaseApp) OnMailerBeforeUserResetPasswordSend() *hook.Hook[*MailerUserEvent] {
-	return app.onMailerBeforeUserResetPasswordSend
+func (app *BaseApp) OnMailerBeforeRecordResetPasswordSend(tags ...string) *hook.TaggedHook[*MailerRecordEvent] {
+	return hook.NewTaggedHook(app.onMailerBeforeRecordResetPasswordSend, tags...)
 }
 
-func (app *BaseApp) OnMailerAfterUserResetPasswordSend() *hook.Hook[*MailerUserEvent] {
-	return app.onMailerAfterUserResetPasswordSend
+func (app *BaseApp) OnMailerAfterRecordResetPasswordSend(tags ...string) *hook.TaggedHook[*MailerRecordEvent] {
+	return hook.NewTaggedHook(app.onMailerAfterRecordResetPasswordSend, tags...)
 }
 
-func (app *BaseApp) OnMailerBeforeUserVerificationSend() *hook.Hook[*MailerUserEvent] {
-	return app.onMailerBeforeUserVerificationSend
+func (app *BaseApp) OnMailerBeforeRecordVerificationSend(tags ...string) *hook.TaggedHook[*MailerRecordEvent] {
+	return hook.NewTaggedHook(app.onMailerBeforeRecordVerificationSend, tags...)
 }
 
-func (app *BaseApp) OnMailerAfterUserVerificationSend() *hook.Hook[*MailerUserEvent] {
-	return app.onMailerAfterUserVerificationSend
+func (app *BaseApp) OnMailerAfterRecordVerificationSend(tags ...string) *hook.TaggedHook[*MailerRecordEvent] {
+	return hook.NewTaggedHook(app.onMailerAfterRecordVerificationSend, tags...)
 }
 
-func (app *BaseApp) OnMailerBeforeUserChangeEmailSend() *hook.Hook[*MailerUserEvent] {
-	return app.onMailerBeforeUserChangeEmailSend
+func (app *BaseApp) OnMailerBeforeRecordChangeEmailSend(tags ...string) *hook.TaggedHook[*MailerRecordEvent] {
+	return hook.NewTaggedHook(app.onMailerBeforeRecordChangeEmailSend, tags...)
 }
 
-func (app *BaseApp) OnMailerAfterUserChangeEmailSend() *hook.Hook[*MailerUserEvent] {
-	return app.onMailerAfterUserChangeEmailSend
+func (app *BaseApp) OnMailerAfterRecordChangeEmailSend(tags ...string) *hook.TaggedHook[*MailerRecordEvent] {
+	return hook.NewTaggedHook(app.onMailerAfterRecordChangeEmailSend, tags...)
 }
 
 // -------------------------------------------------------------------
@@ -499,6 +674,18 @@ func (app *BaseApp) OnMailerAfterUserChangeEmailSend() *hook.Hook[*MailerUserEve
 
 func (app *BaseApp) OnRealtimeConnectRequest() *hook.Hook[*RealtimeConnectEvent] {
 	return app.onRealtimeConnectRequest
+}
+
+func (app *BaseApp) OnRealtimeDisconnectRequest() *hook.Hook[*RealtimeDisconnectEvent] {
+	return app.onRealtimeDisconnectRequest
+}
+
+func (app *BaseApp) OnRealtimeBeforeMessageSend() *hook.Hook[*RealtimeMessageEvent] {
+	return app.onRealtimeBeforeMessageSend
+}
+
+func (app *BaseApp) OnRealtimeAfterMessageSend() *hook.Hook[*RealtimeMessageEvent] {
+	return app.onRealtimeAfterMessageSend
 }
 
 func (app *BaseApp) OnRealtimeBeforeSubscribeRequest() *hook.Hook[*RealtimeSubscribeEvent] {
@@ -529,8 +716,16 @@ func (app *BaseApp) OnSettingsAfterUpdateRequest() *hook.Hook[*SettingsUpdateEve
 // File API event hooks
 // -------------------------------------------------------------------
 
-func (app *BaseApp) OnFileDownloadRequest() *hook.Hook[*FileDownloadEvent] {
-	return app.onFileDownloadRequest
+func (app *BaseApp) OnFileDownloadRequest(tags ...string) *hook.TaggedHook[*FileDownloadEvent] {
+	return hook.NewTaggedHook(app.onFileDownloadRequest, tags...)
+}
+
+func (app *BaseApp) OnFileBeforeTokenRequest(tags ...string) *hook.TaggedHook[*FileTokenEvent] {
+	return hook.NewTaggedHook(app.onFileBeforeTokenRequest, tags...)
+}
+
+func (app *BaseApp) OnFileAfterTokenRequest(tags ...string) *hook.TaggedHook[*FileTokenEvent] {
+	return hook.NewTaggedHook(app.onFileAfterTokenRequest, tags...)
 }
 
 // -------------------------------------------------------------------
@@ -573,92 +768,164 @@ func (app *BaseApp) OnAdminAuthRequest() *hook.Hook[*AdminAuthEvent] {
 	return app.onAdminAuthRequest
 }
 
-// -------------------------------------------------------------------
-// User API event hooks
-// -------------------------------------------------------------------
-
-func (app *BaseApp) OnUsersListRequest() *hook.Hook[*UsersListEvent] {
-	return app.onUsersListRequest
+func (app *BaseApp) OnAdminBeforeAuthWithPasswordRequest() *hook.Hook[*AdminAuthWithPasswordEvent] {
+	return app.onAdminBeforeAuthWithPasswordRequest
 }
 
-func (app *BaseApp) OnUserViewRequest() *hook.Hook[*UserViewEvent] {
-	return app.onUserViewRequest
+func (app *BaseApp) OnAdminAfterAuthWithPasswordRequest() *hook.Hook[*AdminAuthWithPasswordEvent] {
+	return app.onAdminAfterAuthWithPasswordRequest
 }
 
-func (app *BaseApp) OnUserBeforeCreateRequest() *hook.Hook[*UserCreateEvent] {
-	return app.onUserBeforeCreateRequest
+func (app *BaseApp) OnAdminBeforeAuthRefreshRequest() *hook.Hook[*AdminAuthRefreshEvent] {
+	return app.onAdminBeforeAuthRefreshRequest
 }
 
-func (app *BaseApp) OnUserAfterCreateRequest() *hook.Hook[*UserCreateEvent] {
-	return app.onUserAfterCreateRequest
+func (app *BaseApp) OnAdminAfterAuthRefreshRequest() *hook.Hook[*AdminAuthRefreshEvent] {
+	return app.onAdminAfterAuthRefreshRequest
 }
 
-func (app *BaseApp) OnUserBeforeUpdateRequest() *hook.Hook[*UserUpdateEvent] {
-	return app.onUserBeforeUpdateRequest
+func (app *BaseApp) OnAdminBeforeRequestPasswordResetRequest() *hook.Hook[*AdminRequestPasswordResetEvent] {
+	return app.onAdminBeforeRequestPasswordResetRequest
 }
 
-func (app *BaseApp) OnUserAfterUpdateRequest() *hook.Hook[*UserUpdateEvent] {
-	return app.onUserAfterUpdateRequest
+func (app *BaseApp) OnAdminAfterRequestPasswordResetRequest() *hook.Hook[*AdminRequestPasswordResetEvent] {
+	return app.onAdminAfterRequestPasswordResetRequest
 }
 
-func (app *BaseApp) OnUserBeforeDeleteRequest() *hook.Hook[*UserDeleteEvent] {
-	return app.onUserBeforeDeleteRequest
+func (app *BaseApp) OnAdminBeforeConfirmPasswordResetRequest() *hook.Hook[*AdminConfirmPasswordResetEvent] {
+	return app.onAdminBeforeConfirmPasswordResetRequest
 }
 
-func (app *BaseApp) OnUserAfterDeleteRequest() *hook.Hook[*UserDeleteEvent] {
-	return app.onUserAfterDeleteRequest
-}
-
-func (app *BaseApp) OnUserAuthRequest() *hook.Hook[*UserAuthEvent] {
-	return app.onUserAuthRequest
-}
-
-func (app *BaseApp) OnUserListExternalAuths() *hook.Hook[*UserListExternalAuthsEvent] {
-	return app.onUserListExternalAuths
-}
-
-func (app *BaseApp) OnUserBeforeUnlinkExternalAuthRequest() *hook.Hook[*UserUnlinkExternalAuthEvent] {
-	return app.onUserBeforeUnlinkExternalAuthRequest
-}
-
-func (app *BaseApp) OnUserAfterUnlinkExternalAuthRequest() *hook.Hook[*UserUnlinkExternalAuthEvent] {
-	return app.onUserAfterUnlinkExternalAuthRequest
+func (app *BaseApp) OnAdminAfterConfirmPasswordResetRequest() *hook.Hook[*AdminConfirmPasswordResetEvent] {
+	return app.onAdminAfterConfirmPasswordResetRequest
 }
 
 // -------------------------------------------------------------------
-// Record API event hooks
+// Record auth API event hooks
 // -------------------------------------------------------------------
 
-func (app *BaseApp) OnRecordsListRequest() *hook.Hook[*RecordsListEvent] {
-	return app.onRecordsListRequest
+func (app *BaseApp) OnRecordAuthRequest(tags ...string) *hook.TaggedHook[*RecordAuthEvent] {
+	return hook.NewTaggedHook(app.onRecordAuthRequest, tags...)
 }
 
-func (app *BaseApp) OnRecordViewRequest() *hook.Hook[*RecordViewEvent] {
-	return app.onRecordViewRequest
+func (app *BaseApp) OnRecordBeforeAuthWithPasswordRequest(tags ...string) *hook.TaggedHook[*RecordAuthWithPasswordEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeAuthWithPasswordRequest, tags...)
 }
 
-func (app *BaseApp) OnRecordBeforeCreateRequest() *hook.Hook[*RecordCreateEvent] {
-	return app.onRecordBeforeCreateRequest
+func (app *BaseApp) OnRecordAfterAuthWithPasswordRequest(tags ...string) *hook.TaggedHook[*RecordAuthWithPasswordEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterAuthWithPasswordRequest, tags...)
 }
 
-func (app *BaseApp) OnRecordAfterCreateRequest() *hook.Hook[*RecordCreateEvent] {
-	return app.onRecordAfterCreateRequest
+func (app *BaseApp) OnRecordBeforeAuthWithOAuth2Request(tags ...string) *hook.TaggedHook[*RecordAuthWithOAuth2Event] {
+	return hook.NewTaggedHook(app.onRecordBeforeAuthWithOAuth2Request, tags...)
 }
 
-func (app *BaseApp) OnRecordBeforeUpdateRequest() *hook.Hook[*RecordUpdateEvent] {
-	return app.onRecordBeforeUpdateRequest
+func (app *BaseApp) OnRecordAfterAuthWithOAuth2Request(tags ...string) *hook.TaggedHook[*RecordAuthWithOAuth2Event] {
+	return hook.NewTaggedHook(app.onRecordAfterAuthWithOAuth2Request, tags...)
 }
 
-func (app *BaseApp) OnRecordAfterUpdateRequest() *hook.Hook[*RecordUpdateEvent] {
-	return app.onRecordAfterUpdateRequest
+func (app *BaseApp) OnRecordBeforeAuthRefreshRequest(tags ...string) *hook.TaggedHook[*RecordAuthRefreshEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeAuthRefreshRequest, tags...)
 }
 
-func (app *BaseApp) OnRecordBeforeDeleteRequest() *hook.Hook[*RecordDeleteEvent] {
-	return app.onRecordBeforeDeleteRequest
+func (app *BaseApp) OnRecordAfterAuthRefreshRequest(tags ...string) *hook.TaggedHook[*RecordAuthRefreshEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterAuthRefreshRequest, tags...)
 }
 
-func (app *BaseApp) OnRecordAfterDeleteRequest() *hook.Hook[*RecordDeleteEvent] {
-	return app.onRecordAfterDeleteRequest
+func (app *BaseApp) OnRecordBeforeRequestPasswordResetRequest(tags ...string) *hook.TaggedHook[*RecordRequestPasswordResetEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeRequestPasswordResetRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordAfterRequestPasswordResetRequest(tags ...string) *hook.TaggedHook[*RecordRequestPasswordResetEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterRequestPasswordResetRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordBeforeConfirmPasswordResetRequest(tags ...string) *hook.TaggedHook[*RecordConfirmPasswordResetEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeConfirmPasswordResetRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordAfterConfirmPasswordResetRequest(tags ...string) *hook.TaggedHook[*RecordConfirmPasswordResetEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterConfirmPasswordResetRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordBeforeRequestVerificationRequest(tags ...string) *hook.TaggedHook[*RecordRequestVerificationEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeRequestVerificationRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordAfterRequestVerificationRequest(tags ...string) *hook.TaggedHook[*RecordRequestVerificationEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterRequestVerificationRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordBeforeConfirmVerificationRequest(tags ...string) *hook.TaggedHook[*RecordConfirmVerificationEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeConfirmVerificationRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordAfterConfirmVerificationRequest(tags ...string) *hook.TaggedHook[*RecordConfirmVerificationEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterConfirmVerificationRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordBeforeRequestEmailChangeRequest(tags ...string) *hook.TaggedHook[*RecordRequestEmailChangeEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeRequestEmailChangeRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordAfterRequestEmailChangeRequest(tags ...string) *hook.TaggedHook[*RecordRequestEmailChangeEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterRequestEmailChangeRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordBeforeConfirmEmailChangeRequest(tags ...string) *hook.TaggedHook[*RecordConfirmEmailChangeEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeConfirmEmailChangeRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordAfterConfirmEmailChangeRequest(tags ...string) *hook.TaggedHook[*RecordConfirmEmailChangeEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterConfirmEmailChangeRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordListExternalAuthsRequest(tags ...string) *hook.TaggedHook[*RecordListExternalAuthsEvent] {
+	return hook.NewTaggedHook(app.onRecordListExternalAuthsRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordBeforeUnlinkExternalAuthRequest(tags ...string) *hook.TaggedHook[*RecordUnlinkExternalAuthEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeUnlinkExternalAuthRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordAfterUnlinkExternalAuthRequest(tags ...string) *hook.TaggedHook[*RecordUnlinkExternalAuthEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterUnlinkExternalAuthRequest, tags...)
+}
+
+// -------------------------------------------------------------------
+// Record CRUD API event hooks
+// -------------------------------------------------------------------
+
+func (app *BaseApp) OnRecordsListRequest(tags ...string) *hook.TaggedHook[*RecordsListEvent] {
+	return hook.NewTaggedHook(app.onRecordsListRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordViewRequest(tags ...string) *hook.TaggedHook[*RecordViewEvent] {
+	return hook.NewTaggedHook(app.onRecordViewRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordBeforeCreateRequest(tags ...string) *hook.TaggedHook[*RecordCreateEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeCreateRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordAfterCreateRequest(tags ...string) *hook.TaggedHook[*RecordCreateEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterCreateRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordBeforeUpdateRequest(tags ...string) *hook.TaggedHook[*RecordUpdateEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeUpdateRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordAfterUpdateRequest(tags ...string) *hook.TaggedHook[*RecordUpdateEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterUpdateRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordBeforeDeleteRequest(tags ...string) *hook.TaggedHook[*RecordDeleteEvent] {
+	return hook.NewTaggedHook(app.onRecordBeforeDeleteRequest, tags...)
+}
+
+func (app *BaseApp) OnRecordAfterDeleteRequest(tags ...string) *hook.TaggedHook[*RecordDeleteEvent] {
+	return hook.NewTaggedHook(app.onRecordAfterDeleteRequest, tags...)
 }
 
 // -------------------------------------------------------------------
@@ -710,66 +977,134 @@ func (app *BaseApp) OnCollectionsAfterImportRequest() *hook.Hook[*CollectionsImp
 // -------------------------------------------------------------------
 
 func (app *BaseApp) initLogsDB() error {
-	var connectErr error
-	app.logsDB, connectErr = connectDB(filepath.Join(app.DataDir(), "logs.db"))
-	if connectErr != nil {
-		return connectErr
+	maxOpenConns := DefaultLogsMaxOpenConns
+	maxIdleConns := DefaultLogsMaxIdleConns
+	if app.logsMaxOpenConns > 0 {
+		maxOpenConns = app.logsMaxOpenConns
+	}
+	if app.logsMaxIdleConns > 0 {
+		maxIdleConns = app.logsMaxIdleConns
 	}
 
-	app.logsDao = daos.New(app.logsDB)
+	concurrentDB, err := connectDB(filepath.Join(app.DataDir(), "logs.db"))
+	if err != nil {
+		return err
+	}
+	concurrentDB.DB().SetMaxOpenConns(maxOpenConns)
+	concurrentDB.DB().SetMaxIdleConns(maxIdleConns)
+	concurrentDB.DB().SetConnMaxIdleTime(5 * time.Minute)
+
+	nonconcurrentDB, err := connectDB(filepath.Join(app.DataDir(), "logs.db"))
+	if err != nil {
+		return err
+	}
+	nonconcurrentDB.DB().SetMaxOpenConns(1)
+	nonconcurrentDB.DB().SetMaxIdleConns(1)
+	nonconcurrentDB.DB().SetConnMaxIdleTime(5 * time.Minute)
+
+	app.logsDao = daos.NewMultiDB(concurrentDB, nonconcurrentDB)
 
 	return nil
 }
 
 func (app *BaseApp) initDataDB() error {
-	var connectErr error
-	app.db, connectErr = connectDB(filepath.Join(app.DataDir(), "data.db"))
-	if connectErr != nil {
-		return connectErr
+	maxOpenConns := DefaultDataMaxOpenConns
+	maxIdleConns := DefaultDataMaxIdleConns
+	if app.dataMaxOpenConns > 0 {
+		maxOpenConns = app.dataMaxOpenConns
+	}
+	if app.dataMaxIdleConns > 0 {
+		maxIdleConns = app.dataMaxIdleConns
 	}
 
-	app.db.QueryLogFunc = func(ctx context.Context, t time.Duration, sql string, rows *sql.Rows, err error) {
-		if app.IsDebug() {
+	concurrentDB, err := connectDB(filepath.Join(app.DataDir(), "data.db"))
+	if err != nil {
+		return err
+	}
+	concurrentDB.DB().SetMaxOpenConns(maxOpenConns)
+	concurrentDB.DB().SetMaxIdleConns(maxIdleConns)
+	concurrentDB.DB().SetConnMaxIdleTime(5 * time.Minute)
+
+	nonconcurrentDB, err := connectDB(filepath.Join(app.DataDir(), "data.db"))
+	if err != nil {
+		return err
+	}
+	nonconcurrentDB.DB().SetMaxOpenConns(1)
+	nonconcurrentDB.DB().SetMaxIdleConns(1)
+	nonconcurrentDB.DB().SetConnMaxIdleTime(5 * time.Minute)
+
+	if app.IsDebug() {
+		nonconcurrentDB.QueryLogFunc = func(ctx context.Context, t time.Duration, sql string, rows *sql.Rows, err error) {
 			color.HiBlack("[%.2fms] %v\n", float64(t.Milliseconds()), sql)
 		}
-	}
+		concurrentDB.QueryLogFunc = nonconcurrentDB.QueryLogFunc
 
-	app.db.ExecLogFunc = func(ctx context.Context, t time.Duration, sql string, result sql.Result, err error) {
-		if app.IsDebug() {
+		nonconcurrentDB.ExecLogFunc = func(ctx context.Context, t time.Duration, sql string, result sql.Result, err error) {
 			color.HiBlack("[%.2fms] %v\n", float64(t.Milliseconds()), sql)
 		}
+		concurrentDB.ExecLogFunc = nonconcurrentDB.ExecLogFunc
 	}
 
-	app.dao = app.createDaoWithHooks(app.db)
+	app.dao = app.createDaoWithHooks(concurrentDB, nonconcurrentDB)
 
 	return nil
 }
 
-func (app *BaseApp) createDaoWithHooks(db dbx.Builder) *daos.Dao {
-	dao := daos.New(db)
+func (app *BaseApp) createDaoWithHooks(concurrentDB, nonconcurrentDB dbx.Builder) *daos.Dao {
+	dao := daos.NewMultiDB(concurrentDB, nonconcurrentDB)
 
 	dao.BeforeCreateFunc = func(eventDao *daos.Dao, m models.Model) error {
-		return app.OnModelBeforeCreate().Trigger(&ModelEvent{eventDao, m})
+		e := new(ModelEvent)
+		e.Dao = eventDao
+		e.Model = m
+
+		return app.OnModelBeforeCreate().Trigger(e)
 	}
 
 	dao.AfterCreateFunc = func(eventDao *daos.Dao, m models.Model) {
-		app.OnModelAfterCreate().Trigger(&ModelEvent{eventDao, m})
+		e := new(ModelEvent)
+		e.Dao = eventDao
+		e.Model = m
+
+		if err := app.OnModelAfterCreate().Trigger(e); err != nil && app.isDebug {
+			log.Println(err)
+		}
 	}
 
 	dao.BeforeUpdateFunc = func(eventDao *daos.Dao, m models.Model) error {
-		return app.OnModelBeforeUpdate().Trigger(&ModelEvent{eventDao, m})
+		e := new(ModelEvent)
+		e.Dao = eventDao
+		e.Model = m
+
+		return app.OnModelBeforeUpdate().Trigger(e)
 	}
 
 	dao.AfterUpdateFunc = func(eventDao *daos.Dao, m models.Model) {
-		app.OnModelAfterUpdate().Trigger(&ModelEvent{eventDao, m})
+		e := new(ModelEvent)
+		e.Dao = eventDao
+		e.Model = m
+
+		if err := app.OnModelAfterUpdate().Trigger(e); err != nil && app.isDebug {
+			log.Println(err)
+		}
 	}
 
 	dao.BeforeDeleteFunc = func(eventDao *daos.Dao, m models.Model) error {
-		return app.OnModelBeforeDelete().Trigger(&ModelEvent{eventDao, m})
+		e := new(ModelEvent)
+		e.Dao = eventDao
+		e.Model = m
+
+		return app.OnModelBeforeDelete().Trigger(e)
 	}
 
 	dao.AfterDeleteFunc = func(eventDao *daos.Dao, m models.Model) {
-		app.OnModelAfterDelete().Trigger(&ModelEvent{eventDao, m})
+		e := new(ModelEvent)
+		e.Dao = eventDao
+		e.Model = m
+
+		if err := app.OnModelAfterDelete().Trigger(e); err != nil && app.isDebug {
+			log.Println(err)
+		}
 	}
 
 	return dao
@@ -785,22 +1120,40 @@ func (app *BaseApp) registerDefaultHooks() {
 
 		failed := fs.DeletePrefix(prefix)
 		if len(failed) > 0 {
-			return errors.New("Failed to delete the files at " + prefix)
+			return errors.New("failed to delete the files at " + prefix)
 		}
 
 		return nil
 	}
 
-	// delete storage files from deleted Collection, Records, etc.
+	// try to delete the storage files from deleted Collection, Records, etc. model
 	app.OnModelAfterDelete().Add(func(e *ModelEvent) error {
 		if m, ok := e.Model.(models.FilesManager); ok && m.BaseFilesPath() != "" {
-			if err := deletePrefix(m.BaseFilesPath()); err != nil && app.IsDebug() {
-				// non critical error - only log for debug
-				// (usually could happen because of S3 api limits)
-				log.Println(err)
-			}
+			prefix := m.BaseFilesPath()
+
+			// run in the background for "optimistic" delete to avoid
+			// blocking the delete transaction
+			//
+			// @todo consider creating a bg process queue so that the
+			// call could be "retried" in case of a failure.
+			routine.FireAndForget(func() {
+				if err := deletePrefix(prefix); err != nil && app.IsDebug() {
+					// non critical error - only log for debug
+					// (usually could happen because of S3 api limits)
+					log.Println(err)
+				}
+			})
 		}
 
 		return nil
 	})
+
+	app.OnTerminate().Add(func(e *TerminateEvent) error {
+		app.ResetBootstrapState()
+		return nil
+	})
+
+	if err := app.initAutobackupHooks(); err != nil && app.IsDebug() {
+		log.Println(err)
+	}
 }

@@ -4,6 +4,7 @@ go_library(
     name = "go_default_library",
     srcs = [
         "file.go",
+        "model.go",
         "record_data.go",
         "string.go",
         "validators.go",
@@ -19,8 +20,8 @@ go_library(
         "//vendor/github.com/pocketbase/pocketbase/daos:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/models:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/models/schema:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/filesystem:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/list:go_default_library",
-        "//vendor/github.com/pocketbase/pocketbase/tools/rest:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/types:go_default_library",
     ],
 )

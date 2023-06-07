@@ -2,8 +2,12 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "go_default_library",
-    srcs = ["hook.go"],
+    srcs = [
+        "hook.go",
+        "tagged.go",
+    ],
     importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/hook",
     importpath = "github.com/pocketbase/pocketbase/tools/hook",
     visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/pocketbase/pocketbase/tools/list:go_default_library"],
 )

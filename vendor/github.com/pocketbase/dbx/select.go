@@ -10,6 +10,8 @@ import (
 	"reflect"
 )
 
+type BuildHookFunc func(q *Query)
+
 // SelectQuery represents a DB-agnostic SELECT query.
 // It can be built into a DB-specific query by calling the Build() method.
 type SelectQuery struct {
@@ -18,8 +20,9 @@ type SelectQuery struct {
 	// TableMapper maps structs to DB table names.
 	TableMapper TableMapFunc
 
-	builder Builder
-	ctx     context.Context
+	builder   Builder
+	ctx       context.Context
+	buildHook BuildHookFunc
 
 	selects      []string
 	distinct     bool
@@ -65,6 +68,12 @@ func NewSelectQuery(builder Builder, db *DB) *SelectQuery {
 		FieldMapper: db.FieldMapper,
 		TableMapper: db.TableMapper,
 	}
+}
+
+// WithBuildHook runs the provided hook function with the query created on Build().
+func (q *SelectQuery) WithBuildHook(fn BuildHookFunc) *SelectQuery {
+	q.buildHook = fn
+	return q
 }
 
 // Context returns the context associated with the query.
@@ -277,7 +286,13 @@ func (s *SelectQuery) Build() *Query {
 		sql = fmt.Sprintf("(%v) %v", sql, union)
 	}
 
-	return s.builder.NewQuery(sql).Bind(params)
+	query := s.builder.NewQuery(sql).Bind(params).WithContext(s.ctx)
+
+	if s.buildHook != nil {
+		s.buildHook(query)
+	}
+
+	return query
 }
 
 // One executes the SELECT query and populates the first row of the result into the specified variable.
@@ -293,7 +308,8 @@ func (s *SelectQuery) One(a interface{}) error {
 			s.from = []string{tableName}
 		}
 	}
-	return s.Build().WithContext(s.ctx).One(a)
+
+	return s.Build().One(a)
 }
 
 // Model selects the row with the specified primary key and populates the model with the row data.
@@ -310,14 +326,15 @@ func (s *SelectQuery) Model(pk, model interface{}) error {
 	if t.Kind() != reflect.Struct {
 		return VarTypeError("must be a pointer to a struct")
 	}
+
 	si := getStructInfo(t, s.FieldMapper)
 	if len(si.pkNames) == 1 {
 		return s.AndWhere(HashExp{si.nameMap[si.pkNames[0]].dbName: pk}).One(model)
 	}
-
 	if len(si.pkNames) == 0 {
 		return MissingPKError
 	}
+
 	return CompositePKError
 }
 
@@ -334,24 +351,68 @@ func (s *SelectQuery) All(slice interface{}) error {
 			s.from = []string{tableName}
 		}
 	}
-	return s.Build().WithContext(s.ctx).All(slice)
+
+	return s.Build().All(slice)
 }
 
 // Rows builds and executes the SELECT query and returns a Rows object for data retrieval purpose.
 // This is a shortcut to SelectQuery.Build().Rows()
 func (s *SelectQuery) Rows() (*Rows, error) {
-	return s.Build().WithContext(s.ctx).Rows()
+	return s.Build().Rows()
 }
 
 // Row builds and executes the SELECT query and populates the first row of the result into the specified variables.
 // This is a shortcut to SelectQuery.Build().Row()
 func (s *SelectQuery) Row(a ...interface{}) error {
-	return s.Build().WithContext(s.ctx).Row(a...)
+	return s.Build().Row(a...)
 }
 
 // Column builds and executes the SELECT statement and populates the first column of the result into a slice.
 // Note that the parameter must be a pointer to a slice.
 // This is a shortcut to SelectQuery.Build().Column()
 func (s *SelectQuery) Column(a interface{}) error {
-	return s.Build().WithContext(s.ctx).Column(a)
+	return s.Build().Column(a)
+}
+
+// QueryInfo represents a debug/info struct with exported SelectQuery fields.
+type QueryInfo struct {
+	Builder      Builder
+	Selects      []string
+	Distinct     bool
+	SelectOption string
+	From         []string
+	Where        Expression
+	Join         []JoinInfo
+	OrderBy      []string
+	GroupBy      []string
+	Having       Expression
+	Union        []UnionInfo
+	Limit        int64
+	Offset       int64
+	Params       Params
+	Context      context.Context
+	BuildHook    BuildHookFunc
+}
+
+// Info exports common SelectQuery fields allowing to inspect the
+// current select query options.
+func (s *SelectQuery) Info() *QueryInfo {
+	return &QueryInfo{
+		Builder:      s.builder,
+		Selects:      s.selects,
+		Distinct:     s.distinct,
+		SelectOption: s.selectOption,
+		From:         s.from,
+		Where:        s.where,
+		Join:         s.join,
+		OrderBy:      s.orderBy,
+		GroupBy:      s.groupBy,
+		Having:       s.having,
+		Union:        s.union,
+		Limit:        s.limit,
+		Offset:       s.offset,
+		Params:       s.params,
+		Context:      s.ctx,
+		BuildHook:    s.buildHook,
+	}
 }

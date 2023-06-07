@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"context"
+	"encoding/json"
+
 	"golang.org/x/oauth2"
 )
 
@@ -17,6 +20,7 @@ type Twitter struct {
 // NewTwitterProvider creates new Twitter provider instance with some defaults.
 func NewTwitterProvider() *Twitter {
 	return &Twitter{&baseProvider{
+		ctx: context.Background(),
 		scopes: []string{
 			"users.read",
 
@@ -31,9 +35,20 @@ func NewTwitterProvider() *Twitter {
 }
 
 // FetchAuthUser returns an AuthUser instance based on the Twitter's user api.
+//
+// API reference: https://developer.twitter.com/en/docs/twitter-api/users/lookup/api-reference/get-users-me
 func (p *Twitter) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
-	// https://developer.twitter.com/en/docs/twitter-api/users/lookup/api-reference/get-users-me
-	rawData := struct {
+	data, err := p.FetchRawUserData(token)
+	if err != nil {
+		return nil, err
+	}
+
+	rawUser := map[string]any{}
+	if err := json.Unmarshal(data, &rawUser); err != nil {
+		return nil, err
+	}
+
+	extracted := struct {
 		Data struct {
 			Id              string `json:"id"`
 			Name            string `json:"name"`
@@ -42,20 +57,21 @@ func (p *Twitter) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
 
 			// NB! At the time of writing, Twitter OAuth2 doesn't support returning the user email address
 			// (see https://twittercommunity.com/t/which-api-to-get-user-after-oauth2-authorization/162417/33)
-			Email string `json:"email"`
+			// Email string `json:"email"`
 		} `json:"data"`
 	}{}
-
-	if err := p.FetchRawUserData(token, &rawData); err != nil {
+	if err := json.Unmarshal(data, &extracted); err != nil {
 		return nil, err
 	}
 
 	user := &AuthUser{
-		Id:        rawData.Data.Id,
-		Name:      rawData.Data.Name,
-		Username:  rawData.Data.Username,
-		Email:     rawData.Data.Email,
-		AvatarUrl: rawData.Data.ProfileImageUrl,
+		Id:           extracted.Data.Id,
+		Name:         extracted.Data.Name,
+		Username:     extracted.Data.Username,
+		AvatarUrl:    extracted.Data.ProfileImageUrl,
+		RawUser:      rawUser,
+		AccessToken:  token.AccessToken,
+		RefreshToken: token.RefreshToken,
 	}
 
 	return user, nil

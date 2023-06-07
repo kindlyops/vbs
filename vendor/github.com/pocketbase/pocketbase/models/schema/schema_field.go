@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"strconv"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/go-ozzo/ozzo-validation/v4/is"
@@ -13,21 +14,69 @@ import (
 	"github.com/spf13/cast"
 )
 
-var schemaFieldNameRegex = regexp.MustCompile(`^\#?\w+$`)
+var schemaFieldNameRegex = regexp.MustCompile(`^\w+$`)
 
-// reserved internal field names
+// field value modifiers
 const (
-	ReservedFieldNameId      = "id"
-	ReservedFieldNameCreated = "created"
-	ReservedFieldNameUpdated = "updated"
+	FieldValueModifierAdd      string = "+"
+	FieldValueModifierSubtract string = "-"
 )
 
-// ReservedFieldNames returns slice with reserved/system field names.
-func ReservedFieldNames() []string {
+// FieldValueModifiers returns a list with all available field modifier tokens.
+func FieldValueModifiers() []string {
 	return []string{
-		ReservedFieldNameId,
-		ReservedFieldNameCreated,
-		ReservedFieldNameUpdated,
+		FieldValueModifierAdd,
+		FieldValueModifierSubtract,
+	}
+}
+
+// commonly used field names
+const (
+	FieldNameId                     string = "id"
+	FieldNameCreated                string = "created"
+	FieldNameUpdated                string = "updated"
+	FieldNameCollectionId           string = "collectionId"
+	FieldNameCollectionName         string = "collectionName"
+	FieldNameExpand                 string = "expand"
+	FieldNameUsername               string = "username"
+	FieldNameEmail                  string = "email"
+	FieldNameEmailVisibility        string = "emailVisibility"
+	FieldNameVerified               string = "verified"
+	FieldNameTokenKey               string = "tokenKey"
+	FieldNamePasswordHash           string = "passwordHash"
+	FieldNameLastResetSentAt        string = "lastResetSentAt"
+	FieldNameLastVerificationSentAt string = "lastVerificationSentAt"
+)
+
+// BaseModelFieldNames returns the field names that all models have (id, created, updated).
+func BaseModelFieldNames() []string {
+	return []string{
+		FieldNameId,
+		FieldNameCreated,
+		FieldNameUpdated,
+	}
+}
+
+// SystemFields returns special internal field names that are usually readonly.
+func SystemFieldNames() []string {
+	return []string{
+		FieldNameCollectionId,
+		FieldNameCollectionName,
+		FieldNameExpand,
+	}
+}
+
+// AuthFieldNames returns the reserved "auth" collection auth field names.
+func AuthFieldNames() []string {
+	return []string{
+		FieldNameUsername,
+		FieldNameEmail,
+		FieldNameEmailVisibility,
+		FieldNameVerified,
+		FieldNameTokenKey,
+		FieldNamePasswordHash,
+		FieldNameLastResetSentAt,
+		FieldNameLastVerificationSentAt,
 	}
 }
 
@@ -38,12 +87,15 @@ const (
 	FieldTypeBool     string = "bool"
 	FieldTypeEmail    string = "email"
 	FieldTypeUrl      string = "url"
+	FieldTypeEditor   string = "editor"
 	FieldTypeDate     string = "date"
 	FieldTypeSelect   string = "select"
 	FieldTypeJson     string = "json"
 	FieldTypeFile     string = "file"
 	FieldTypeRelation string = "relation"
-	FieldTypeUser     string = "user"
+
+	// Deprecated: Will be removed in v0.9+
+	FieldTypeUser string = "user"
 )
 
 // FieldTypes returns slice with all supported field types.
@@ -54,12 +106,12 @@ func FieldTypes() []string {
 		FieldTypeBool,
 		FieldTypeEmail,
 		FieldTypeUrl,
+		FieldTypeEditor,
 		FieldTypeDate,
 		FieldTypeSelect,
 		FieldTypeJson,
 		FieldTypeFile,
 		FieldTypeRelation,
-		FieldTypeUser,
 	}
 }
 
@@ -69,7 +121,6 @@ func ArraybleFieldTypes() []string {
 		FieldTypeSelect,
 		FieldTypeFile,
 		FieldTypeRelation,
-		FieldTypeUser,
 	}
 }
 
@@ -80,17 +131,21 @@ type SchemaField struct {
 	Name     string `form:"name" json:"name"`
 	Type     string `form:"type" json:"type"`
 	Required bool   `form:"required" json:"required"`
-	Unique   bool   `form:"unique" json:"unique"`
-	Options  any    `form:"options" json:"options"`
+
+	// Deprecated: This field is no-op and will be removed in future versions.
+	// Please use the collection.Indexes field to define a unique constraint.
+	Unique bool `form:"unique" json:"unique"`
+
+	Options any `form:"options" json:"options"`
 }
 
 // ColDefinition returns the field db column type definition as string.
 func (f *SchemaField) ColDefinition() string {
 	switch f.Type {
 	case FieldTypeNumber:
-		return "REAL DEFAULT 0"
+		return "NUMERIC DEFAULT 0"
 	case FieldTypeBool:
-		return "Boolean DEFAULT FALSE"
+		return "BOOLEAN DEFAULT FALSE"
 	case FieldTypeJson:
 		return "JSON DEFAULT NULL"
 	default:
@@ -133,9 +188,11 @@ func (f SchemaField) Validate() error {
 	// init field options (if not already)
 	f.InitOptions()
 
-	// add commonly used filter literals to the exclude names list
-	excludeNames := ReservedFieldNames()
+	excludeNames := BaseModelFieldNames()
+	// exclude special filter literals
 	excludeNames = append(excludeNames, "null", "true", "false")
+	// exclude system literals
+	excludeNames = append(excludeNames, SystemFieldNames()...)
 
 	return validation.ValidateStruct(&f,
 		validation.Field(&f.Options, validation.Required, validation.By(f.checkOptions)),
@@ -188,6 +245,8 @@ func (f *SchemaField) InitOptions() error {
 		options = &EmailOptions{}
 	case FieldTypeUrl:
 		options = &UrlOptions{}
+	case FieldTypeEditor:
+		options = &EditorOptions{}
 	case FieldTypeDate:
 		options = &DateOptions{}
 	case FieldTypeSelect:
@@ -198,8 +257,11 @@ func (f *SchemaField) InitOptions() error {
 		options = &FileOptions{}
 	case FieldTypeRelation:
 		options = &RelationOptions{}
+
+	// Deprecated: Will be removed in v0.9+
 	case FieldTypeUser:
 		options = &UserOptions{}
+
 	default:
 		return errors.New("Missing or unknown field field type.")
 	}
@@ -219,10 +281,38 @@ func (f *SchemaField) PrepareValue(value any) any {
 	f.InitOptions()
 
 	switch f.Type {
-	case FieldTypeText, FieldTypeEmail, FieldTypeUrl:
+	case FieldTypeText, FieldTypeEmail, FieldTypeUrl, FieldTypeEditor:
 		return cast.ToString(value)
 	case FieldTypeJson:
-		val, _ := types.ParseJsonRaw(value)
+		val := value
+
+		if str, ok := val.(string); ok {
+			// in order to support seamlessly both json and multipart/form-data requests,
+			// the following normalization rules are applied for plain string values:
+			// - "true" is converted to the json `true`
+			// - "false" is converted to the json `false`
+			// - "null" is converted to the json `null`
+			// - "[1,2,3]" is converted to the json `[1,2,3]`
+			// - "{\"a\":1,\"b\":2}" is converted to the json `{"a":1,"b":2}`
+			// - numeric strings are converted to json number
+			// - double quoted strings are left as they are (aka. without normalizations)
+			// - any other string (empty string too) is double quoted
+			if str == "" {
+				val = strconv.Quote(str)
+			} else if str == "null" || str == "true" || str == "false" {
+				val = str
+			} else if ((str[0] >= '0' && str[0] <= '9') ||
+				str[0] == '"' ||
+				str[0] == '[' ||
+				str[0] == '{') &&
+				is.JSON.Validate(str) == nil {
+				val = str
+			} else {
+				val = strconv.Quote(str)
+			}
+		}
+
+		val, _ = types.ParseJsonRaw(val)
 		return val
 	case FieldTypeNumber:
 		return cast.ToFloat64(value)
@@ -235,9 +325,9 @@ func (f *SchemaField) PrepareValue(value any) any {
 		val := list.ToUniqueStringSlice(value)
 
 		options, _ := f.Options.(*SelectOptions)
-		if options.MaxSelect <= 1 {
+		if !options.IsMultiple() {
 			if len(val) > 0 {
-				return val[0]
+				return val[len(val)-1] // the last selected
 			}
 			return ""
 		}
@@ -247,9 +337,9 @@ func (f *SchemaField) PrepareValue(value any) any {
 		val := list.ToUniqueStringSlice(value)
 
 		options, _ := f.Options.(*FileOptions)
-		if options.MaxSelect <= 1 {
+		if !options.IsMultiple() {
 			if len(val) > 0 {
-				return val[0]
+				return val[len(val)-1] // the last selected
 			}
 			return ""
 		}
@@ -259,21 +349,9 @@ func (f *SchemaField) PrepareValue(value any) any {
 		ids := list.ToUniqueStringSlice(value)
 
 		options, _ := f.Options.(*RelationOptions)
-		if options.MaxSelect <= 1 {
+		if !options.IsMultiple() {
 			if len(ids) > 0 {
-				return ids[0]
-			}
-			return ""
-		}
-
-		return ids
-	case FieldTypeUser:
-		ids := list.ToUniqueStringSlice(value)
-
-		options, _ := f.Options.(*UserOptions)
-		if options.MaxSelect <= 1 {
-			if len(ids) > 0 {
-				return ids[0]
+				return ids[len(ids)-1] // the last selected
 			}
 			return ""
 		}
@@ -284,9 +362,53 @@ func (f *SchemaField) PrepareValue(value any) any {
 	}
 }
 
+// PrepareValueWithModifier returns normalized and properly formatted field value
+// by "merging" baseValue with the modifierValue based on the specified modifier (+ or -).
+func (f *SchemaField) PrepareValueWithModifier(baseValue any, modifier string, modifierValue any) any {
+	resolvedValue := baseValue
+
+	switch f.Type {
+	case FieldTypeNumber:
+		switch modifier {
+		case FieldValueModifierAdd:
+			resolvedValue = cast.ToFloat64(baseValue) + cast.ToFloat64(modifierValue)
+		case FieldValueModifierSubtract:
+			resolvedValue = cast.ToFloat64(baseValue) - cast.ToFloat64(modifierValue)
+		}
+	case FieldTypeSelect, FieldTypeRelation:
+		switch modifier {
+		case FieldValueModifierAdd:
+			resolvedValue = append(
+				list.ToUniqueStringSlice(baseValue),
+				list.ToUniqueStringSlice(modifierValue)...,
+			)
+		case FieldValueModifierSubtract:
+			resolvedValue = list.SubtractSlice(
+				list.ToUniqueStringSlice(baseValue),
+				list.ToUniqueStringSlice(modifierValue),
+			)
+		}
+	case FieldTypeFile:
+		// note: file for now supports only the subtract modifier
+		if modifier == FieldValueModifierSubtract {
+			resolvedValue = list.SubtractSlice(
+				list.ToUniqueStringSlice(baseValue),
+				list.ToUniqueStringSlice(modifierValue),
+			)
+		}
+	}
+
+	return f.PrepareValue(resolvedValue)
+}
+
 // -------------------------------------------------------------------
 
-// FieldOptions interfaces that defines common methods that every field options struct has.
+// MultiValuer defines common interface methods that every multi-valued (eg. with MaxSelect) field option struct has.
+type MultiValuer interface {
+	IsMultiple() bool
+}
+
+// FieldOptions defines common interface methods that every field option struct has.
 type FieldOptions interface {
 	Validate() error
 }
@@ -392,6 +514,15 @@ func (o UrlOptions) Validate() error {
 
 // -------------------------------------------------------------------
 
+type EditorOptions struct {
+}
+
+func (o EditorOptions) Validate() error {
+	return nil
+}
+
+// -------------------------------------------------------------------
+
 type DateOptions struct {
 	Min types.DateTime `form:"min" json:"min"`
 	Max types.DateTime `form:"max" json:"max"`
@@ -426,15 +557,26 @@ type SelectOptions struct {
 }
 
 func (o SelectOptions) Validate() error {
+	max := len(o.Values)
+	if max == 0 {
+		max = 1
+	}
+
 	return validation.ValidateStruct(&o,
 		validation.Field(&o.Values, validation.Required),
 		validation.Field(
 			&o.MaxSelect,
 			validation.Required,
 			validation.Min(1),
-			validation.Max(len(o.Values)),
+			validation.Max(max),
 		),
 	)
+}
+
+// IsMultiple implements MultiValuer interface and checks whether the
+// current field options support multiple values.
+func (o SelectOptions) IsMultiple() bool {
+	return o.MaxSelect > 1
 }
 
 // -------------------------------------------------------------------
@@ -448,11 +590,14 @@ func (o JsonOptions) Validate() error {
 
 // -------------------------------------------------------------------
 
+var _ MultiValuer = (*FileOptions)(nil)
+
 type FileOptions struct {
 	MaxSelect int      `form:"maxSelect" json:"maxSelect"`
 	MaxSize   int      `form:"maxSize" json:"maxSize"` // in bytes
 	MimeTypes []string `form:"mimeTypes" json:"mimeTypes"`
 	Thumbs    []string `form:"thumbs" json:"thumbs"`
+	Protected bool     `form:"protected" json:"protected"`
 }
 
 func (o FileOptions) Validate() error {
@@ -466,30 +611,68 @@ func (o FileOptions) Validate() error {
 	)
 }
 
+// IsMultiple implements MultiValuer interface and checks whether the
+// current field options support multiple values.
+func (o FileOptions) IsMultiple() bool {
+	return o.MaxSelect > 1
+}
+
 // -------------------------------------------------------------------
 
+var _ MultiValuer = (*RelationOptions)(nil)
+
 type RelationOptions struct {
-	MaxSelect     int    `form:"maxSelect" json:"maxSelect"`
-	CollectionId  string `form:"collectionId" json:"collectionId"`
-	CascadeDelete bool   `form:"cascadeDelete" json:"cascadeDelete"`
+	// CollectionId is the id of the related collection.
+	CollectionId string `form:"collectionId" json:"collectionId"`
+
+	// CascadeDelete indicates whether the root model should be deleted
+	// in case of delete of all linked relations.
+	CascadeDelete bool `form:"cascadeDelete" json:"cascadeDelete"`
+
+	// MinSelect indicates the min number of allowed relation records
+	// that could be linked to the main model.
+	//
+	// If nil no limits are applied.
+	MinSelect *int `form:"minSelect" json:"minSelect"`
+
+	// MaxSelect indicates the max number of allowed relation records
+	// that could be linked to the main model.
+	//
+	// If nil no limits are applied.
+	MaxSelect *int `form:"maxSelect" json:"maxSelect"`
+
+	// DisplayFields is optional slice of collection field names used for UI purposes.
+	DisplayFields []string `form:"displayFields" json:"displayFields"`
 }
 
 func (o RelationOptions) Validate() error {
+	minVal := 0
+	if o.MinSelect != nil {
+		minVal = *o.MinSelect
+	}
+
 	return validation.ValidateStruct(&o,
-		validation.Field(&o.MaxSelect, validation.Required, validation.Min(1)),
 		validation.Field(&o.CollectionId, validation.Required),
+		validation.Field(&o.MinSelect, validation.NilOrNotEmpty, validation.Min(1)),
+		validation.Field(&o.MaxSelect, validation.NilOrNotEmpty, validation.Min(minVal)),
 	)
+}
+
+// IsMultiple implements MultiValuer interface and checks whether the
+// current field options support multiple values.
+func (o RelationOptions) IsMultiple() bool {
+	return o.MaxSelect == nil || *o.MaxSelect > 1
 }
 
 // -------------------------------------------------------------------
 
+// Deprecated: Will be removed in v0.9+
 type UserOptions struct {
 	MaxSelect     int  `form:"maxSelect" json:"maxSelect"`
 	CascadeDelete bool `form:"cascadeDelete" json:"cascadeDelete"`
 }
 
+// Deprecated: Will be removed in v0.9+
 func (o UserOptions) Validate() error {
-	return validation.ValidateStruct(&o,
-		validation.Field(&o.MaxSelect, validation.Required, validation.Min(1)),
-	)
+	return nil
 }

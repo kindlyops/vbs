@@ -5,6 +5,7 @@ import (
 	"errors"
 	"image"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,7 +13,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -82,6 +82,11 @@ func NewLocal(dirPath string) (*System, error) {
 	return &System{ctx: ctx, bucket: bucket}, nil
 }
 
+// SetContext assigns the specified context to the current filesystem.
+func (s *System) SetContext(ctx context.Context) {
+	s.ctx = ctx
+}
+
 // Close releases any resources used for the related filesystem.
 func (s *System) Close() error {
 	return s.bucket.Close()
@@ -97,6 +102,40 @@ func (s *System) Attributes(fileKey string) (*blob.Attributes, error) {
 	return s.bucket.Attributes(s.ctx, fileKey)
 }
 
+// GetFile returns a file content reader for the given fileKey.
+//
+// NB! Make sure to call `Close()` after you are done working with it.
+func (s *System) GetFile(fileKey string) (*blob.Reader, error) {
+	br, err := s.bucket.NewReader(s.ctx, fileKey, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return br, nil
+}
+
+// List returns a flat list with info for all files under the specified prefix.
+func (s *System) List(prefix string) ([]*blob.ListObject, error) {
+	files := []*blob.ListObject{}
+
+	iter := s.bucket.List(&blob.ListOptions{
+		Prefix: prefix,
+	})
+
+	for {
+		obj, err := iter.Next(s.ctx)
+		if err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
+			break
+		}
+		files = append(files, obj)
+	}
+
+	return files, nil
+}
+
 // Upload writes content into the fileKey location.
 func (s *System) Upload(content []byte, fileKey string) error {
 	opts := &blob.WriterOptions{
@@ -109,6 +148,90 @@ func (s *System) Upload(content []byte, fileKey string) error {
 	}
 
 	if _, err := w.Write(content); err != nil {
+		w.Close()
+		return err
+	}
+
+	return w.Close()
+}
+
+// UploadFile uploads the provided multipart file to the fileKey location.
+func (s *System) UploadFile(file *File, fileKey string) error {
+	f, err := file.Reader.Open()
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	mt, err := mimetype.DetectReader(f)
+	if err != nil {
+		return err
+	}
+
+	// rewind
+	f.Seek(0, io.SeekStart)
+
+	originalName := file.OriginalName
+	if len(originalName) > 255 {
+		// keep only the first 255 chars as a very rudimentary measure
+		// to prevent the metadata to grow too big in size
+		originalName = originalName[:255]
+	}
+	opts := &blob.WriterOptions{
+		ContentType: mt.String(),
+		Metadata: map[string]string{
+			"original-filename": originalName,
+		},
+	}
+
+	w, err := s.bucket.NewWriter(s.ctx, fileKey, opts)
+	if err != nil {
+		return err
+	}
+
+	if _, err := w.ReadFrom(f); err != nil {
+		w.Close()
+		return err
+	}
+
+	return w.Close()
+}
+
+// UploadMultipart uploads the provided multipart file to the fileKey location.
+func (s *System) UploadMultipart(fh *multipart.FileHeader, fileKey string) error {
+	f, err := fh.Open()
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	mt, err := mimetype.DetectReader(f)
+	if err != nil {
+		return err
+	}
+
+	// rewind
+	f.Seek(0, io.SeekStart)
+
+	originalName := fh.Filename
+	if len(originalName) > 255 {
+		// keep only the first 255 chars as a very rudimentary measure
+		// to prevent the metadata to grow too big in size
+		originalName = originalName[:255]
+	}
+	opts := &blob.WriterOptions{
+		ContentType: mt.String(),
+		Metadata: map[string]string{
+			"original-filename": originalName,
+		},
+	}
+
+	w, err := s.bucket.NewWriter(s.ctx, fileKey, opts)
+	if err != nil {
+		return err
+	}
+
+	if _, err := w.ReadFrom(f); err != nil {
 		w.Close()
 		return err
 	}
@@ -133,22 +256,18 @@ func (s *System) DeletePrefix(prefix string) []error {
 	dirsMap := map[string]struct{}{}
 	dirsMap[prefix] = struct{}{}
 
-	opts := blob.ListOptions{
-		Prefix: prefix,
-	}
-
 	// delete all files with the prefix
 	// ---
-	iter := s.bucket.List(&opts)
+	iter := s.bucket.List(&blob.ListOptions{
+		Prefix: prefix,
+	})
 	for {
 		obj, err := iter.Next(s.ctx)
-		if err == io.EOF {
-			break
-		}
-
 		if err != nil {
-			failed = append(failed, err)
-			continue
+			if err != io.EOF {
+				failed = append(failed, err)
+			}
+			break
 		}
 
 		if err := s.Delete(obj.Key); err != nil {
@@ -203,49 +322,45 @@ var manualExtensionContentTypes = map[string]string{
 }
 
 // Serve serves the file at fileKey location to an HTTP response.
-func (s *System) Serve(response http.ResponseWriter, fileKey string, name string) error {
-	r, readErr := s.bucket.NewReader(s.ctx, fileKey, nil)
+func (s *System) Serve(res http.ResponseWriter, req *http.Request, fileKey string, name string) error {
+	br, readErr := s.bucket.NewReader(s.ctx, fileKey, nil)
 	if readErr != nil {
 		return readErr
 	}
-	defer r.Close()
+	defer br.Close()
 
 	disposition := "attachment"
-	realContentType := r.ContentType()
+	realContentType := br.ContentType()
 	if list.ExistInSlice(realContentType, inlineServeContentTypes) {
 		disposition = "inline"
 	}
 
 	// make an exception for specific content types and force a custom
-	// content type to send in the response so that it can be loaded directly
+	// content type to send in the response so that it can be loaded properly
 	extContentType := realContentType
 	if ct, found := manualExtensionContentTypes[filepath.Ext(name)]; found && extContentType != ct {
 		extContentType = ct
 	}
 
-	// clickjacking shouldn't be a concern when serving uploaded files,
-	// so it safe to unset the global X-Frame-Options to allow files embedding
-	// (see https://github.com/pocketbase/pocketbase/issues/677)
-	response.Header().Del("X-Frame-Options")
+	setHeaderIfMissing(res, "Content-Disposition", disposition+"; filename="+name)
+	setHeaderIfMissing(res, "Content-Type", extContentType)
+	setHeaderIfMissing(res, "Content-Security-Policy", "default-src 'none'; media-src 'self'; style-src 'unsafe-inline'; sandbox")
 
-	response.Header().Set("Content-Disposition", disposition+"; filename="+name)
-	response.Header().Set("Content-Type", extContentType)
-	response.Header().Set("Content-Length", strconv.FormatInt(r.Size(), 10))
-	response.Header().Set("Content-Security-Policy", "default-src 'none'; media-src 'self'; style-src 'unsafe-inline'; sandbox")
+	// set a default cache-control header
+	// (valid for 30 days but the cache is allowed to reuse the file for any requests
+	// that are made in the last day while revalidating the res in the background)
+	setHeaderIfMissing(res, "Cache-Control", "max-age=2592000, stale-while-revalidate=86400")
 
-	// All HTTP date/time stamps MUST be represented in Greenwich Mean Time (GMT)
-	// (see https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1)
-	//
-	// NB! time.LoadLocation may fail on non-Unix systems (see https://github.com/pocketbase/pocketbase/issues/45)
-	location, locationErr := time.LoadLocation("GMT")
-	if locationErr == nil {
-		response.Header().Set("Last-Modified", r.ModTime().In(location).Format("Mon, 02 Jan 06 15:04:05 MST"))
+	http.ServeContent(res, req, name, br.ModTime(), br)
+
+	return nil
+}
+
+// note: expects key to be in a canonical form (eg. "accept-encoding" should be "Accept-Encoding").
+func setHeaderIfMissing(res http.ResponseWriter, key string, value string) {
+	if _, ok := res.Header()[key]; !ok {
+		res.Header().Set(key, value)
 	}
-
-	// copy from the read range to response.
-	_, err := io.Copy(response, r)
-
-	return err
 }
 
 var ThumbSizeRegex = regexp.MustCompile(`^(\d+)x(\d+)(t|b|f)?$`)
@@ -282,6 +397,7 @@ func (s *System) CreateThumb(originalKey string, thumbKey, thumbSize string) err
 	defer r.Close()
 
 	// create imaging object from the original reader
+	// (note: only the first frame for animated image formats)
 	img, decodeErr := imaging.Decode(r, imaging.AutoOrientation(true))
 	if decodeErr != nil {
 		return decodeErr
@@ -309,8 +425,12 @@ func (s *System) CreateThumb(originalKey string, thumbKey, thumbSize string) err
 		}
 	}
 
+	opts := &blob.WriterOptions{
+		ContentType: r.ContentType(),
+	}
+
 	// open a thumb storage writer (aka. prepare for upload)
-	w, writerErr := s.bucket.NewWriter(s.ctx, thumbKey, nil)
+	w, writerErr := s.bucket.NewWriter(s.ctx, thumbKey, opts)
 	if writerErr != nil {
 		return writerErr
 	}

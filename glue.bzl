@@ -30,7 +30,7 @@ site build and embedding or publishing.
             default = Label("//sitemanifest:manifester"),
             allow_single_file = True,
             executable = True,
-            cfg = "host",
+            cfg = "exec",
         ),
     },
     outputs = {

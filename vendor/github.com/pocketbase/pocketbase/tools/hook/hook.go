@@ -8,7 +8,7 @@ import (
 var StopPropagation = errors.New("Event hook propagation stopped")
 
 // Handler defines a hook handler function.
-type Handler[T any] func(data T) error
+type Handler[T any] func(e T) error
 
 // Hook defines a concurrent safe structure for handling event hooks
 // (aka. callbacks propagation).
@@ -37,6 +37,8 @@ func (h *Hook[T]) Add(fn Handler[T]) {
 }
 
 // Reset removes all registered handlers.
+//
+// @todo for consistency with other Go methods consider renaming it to Clear.
 func (h *Hook[T]) Reset() {
 	h.mux.Lock()
 	defer h.mux.Unlock()
@@ -54,12 +56,12 @@ func (h *Hook[T]) Reset() {
 // - hook.StopPropagation is returned in one of the handlers
 // - any non-nil error is returned in one of the handlers
 func (h *Hook[T]) Trigger(data T, oneOffHandlers ...Handler[T]) error {
-	h.mux.Lock()
+	h.mux.RLock()
 	handlers := make([]Handler[T], 0, len(h.handlers)+len(oneOffHandlers))
 	handlers = append(handlers, h.handlers...)
 	handlers = append(handlers, oneOffHandlers...)
 	// unlock is not deferred to avoid deadlocks when Trigger is called recursive by the handlers
-	h.mux.Unlock()
+	h.mux.RUnlock()
 
 	for _, fn := range handlers {
 		err := fn(data)

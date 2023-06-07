@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"context"
+	"encoding/json"
+
 	"golang.org/x/oauth2"
 )
 
@@ -17,6 +20,7 @@ type Google struct {
 // NewGoogleProvider creates new Google provider instance with some defaults.
 func NewGoogleProvider() *Google {
 	return &Google{&baseProvider{
+		ctx: context.Background(),
 		scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.profile",
 			"https://www.googleapis.com/auth/userinfo.email",
@@ -29,22 +33,38 @@ func NewGoogleProvider() *Google {
 
 // FetchAuthUser returns an AuthUser instance based the Google's user api.
 func (p *Google) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
-	rawData := struct {
-		Id      string `json:"id"`
-		Name    string `json:"name"`
-		Email   string `json:"email"`
-		Picture string `json:"picture"`
-	}{}
+	data, err := p.FetchRawUserData(token)
+	if err != nil {
+		return nil, err
+	}
 
-	if err := p.FetchRawUserData(token, &rawData); err != nil {
+	rawUser := map[string]any{}
+	if err := json.Unmarshal(data, &rawUser); err != nil {
+		return nil, err
+	}
+
+	extracted := struct {
+		Id            string `json:"id"`
+		Name          string `json:"name"`
+		Email         string `json:"email"`
+		Picture       string `json:"picture"`
+		VerifiedEmail bool   `json:"verified_email"`
+	}{}
+	if err := json.Unmarshal(data, &extracted); err != nil {
 		return nil, err
 	}
 
 	user := &AuthUser{
-		Id:        rawData.Id,
-		Name:      rawData.Name,
-		Email:     rawData.Email,
-		AvatarUrl: rawData.Picture,
+		Id:           extracted.Id,
+		Name:         extracted.Name,
+		AvatarUrl:    extracted.Picture,
+		RawUser:      rawUser,
+		AccessToken:  token.AccessToken,
+		RefreshToken: token.RefreshToken,
+	}
+
+	if extracted.VerifiedEmail {
+		user.Email = extracted.Email
 	}
 
 	return user, nil

@@ -102,6 +102,7 @@ go_library(
         "endpoints.go",
         "eventstream.go",
         "go_module_metadata.go",
+        "handwritten_paginators.go",
         "serializers.go",
         "validators.go",
     ],

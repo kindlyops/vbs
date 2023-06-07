@@ -8,11 +8,21 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 )
+
+// ExecHookFunc executes before op allowing custom handling like auto fail/retry.
+type ExecHookFunc func(q *Query, op func() error) error
+
+// OneHookFunc executes right before the query populate the row result from One() call (aka. op).
+type OneHookFunc func(q *Query, a interface{}, op func(b interface{}) error) error
+
+// AllHookFunc executes right before the query populate the row result from All() call (aka. op).
+type AllHookFunc func(q *Query, sliceA interface{}, op func(sliceB interface{}) error) error
 
 // Params represents a list of parameter values to be bound to a SQL statement.
 // The map keys are the parameter names while the map values are the corresponding parameter values.
@@ -42,6 +52,11 @@ type Query struct {
 
 	stmt *sql.Stmt
 	ctx  context.Context
+
+	// hooks
+	execHook ExecHookFunc
+	oneHook  OneHookFunc
+	allHook  AllHookFunc
 
 	// FieldMapper maps struct field names to DB column names.
 	FieldMapper FieldMapFunc
@@ -95,6 +110,31 @@ func (q *Query) WithContext(ctx context.Context) *Query {
 	return q
 }
 
+// WithExecHook associates the provided exec hook function with the query.
+//
+// It is called for every Query resolver (Execute(), One(), All(), Row(), Column()),
+// allowing you to implement auto fail/retry or any other additional handling.
+func (q *Query) WithExecHook(fn ExecHookFunc) *Query {
+	q.execHook = fn
+	return q
+}
+
+// WithOneHook associates the provided hook function with the query,
+// called on q.One(), allowing you to implement custom struct scan based
+// on the One() argument and/or result.
+func (q *Query) WithOneHook(fn OneHookFunc) *Query {
+	q.oneHook = fn
+	return q
+}
+
+// WithOneHook associates the provided hook function with the query,
+// called on q.All(), allowing you to implement custom slice scan based
+// on the All() argument and/or result.
+func (q *Query) WithAllHook(fn AllHookFunc) *Query {
+	q.allHook = fn
+	return q
+}
+
 // logSQL returns the SQL statement with parameters being replaced with the actual values.
 // The result is only for logging purpose and should not be used to execute.
 func (q *Query) logSQL() string {
@@ -107,7 +147,7 @@ func (q *Query) logSQL() string {
 		if str, ok := v.(string); ok {
 			sv = "'" + strings.Replace(str, "'", "''", -1) + "'"
 		} else if bs, ok := v.([]byte); ok {
-			sv = "'" + strings.Replace(string(bs), "'", "''", -1) + "'"
+			sv = "0x" + hex.EncodeToString(bs)
 		} else {
 			sv = fmt.Sprintf("%v", v)
 		}
@@ -159,7 +199,19 @@ func (q *Query) Bind(params Params) *Query {
 }
 
 // Execute executes the SQL statement without retrieving data.
-func (q *Query) Execute() (result sql.Result, err error) {
+func (q *Query) Execute() (sql.Result, error) {
+	var result sql.Result
+
+	execErr := q.execWrap(func() error {
+		var err error
+		result, err = q.execute()
+		return err
+	})
+
+	return result, execErr
+}
+
+func (q *Query) execute() (result sql.Result, err error) {
 	err = q.LastError
 	q.LastError = nil
 	if err != nil {
@@ -205,11 +257,18 @@ func (q *Query) Execute() (result sql.Result, err error) {
 // the variable to be populated.
 // Note that when the query has no rows in the result set, an sql.ErrNoRows will be returned.
 func (q *Query) One(a interface{}) error {
-	rows, err := q.Rows()
-	if err != nil {
-		return err
-	}
-	return rows.one(a)
+	return q.execWrap(func() error {
+		rows, err := q.Rows()
+		if err != nil {
+			return err
+		}
+
+		if q.oneHook != nil {
+			return q.oneHook(q, a, rows.one)
+		}
+
+		return rows.one(a)
+	})
 }
 
 // All executes the SQL statement and populates all the resulting rows into a slice of struct or NullStringMap.
@@ -217,32 +276,43 @@ func (q *Query) One(a interface{}) error {
 // Refer to Rows.ScanStruct() and Rows.ScanMap() for more details on how each slice element can be.
 // If the query returns no row, the slice will be an empty slice (not nil).
 func (q *Query) All(slice interface{}) error {
-	rows, err := q.Rows()
-	if err != nil {
-		return err
-	}
-	return rows.all(slice)
+	return q.execWrap(func() error {
+		rows, err := q.Rows()
+		if err != nil {
+			return err
+		}
+
+		if q.allHook != nil {
+			return q.allHook(q, slice, rows.all)
+		}
+
+		return rows.all(slice)
+	})
 }
 
 // Row executes the SQL statement and populates the first row of the result into a list of variables.
 // Note that the number of the variables should match to that of the columns in the query result.
 // Note that when the query has no rows in the result set, an sql.ErrNoRows will be returned.
 func (q *Query) Row(a ...interface{}) error {
-	rows, err := q.Rows()
-	if err != nil {
-		return err
-	}
-	return rows.row(a...)
+	return q.execWrap(func() error {
+		rows, err := q.Rows()
+		if err != nil {
+			return err
+		}
+		return rows.row(a...)
+	})
 }
 
 // Column executes the SQL statement and populates the first column of the result into a slice.
 // Note that the parameter must be a pointer to a slice.
 func (q *Query) Column(a interface{}) error {
-	rows, err := q.Rows()
-	if err != nil {
-		return err
-	}
-	return rows.column(a)
+	return q.execWrap(func() error {
+		rows, err := q.Rows()
+		if err != nil {
+			return err
+		}
+		return rows.column(a)
+	})
 }
 
 // Rows executes the SQL statement and returns a Rows object to allow retrieving data row by row.
@@ -287,6 +357,13 @@ func (q *Query) Rows() (rows *Rows, err error) {
 		q.PerfFunc(time.Now().Sub(start).Nanoseconds(), q.logSQL(), false)
 	}
 	return
+}
+
+func (q *Query) execWrap(op func() error) error {
+	if q.execHook != nil {
+		return q.execHook(q, op)
+	}
+	return op()
 }
 
 // replacePlaceholders converts a list of named parameters into a list of anonymous parameters.

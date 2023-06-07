@@ -8,9 +8,36 @@ type Store[T any] struct {
 	data map[string]T
 }
 
-// New creates a new Store[T] instance.
+// New creates a new Store[T] instance with a shallow copy of the provided data (if any).
 func New[T any](data map[string]T) *Store[T] {
-	return &Store[T]{data: data}
+	s := &Store[T]{}
+
+	s.Reset(data)
+
+	return s
+}
+
+// Reset clears the store and replaces the store data with a
+// shallow copy of the provided newData.
+func (s *Store[T]) Reset(newData map[string]T) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+
+	var clone = make(map[string]T, len(newData))
+
+	for k, v := range newData {
+		clone[k] = v
+	}
+
+	s.data = clone
+}
+
+// Length returns the current number of elements in the store.
+func (s *Store[T]) Length() int {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+
+	return len(s.data)
 }
 
 // RemoveAll removes all the existing store entries.
@@ -33,8 +60,8 @@ func (s *Store[T]) Remove(key string) {
 
 // Has checks if element with the specified key exist or not.
 func (s *Store[T]) Has(key string) bool {
-	s.mux.Lock()
-	defer s.mux.Unlock()
+	s.mux.RLock()
+	defer s.mux.RUnlock()
 
 	_, ok := s.data[key]
 
@@ -45,10 +72,24 @@ func (s *Store[T]) Has(key string) bool {
 //
 // If key is not set, the zero T value is returned.
 func (s *Store[T]) Get(key string) T {
-	s.mux.Lock()
-	defer s.mux.Unlock()
+	s.mux.RLock()
+	defer s.mux.RUnlock()
 
 	return s.data[key]
+}
+
+// GetAll returns a shallow copy of the current store data.
+func (s *Store[T]) GetAll() map[string]T {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+
+	var clone = make(map[string]T, len(s.data))
+
+	for k, v := range s.data {
+		clone[k] = v
+	}
+
+	return clone
 }
 
 // Set sets (or overwrite if already exist) a new value for key.

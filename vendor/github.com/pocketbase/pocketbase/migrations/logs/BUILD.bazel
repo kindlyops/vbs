@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "1640988000_init.go",
         "1660821103_add_user_ip_column.go",
+        "1677760279_uppsercase_method.go",
     ],
     importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/migrations/logs",
     importpath = "github.com/pocketbase/pocketbase/migrations/logs",

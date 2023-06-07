@@ -49,9 +49,18 @@ var (
 
 	fieldRegex      = regexp.MustCompile(`([^A-Z_])([A-Z])`)
 	scannerType     = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
+	postScannerType = reflect.TypeOf((*PostScanner)(nil)).Elem()
 	structInfoMap   = make(map[structInfoMapKey]*structInfo)
 	muStructInfoMap sync.Mutex
 )
+
+// PostScanner is an optional interface used by ScanStruct.
+type PostScanner interface {
+	// PostScan executes right after the struct has been populated
+	// with the DB values, allowing you to further normalize or validate
+	// the loaded data.
+	PostScan() error
+}
 
 // DefaultFieldMapFunc maps a field name to a DB column name.
 // The mapping rule set by this method is that words in a field name will be separated by underscores
