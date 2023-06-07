@@ -11,7 +11,7 @@ func init() {
 	LogsMigrations.Register(func(db dbx.Builder) (err error) {
 		_, err = db.NewQuery(`
 			CREATE TABLE {{_requests}} (
-				[[id]]        TEXT PRIMARY KEY,
+				[[id]]        TEXT PRIMARY KEY NOT NULL,
 				[[url]]       TEXT DEFAULT "" NOT NULL,
 				[[method]]    TEXT DEFAULT "get" NOT NULL,
 				[[status]]    INTEGER DEFAULT 200 NOT NULL,
@@ -20,8 +20,8 @@ func init() {
 				[[referer]]   TEXT DEFAULT "" NOT NULL,
 				[[userAgent]] TEXT DEFAULT "" NOT NULL,
 				[[meta]]      JSON DEFAULT "{}" NOT NULL,
-				[[created]]   TEXT DEFAULT "" NOT NULL,
-				[[updated]]   TEXT DEFAULT "" NOT NULL
+				[[created]]   TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%fZ')) NOT NULL,
+				[[updated]]   TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%fZ')) NOT NULL
 			);
 
 			CREATE INDEX _request_status_idx on {{_requests}} ([[status]]);

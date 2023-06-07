@@ -2,6 +2,7 @@
 package apis
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -25,12 +26,22 @@ const trailedAdminPath = "/_/"
 func InitApi(app core.App) (*echo.Echo, error) {
 	e := echo.New()
 	e.Debug = app.IsDebug()
+	e.JSONSerializer = &rest.Serializer{
+		FieldsParam: "fields",
+	}
+
+	// configure a custom router
+	e.ResetRouterCreator(func(ec *echo.Echo) echo.Router {
+		return echo.NewRouter(echo.RouterConfig{
+			UnescapePathParamValues: true,
+		})
+	})
 
 	// default middlewares
 	e.Pre(middleware.RemoveTrailingSlashWithConfig(middleware.RemoveTrailingSlashConfig{
 		Skipper: func(c echo.Context) bool {
-			// ignore Admin UI route(s)
-			return strings.HasPrefix(c.Request().URL.Path, trailedAdminPath)
+			// enable by default only for the API routes
+			return !strings.HasPrefix(c.Request().URL.Path, "/api/")
 		},
 	}))
 	e.Use(middleware.Recover())
@@ -40,10 +51,13 @@ func InitApi(app core.App) (*echo.Echo, error) {
 	// custom error handler
 	e.HTTPErrorHandler = func(c echo.Context, err error) {
 		if c.Response().Committed {
+			if app.IsDebug() {
+				log.Println("HTTPErrorHandler response was already committed:", err)
+			}
 			return
 		}
 
-		var apiErr *rest.ApiError
+		var apiErr *ApiError
 
 		switch v := err.(type) {
 		case *echo.HTTPError:
@@ -51,8 +65,8 @@ func InitApi(app core.App) (*echo.Echo, error) {
 				log.Println(v.Internal)
 			}
 			msg := fmt.Sprintf("%v", v.Message)
-			apiErr = rest.NewApiError(v.Code, msg, v)
-		case *rest.ApiError:
+			apiErr = NewApiError(v.Code, msg, v)
+		case *ApiError:
 			if app.IsDebug() && v.RawData() != nil {
 				log.Println(v.RawData())
 			}
@@ -61,22 +75,29 @@ func InitApi(app core.App) (*echo.Echo, error) {
 			if err != nil && app.IsDebug() {
 				log.Println(err)
 			}
-			apiErr = rest.NewBadRequestError("", err)
+			apiErr = NewBadRequestError("", err)
 		}
 
-		// Send response
-		var cErr error
-		if c.Request().Method == http.MethodHead {
+		event := new(core.ApiErrorEvent)
+		event.HttpContext = c
+		event.Error = apiErr
+
+		// send error response
+		hookErr := app.OnBeforeApiError().Trigger(event, func(e *core.ApiErrorEvent) error {
 			// @see https://github.com/labstack/echo/issues/608
-			cErr = c.NoContent(apiErr.Code)
-		} else {
-			cErr = c.JSON(apiErr.Code, apiErr)
-		}
+			if e.HttpContext.Request().Method == http.MethodHead {
+				return e.HttpContext.NoContent(apiErr.Code)
+			}
+
+			return e.HttpContext.JSON(apiErr.Code, apiErr)
+		})
 
 		// truly rare case; eg. client already disconnected
-		if cErr != nil && app.IsDebug() {
-			log.Println(cErr)
+		if hookErr != nil && app.IsDebug() {
+			log.Println(hookErr)
 		}
+
+		app.OnAfterApiError().Trigger(event)
 	}
 
 	// admin ui routes
@@ -84,14 +105,16 @@ func InitApi(app core.App) (*echo.Echo, error) {
 
 	// default routes
 	api := e.Group("/api")
-	BindSettingsApi(app, api)
-	BindAdminApi(app, api)
-	BindUserApi(app, api)
-	BindCollectionApi(app, api)
-	BindRecordApi(app, api)
-	BindFileApi(app, api)
-	BindRealtimeApi(app, api)
-	BindLogsApi(app, api)
+	bindSettingsApi(app, api)
+	bindAdminApi(app, api)
+	bindCollectionApi(app, api)
+	bindRecordCrudApi(app, api)
+	bindRecordAuthApi(app, api)
+	bindFileApi(app, api)
+	bindRealtimeApi(app, api)
+	bindLogsApi(app, api)
+	bindHealthApi(app, api)
+	bindBackupApi(app, api)
 
 	// trigger the custom BeforeServe hook for the created api router
 	// allowing users to further adjust its options or register new routes
@@ -102,6 +125,10 @@ func InitApi(app core.App) (*echo.Echo, error) {
 	if err := app.OnBeforeServe().Trigger(serveEvent); err != nil {
 		return nil, err
 	}
+
+	// note: it is after the OnBeforeServe hook to ensure that the implicit
+	// cache is after any user custom defined middlewares
+	e.Use(eagerRequestDataCache(app))
 
 	// catch all any route
 	api.Any("/*", func(c echo.Context) error {
@@ -114,22 +141,31 @@ func InitApi(app core.App) (*echo.Echo, error) {
 // StaticDirectoryHandler is similar to `echo.StaticDirectoryHandler`
 // but without the directory redirect which conflicts with RemoveTrailingSlash middleware.
 //
+// If a file resource is missing and indexFallback is set, the request
+// will be forwarded to the base index.html (useful also for SPA).
+//
 // @see https://github.com/labstack/echo/issues/2211
-func StaticDirectoryHandler(fileSystem fs.FS, disablePathUnescaping bool) echo.HandlerFunc {
+func StaticDirectoryHandler(fileSystem fs.FS, indexFallback bool) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		p := c.PathParam("*")
-		if !disablePathUnescaping { // when router is already unescaping we do not want to do is twice
-			tmpPath, err := url.PathUnescape(p)
-			if err != nil {
-				return fmt.Errorf("failed to unescape path variable: %w", err)
-			}
-			p = tmpPath
+
+		// escape url path
+		tmpPath, err := url.PathUnescape(p)
+		if err != nil {
+			return fmt.Errorf("failed to unescape path variable: %w", err)
 		}
+		p = tmpPath
 
 		// fs.FS.Open() already assumes that file names are relative to FS root path and considers name with prefix `/` as invalid
 		name := filepath.ToSlash(filepath.Clean(strings.TrimPrefix(p, "/")))
 
-		return c.FileFS(name, fileSystem)
+		fileErr := c.FileFS(name, fileSystem)
+
+		if fileErr != nil && indexFallback && errors.Is(fileErr, echo.ErrNotFound) {
+			return c.FileFS("index.html", fileSystem)
+		}
+
+		return fileErr
 	}
 }
 
@@ -139,7 +175,7 @@ func bindStaticAdminUI(app core.App, e *echo.Echo) error {
 	e.GET(
 		strings.TrimRight(trailedAdminPath, "/"),
 		func(c echo.Context) error {
-			return c.Redirect(http.StatusTemporaryRedirect, trailedAdminPath)
+			return c.Redirect(http.StatusTemporaryRedirect, strings.TrimLeft(trailedAdminPath, "/"))
 		},
 	)
 
@@ -149,13 +185,14 @@ func bindStaticAdminUI(app core.App, e *echo.Echo) error {
 		trailedAdminPath+"*",
 		echo.StaticDirectoryHandler(ui.DistDirFS, false),
 		installerRedirect(app),
+		uiCacheControl(),
 		middleware.Gzip(),
 	)
 
 	return nil
 }
 
-const totalAdminsCacheKey = "totalAdmins"
+const totalAdminsCacheKey = "@totalAdmins"
 
 func updateTotalAdminsCache(app core.App) error {
 	total, err := app.Dao().TotalAdmins()
@@ -166,6 +203,20 @@ func updateTotalAdminsCache(app core.App) error {
 	app.Cache().Set(totalAdminsCacheKey, total)
 
 	return nil
+}
+
+func uiCacheControl() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			// add default Cache-Control header for all Admin UI resources
+			// (ignoring the root admin path)
+			if c.Request().URL.Path != trailedAdminPath {
+				c.Response().Header().Set("Cache-Control", "max-age=1209600, stale-while-revalidate=86400")
+			}
+
+			return next(c)
+		}
+	}
 }
 
 // installerRedirect redirects the user to the installer admin UI page
@@ -200,12 +251,12 @@ func installerRedirect(app core.App) echo.MiddlewareFunc {
 
 			if totalAdmins == 0 && !hasInstallerParam {
 				// redirect to the installer page
-				return c.Redirect(http.StatusTemporaryRedirect, trailedAdminPath+"?installer#")
+				return c.Redirect(http.StatusTemporaryRedirect, "?installer#")
 			}
 
 			if totalAdmins != 0 && hasInstallerParam {
-				// redirect to the home page
-				return c.Redirect(http.StatusTemporaryRedirect, trailedAdminPath+"#/")
+				// clear the installer param
+				return c.Redirect(http.StatusTemporaryRedirect, "?")
 			}
 
 			return next(c)

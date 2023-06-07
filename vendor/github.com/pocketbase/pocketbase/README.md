@@ -1,6 +1,6 @@
 <p align="center">
     <a href="https://pocketbase.io" target="_blank" rel="noopener">
-        <img src="https://i.imgur.com/ZfD4BHO.png" alt="PocketBase - open source backend in 1 file" />
+        <img src="https://i.imgur.com/5qimnm5.png" alt="PocketBase - open source backend in 1 file" />
     </a>
 </p>
 
@@ -19,8 +19,7 @@
 
 **For documentation and examples, please visit https://pocketbase.io/docs.**
 
-> ⚠️ Although the web API definitions are considered stable,
-> please keep in mind that PocketBase is still under active development
+> ⚠️ Please keep in mind that PocketBase is still under active development
 > and therefore full backward compatibility is not guaranteed before reaching v1.0.0.
 
 
@@ -64,15 +63,15 @@ func main() {
     app := pocketbase.New()
 
     app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
-        // add new "GET /api/hello" route to the app router (echo)
+        // add new "GET /hello" route to the app router (echo)
         e.Router.AddRoute(echo.Route{
             Method: http.MethodGet,
-            Path:   "/api/hello",
+            Path:   "/hello",
             Handler: func(c echo.Context) error {
                 return c.String(200, "Hello world!")
             },
             Middlewares: []echo.MiddlewareFunc{
-                apis.RequireAdminOrUserAuth(),
+                apis.ActivityLogger(app),
             },
         })
 
@@ -91,11 +90,33 @@ Running/building the application is the same as for any other Go program, aka. j
 
 **PocketBase embeds SQLite, but doesn't require CGO.**
 
-If CGO is enabled, it will use [mattn/go-sqlite3](https://pkg.go.dev/github.com/mattn/go-sqlite3) driver, otherwise - [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite). You can enable and disable CGO by setting the `CGO_ENABLED` environment variable to `1` or `0` respectively.
-
+If CGO is enabled (aka. `CGO_ENABLED=1`), it will use [mattn/go-sqlite3](https://pkg.go.dev/github.com/mattn/go-sqlite3) driver, otherwise - [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite).
 Enable CGO only if you really need to squeeze the read/write query performance at the expense of complicating cross compilation.
 
-To build the minimal standalone executable, like the prebuilt ones in the releases page, you can simply run `go build` inside the `examples/base` directory.
+To build the minimal standalone executable, like the prebuilt ones in the releases page, you can simply run `go build` inside the `examples/base` directory:
+
+0. [Install Go 1.18+](https://go.dev/doc/install) (_if you haven't already_)
+1. Clone/download the repo
+2. Navigate to `examples/base`
+3. Run `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build`
+    (_https://go.dev/doc/install/source#environment_)
+4. Start the created executable by running `./base serve`.
+
+The supported build targets by the non-cgo driver at the moment are:
+```
+darwin  amd64
+darwin  arm64
+freebsd amd64
+freebsd arm64
+linux   386
+linux   amd64
+linux   arm
+linux   arm64
+linux   ppc64le
+linux   riscv64
+windows amd64
+windows arm64
+```
 
 ### Testing
 
@@ -111,22 +132,28 @@ Check also the [Testing guide](http://pocketbase.io/docs/testing) to learn how t
 
 If you discover a security vulnerability within PocketBase, please send an e-mail to **support at pocketbase.io**.
 
-All reports will be promptly addressed and you'll be credited accordingly.
+All reports will be promptly addressed, and you'll be credited accordingly.
 
 
 ## Contributing
 
 PocketBase is free and open source project licensed under the [MIT License](LICENSE.md).
+You are free to do whatever you want with it, even offering it as a paid service.
 
 You could help continuing its development by:
 
 - [Contribute to the source code](CONTRIBUTING.md)
-
-  > **NB! PR for new features will not be merged until we manage to complete the users refactoring in [#376](https://github.com/pocketbase/pocketbase/issues/376)!**
-
 - [Suggest new features and report issues](https://github.com/pocketbase/pocketbase/issues)
-
 - [Donate a small amount](https://pocketbase.io/support-us)
 
-> Please note that PocketBase was initially created to serve as a new backend for my other open source project - [Presentator](https://presentator.io) (see [#183](https://github.com/presentator/presentator/issues/183)),
-so all feature requests will be first aligned with what we need for Presentator v3.
+PRs for _small features_ (eg. adding new OAuth2 providers), bug and documentation fixes, etc. are more than welcome.
+
+But please refrain creating PRs for _big features_ without previously discussing the implementation details. Reviewing big PRs often requires a lot of time and tedious back-and-forth communication.
+PocketBase has a [roadmap](https://github.com/orgs/pocketbase/projects/2)
+and I try to work on issues in a specific order and such PRs often come in out of nowhere and skew all initial planning.
+
+Don't get upset if I close your PR, even if it is well executed and tested. This doesn't mean that it will never be merged.
+Later we can always refer to it and/or take pieces of your implementation when the time comes to work on the issue (don't worry you'll be credited in the release notes).
+
+_Please also note that PocketBase was initially created to serve as a new backend for my other open source project - [Presentator](https://presentator.io) (see [#183](https://github.com/presentator/presentator/issues/183)),
+so all feature requests will be first aligned with what we need for Presentator v3._

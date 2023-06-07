@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -9,15 +10,24 @@ import (
 
 // AuthUser defines a standardized oauth2 user data structure.
 type AuthUser struct {
-	Id        string `json:"id"`
-	Name      string `json:"name"`
-	Username  string `json:"username"`
-	Email     string `json:"email"`
-	AvatarUrl string `json:"avatarUrl"`
+	Id           string         `json:"id"`
+	Name         string         `json:"name"`
+	Username     string         `json:"username"`
+	Email        string         `json:"email"`
+	AvatarUrl    string         `json:"avatarUrl"`
+	RawUser      map[string]any `json:"rawUser"`
+	AccessToken  string         `json:"accessToken"`
+	RefreshToken string         `json:"refreshToken"`
 }
 
 // Provider defines a common interface for an OAuth2 client.
 type Provider interface {
+	// Scopes returns the context associated with the provider (if any).
+	Context() context.Context
+
+	// SetContext assigns the specified context to the current provider.
+	SetContext(ctx context.Context)
+
 	// Scopes returns the provider access permissions that will be requested.
 	Scopes() []string
 
@@ -73,7 +83,7 @@ type Provider interface {
 
 	// FetchRawUserData requests and marshalizes into `result` the
 	// the OAuth user api response.
-	FetchRawUserData(token *oauth2.Token, result any) error
+	FetchRawUserData(token *oauth2.Token) ([]byte, error)
 
 	// FetchAuthUser is similar to FetchRawUserData, but normalizes and
 	// marshalizes the user api response into a standardized AuthUser struct.
@@ -95,6 +105,30 @@ func NewProviderByName(name string) (Provider, error) {
 		return NewDiscordProvider(), nil
 	case NameTwitter:
 		return NewTwitterProvider(), nil
+	case NameMicrosoft:
+		return NewMicrosoftProvider(), nil
+	case NameSpotify:
+		return NewSpotifyProvider(), nil
+	case NameKakao:
+		return NewKakaoProvider(), nil
+	case NameTwitch:
+		return NewTwitchProvider(), nil
+	case NameStrava:
+		return NewStravaProvider(), nil
+	case NameGitee:
+		return NewGiteeProvider(), nil
+	case NameLivechat:
+		return NewLivechatProvider(), nil
+	case NameGitea:
+		return NewGiteaProvider(), nil
+	case NameOIDC:
+		return NewOIDCProvider(), nil
+	case NameOIDC + "2":
+		return NewOIDCProvider(), nil
+	case NameOIDC + "3":
+		return NewOIDCProvider(), nil
+	case NameApple:
+		return NewAppleProvider(), nil
 	default:
 		return nil, errors.New("Missing provider " + name)
 	}

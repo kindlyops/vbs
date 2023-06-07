@@ -9,7 +9,7 @@ import (
 )
 
 // DefaultDateLayout specifies the default app date strings layout.
-const DefaultDateLayout = "2006-01-02 15:04:05.000"
+const DefaultDateLayout = "2006-01-02 15:04:05.000Z"
 
 // NowDateTime returns new DateTime instance with the current local time.
 func NowDateTime() DateTime {
@@ -53,7 +53,7 @@ func (d DateTime) String() string {
 
 // MarshalJSON implements the [json.Marshaler] interface.
 func (d DateTime) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.String())
+	return []byte(`"` + d.String() + `"`), nil
 }
 
 // UnmarshalJSON implements the [json.Unmarshaler] interface.
@@ -78,8 +78,19 @@ func (d *DateTime) Scan(value any) error {
 		d.t = v.Time()
 	case time.Time:
 		d.t = v
-	case int:
+	case int, int64, int32, uint, uint64, uint32:
 		d.t = cast.ToTime(v)
+	case string:
+		if v == "" {
+			d.t = time.Time{}
+		} else {
+			t, err := time.Parse(DefaultDateLayout, v)
+			if err != nil {
+				// check for other common date layouts
+				t = cast.ToTime(v)
+			}
+			d.t = t
+		}
 	default:
 		str := cast.ToString(v)
 		if str == "" {

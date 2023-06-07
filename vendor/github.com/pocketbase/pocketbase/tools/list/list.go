@@ -5,16 +5,28 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/pocketbase/pocketbase/tools/store"
 	"github.com/spf13/cast"
 )
 
-var cachedPatterns = map[string]*regexp.Regexp{}
+var cachedPatterns = store.New[*regexp.Regexp](nil)
+
+// SubtractSlice returns a new slice with only the "base" elements
+// that don't exist in "subtract".
+func SubtractSlice[T comparable](base []T, subtract []T) []T {
+	var result = make([]T, 0, len(base))
+
+	for _, b := range base {
+		if !ExistInSlice(b, subtract) {
+			result = append(result, b)
+		}
+	}
+
+	return result
+}
 
 // ExistInSlice checks whether a comparable element exists in a slice of the same type.
 func ExistInSlice[T comparable](item T, list []T) bool {
-	if len(list) == 0 {
-		return false
-	}
 
 	for _, v := range list {
 		if v == item {
@@ -42,15 +54,18 @@ func ExistInSliceWithRegex(str string, list []string) bool {
 		}
 
 		// check for regex match
-		pattern, ok := cachedPatterns[field]
-		if !ok {
+		pattern := cachedPatterns.Get(field)
+		if pattern == nil {
 			var err error
 			pattern, err = regexp.Compile(field)
 			if err != nil {
 				continue
 			}
 			// "cache" the pattern to avoid compiling it every time
-			cachedPatterns[field] = pattern
+			// (the limit size is arbitrary and it is there to prevent the cache growing too big)
+			//
+			// @todo consider replacing with TTL or LRU type cache
+			cachedPatterns.SetIfLessThanLimit(field, pattern, 5000)
 		}
 
 		if pattern != nil && pattern.MatchString(str) {
@@ -80,7 +95,10 @@ func NonzeroUniques[T comparable](list []T) []T {
 	var zeroVal T
 
 	for _, val := range list {
-		if _, ok := existMap[val]; ok || val == zeroVal {
+		if val == zeroVal {
+			continue
+		}
+		if _, ok := existMap[val]; ok {
 			continue
 		}
 		existMap[val] = struct{}{}
@@ -103,8 +121,13 @@ func ToUniqueStringSlice(value any) (result []string) {
 		}
 
 		// check if it is a json encoded array of strings
-		if err := json.Unmarshal([]byte(val), &result); err != nil {
-			// not a json array, just add the string as single array element
+		if strings.Contains(val, "[") {
+			if err := json.Unmarshal([]byte(val), &result); err != nil {
+				// not a json array, just add the string as single array element
+				result = append(result, val)
+			}
+		} else {
+			// just add the string as single array element
 			result = append(result, val)
 		}
 	case json.Marshaler: // eg. JsonArray

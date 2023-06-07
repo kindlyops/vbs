@@ -1,12 +1,9 @@
-// Package models implements all PocketBase DB models.
+// Package models implements all PocketBase DB models and DTOs.
 package models
 
 import (
-	"errors"
-
 	"github.com/pocketbase/pocketbase/tools/security"
 	"github.com/pocketbase/pocketbase/tools/types"
-	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -34,7 +31,7 @@ type Model interface {
 	TableName() string
 	IsNew() bool
 	MarkAsNew()
-	UnmarkAsNew()
+	MarkAsNotNew()
 	HasId() bool
 	GetId() string
 	SetId(id string)
@@ -51,7 +48,7 @@ type Model interface {
 
 // BaseModel defines common fields and methods used by all other models.
 type BaseModel struct {
-	isNewFlag bool
+	isNotNew bool
 
 	Id      string         `db:"id" json:"id"`
 	Created types.DateTime `db:"created" json:"created"`
@@ -73,20 +70,20 @@ func (m *BaseModel) SetId(id string) {
 	m.Id = id
 }
 
-// MarkAsNew sets the model isNewFlag enforcing [m.IsNew()] to be true.
+// MarkAsNew marks the model as "new" (aka. enforces m.IsNew() to be true).
 func (m *BaseModel) MarkAsNew() {
-	m.isNewFlag = true
+	m.isNotNew = false
 }
 
-// UnmarkAsNew resets the model isNewFlag.
-func (m *BaseModel) UnmarkAsNew() {
-	m.isNewFlag = false
+// MarkAsNotNew marks the model as "not new" (aka. enforces m.IsNew() to be false)
+func (m *BaseModel) MarkAsNotNew() {
+	m.isNotNew = true
 }
 
 // IsNew indicates what type of db query (insert or update)
 // should be used with the model instance.
 func (m *BaseModel) IsNew() bool {
-	return m.isNewFlag || !m.HasId()
+	return !m.isNotNew
 }
 
 // GetCreated returns the model Created datetime.
@@ -116,56 +113,10 @@ func (m *BaseModel) RefreshUpdated() {
 	m.Updated = types.NowDateTime()
 }
 
-// -------------------------------------------------------------------
-// BaseAccount
-// -------------------------------------------------------------------
-
-// BaseAccount defines common fields and methods used by auth models (aka. users and admins).
-type BaseAccount struct {
-	BaseModel
-
-	Email           string         `db:"email" json:"email"`
-	TokenKey        string         `db:"tokenKey" json:"-"`
-	PasswordHash    string         `db:"passwordHash" json:"-"`
-	LastResetSentAt types.DateTime `db:"lastResetSentAt" json:"lastResetSentAt"`
-}
-
-// ValidatePassword validates a plain password against the model's password.
-func (m *BaseAccount) ValidatePassword(password string) bool {
-	bytePassword := []byte(password)
-	bytePasswordHash := []byte(m.PasswordHash)
-
-	// comparing the password with the hash
-	err := bcrypt.CompareHashAndPassword(bytePasswordHash, bytePassword)
-
-	// nil means it is a match
-	return err == nil
-}
-
-// SetPassword sets cryptographically secure string to `model.Password`.
+// PostScan implements the [dbx.PostScanner] interface.
 //
-// Additionally this method also resets the LastResetSentAt and the TokenKey fields.
-func (m *BaseAccount) SetPassword(password string) error {
-	if password == "" {
-		return errors.New("The provided plain password is empty")
-	}
-
-	// hash the password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), 13)
-	if err != nil {
-		return err
-	}
-
-	m.PasswordHash = string(hashedPassword)
-	m.LastResetSentAt = types.DateTime{} // reset
-
-	// invalidate previously issued tokens
-	m.RefreshTokenKey()
-
+// It is executed right after the model was populated with the db row values.
+func (m *BaseModel) PostScan() error {
+	m.MarkAsNotNew()
 	return nil
-}
-
-// RefreshTokenKey generates and sets new random token key.
-func (m *BaseAccount) RefreshTokenKey() {
-	m.TokenKey = security.RandomString(50)
 }

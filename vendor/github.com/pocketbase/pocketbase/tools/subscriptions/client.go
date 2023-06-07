@@ -37,6 +37,16 @@ type Client interface {
 
 	// Get retrieves the key value from the client's context.
 	Get(key string) any
+
+	// Discard marks the client as "discarded", meaning that it
+	// shouldn't be used anymore for sending new messages.
+	//
+	// It is safe to call Discard() multiple times.
+	Discard()
+
+	// IsDiscarded indicates whether the client has been "discarded"
+	// and should no longer be used.
+	IsDiscarded() bool
 }
 
 // ensures that DefaultClient satisfies the Client interface
@@ -45,6 +55,7 @@ var _ Client = (*DefaultClient)(nil)
 // DefaultClient defines a generic subscription client.
 type DefaultClient struct {
 	mux           sync.RWMutex
+	isDiscarded   bool
 	id            string
 	store         map[string]any
 	channel       chan Message
@@ -61,25 +72,31 @@ func NewDefaultClient() *DefaultClient {
 	}
 }
 
-// Id implements the Client.Id interface method.
+// Id implements the [Client.Id] interface method.
 func (c *DefaultClient) Id() string {
+	c.mux.RLock()
+	defer c.mux.RUnlock()
+
 	return c.id
 }
 
-// Channel implements the Client.Channel interface method.
+// Channel implements the [Client.Channel] interface method.
 func (c *DefaultClient) Channel() chan Message {
+	c.mux.RLock()
+	defer c.mux.RUnlock()
+
 	return c.channel
 }
 
-// Subscriptions implements the Client.Subscriptions interface method.
+// Subscriptions implements the [Client.Subscriptions] interface method.
 func (c *DefaultClient) Subscriptions() map[string]struct{} {
-	c.mux.Lock()
-	defer c.mux.Unlock()
+	c.mux.RLock()
+	defer c.mux.RUnlock()
 
 	return c.subscriptions
 }
 
-// Subscribe implements the Client.Subscribe interface method.
+// Subscribe implements the [Client.Subscribe] interface method.
 //
 // Empty subscriptions (aka. "") are ignored.
 func (c *DefaultClient) Subscribe(subs ...string) {
@@ -95,7 +112,7 @@ func (c *DefaultClient) Subscribe(subs ...string) {
 	}
 }
 
-// Unsubscribe implements the Client.Unsubscribe interface method.
+// Unsubscribe implements the [Client.Unsubscribe] interface method.
 //
 // If subs is not set, this method removes all registered client's subscriptions.
 func (c *DefaultClient) Unsubscribe(subs ...string) {
@@ -114,28 +131,44 @@ func (c *DefaultClient) Unsubscribe(subs ...string) {
 	}
 }
 
-// HasSubscription implements the Client.HasSubscription interface method.
+// HasSubscription implements the [Client.HasSubscription] interface method.
 func (c *DefaultClient) HasSubscription(sub string) bool {
-	c.mux.Lock()
-	defer c.mux.Unlock()
+	c.mux.RLock()
+	defer c.mux.RUnlock()
 
 	_, ok := c.subscriptions[sub]
 
 	return ok
 }
 
-// Get implements the Client.Get interface method.
+// Get implements the [Client.Get] interface method.
 func (c *DefaultClient) Get(key string) any {
-	c.mux.Lock()
-	defer c.mux.Unlock()
+	c.mux.RLock()
+	defer c.mux.RUnlock()
 
 	return c.store[key]
 }
 
-// Set implements the Client.Set interface method.
+// Set implements the [Client.Set] interface method.
 func (c *DefaultClient) Set(key string, value any) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 
 	c.store[key] = value
+}
+
+// Discard implements the [Client.Discard] interface method.
+func (c *DefaultClient) Discard() {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	c.isDiscarded = true
+}
+
+// IsDiscarded implements the [Client.IsDiscarded] interface method.
+func (c *DefaultClient) IsDiscarded() bool {
+	c.mux.RLock()
+	defer c.mux.RUnlock()
+
+	return c.isDiscarded
 }

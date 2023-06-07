@@ -85,7 +85,23 @@ func (r *Rows) ScanStruct(a interface{}) error {
 		}
 	}
 
-	return r.Scan(refs...)
+	if err := r.Scan(refs...); err != nil {
+		return err
+	}
+
+	// check for PostScanner
+	if rv.CanAddr() {
+		addr := rv.Addr()
+		if addr.CanInterface() {
+			if ps, ok := addr.Interface().(PostScanner); ok {
+				if err := ps.PostScan(); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // all populates all rows of query result into a slice of struct or NullStringMap.
@@ -134,6 +150,9 @@ func (r *Rows) all(slice interface{}) error {
 		return VarTypeError("must be a slice of struct or NullStringMap")
 	}
 
+	etPtr := reflect.PtrTo(et)
+	implementsPostScanner := etPtr.Implements(postScannerType)
+
 	si := getStructInfo(et, r.fieldMapFunc)
 
 	cols, _ := r.Columns()
@@ -153,6 +172,21 @@ func (r *Rows) all(slice interface{}) error {
 
 		if isSliceOfPointers {
 			ev = ev.Addr()
+		}
+
+		// check for PostScanner
+		if implementsPostScanner {
+			evAddr := ev
+			if ev.CanAddr() {
+				evAddr = ev.Addr()
+			}
+			if evAddr.CanInterface() {
+				if ps, ok := evAddr.Interface().(PostScanner); ok {
+					if err := ps.PostScan(); err != nil {
+						return err
+					}
+				}
+			}
 		}
 
 		v.Set(reflect.Append(v, ev))

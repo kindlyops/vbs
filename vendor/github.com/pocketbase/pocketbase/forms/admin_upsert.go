@@ -9,10 +9,11 @@ import (
 	"github.com/pocketbase/pocketbase/models"
 )
 
-// AdminUpsert specifies a [models.Admin] upsert (create/update) form.
+// AdminUpsert is a [models.Admin] upsert (create/update) form.
 type AdminUpsert struct {
-	config AdminUpsertConfig
-	admin  *models.Admin
+	app   core.App
+	dao   *daos.Dao
+	admin *models.Admin
 
 	Id              string `form:"id" json:"id"`
 	Avatar          int    `form:"avatar" json:"avatar"`
@@ -21,41 +22,17 @@ type AdminUpsert struct {
 	PasswordConfirm string `form:"passwordConfirm" json:"passwordConfirm"`
 }
 
-// AdminUpsertConfig is the [AdminUpsert] factory initializer config.
-//
-// NB! App is a required struct member.
-type AdminUpsertConfig struct {
-	App core.App
-	Dao *daos.Dao
-}
-
 // NewAdminUpsert creates a new [AdminUpsert] form with initializer
 // config created from the provided [core.App] and [models.Admin] instances
 // (for create you could pass a pointer to an empty Admin - `&models.Admin{}`).
 //
-// If you want to submit the form as part of another transaction, use
-// [NewAdminUpsertWithConfig] with explicitly set Dao.
+// If you want to submit the form as part of a transaction,
+// you can change the default Dao via [SetDao()].
 func NewAdminUpsert(app core.App, admin *models.Admin) *AdminUpsert {
-	return NewAdminUpsertWithConfig(AdminUpsertConfig{
-		App: app,
-	}, admin)
-}
-
-// NewAdminUpsertWithConfig creates a new [AdminUpsert] form
-// with the provided config and [models.Admin] instance or panics on invalid configuration
-// (for create you could pass a pointer to an empty Admin - `&models.Admin{}`).
-func NewAdminUpsertWithConfig(config AdminUpsertConfig, admin *models.Admin) *AdminUpsert {
 	form := &AdminUpsert{
-		config: config,
-		admin:  admin,
-	}
-
-	if form.config.App == nil || form.admin == nil {
-		panic("Invalid initializer config or nil upsert model.")
-	}
-
-	if form.config.Dao == nil {
-		form.config.Dao = form.config.App.Dao()
+		app:   app,
+		dao:   app.Dao(),
+		admin: admin,
 	}
 
 	// load defaults
@@ -64,6 +41,11 @@ func NewAdminUpsertWithConfig(config AdminUpsertConfig, admin *models.Admin) *Ad
 	form.Email = admin.Email
 
 	return form
+}
+
+// SetDao replaces the default form Dao instance with the provided one.
+func (form *AdminUpsert) SetDao(dao *daos.Dao) {
+	form.dao = dao
 }
 
 // Validate makes the form validatable by implementing [validation.Validatable] interface.
@@ -75,6 +57,7 @@ func (form *AdminUpsert) Validate() error {
 				form.admin.IsNew(),
 				validation.Length(models.DefaultIdLength, models.DefaultIdLength),
 				validation.Match(idRegex),
+				validation.By(validators.UniqueId(form.dao, form.admin.TableName())),
 			).Else(validation.In(form.admin.Id)),
 		),
 		validation.Field(
@@ -92,7 +75,7 @@ func (form *AdminUpsert) Validate() error {
 		validation.Field(
 			&form.Password,
 			validation.When(form.admin.IsNew(), validation.Required),
-			validation.Length(10, 100),
+			validation.Length(10, 72),
 		),
 		validation.Field(
 			&form.PasswordConfirm,
@@ -105,7 +88,7 @@ func (form *AdminUpsert) Validate() error {
 func (form *AdminUpsert) checkUniqueEmail(value any) error {
 	v, _ := value.(string)
 
-	if form.config.Dao.IsAdminEmailUnique(v, form.admin.Id) {
+	if form.dao.IsAdminEmailUnique(v, form.admin.Id) {
 		return nil
 	}
 
@@ -116,7 +99,7 @@ func (form *AdminUpsert) checkUniqueEmail(value any) error {
 //
 // You can optionally provide a list of InterceptorFunc to further
 // modify the form behavior before persisting it.
-func (form *AdminUpsert) Submit(interceptors ...InterceptorFunc) error {
+func (form *AdminUpsert) Submit(interceptors ...InterceptorFunc[*models.Admin]) error {
 	if err := form.Validate(); err != nil {
 		return err
 	}
@@ -134,7 +117,7 @@ func (form *AdminUpsert) Submit(interceptors ...InterceptorFunc) error {
 		form.admin.SetPassword(form.Password)
 	}
 
-	return runInterceptors(func() error {
-		return form.config.Dao.SaveAdmin(form.admin)
+	return runInterceptors(form.admin, func(admin *models.Admin) error {
+		return form.dao.SaveAdmin(admin)
 	}, interceptors...)
 }
