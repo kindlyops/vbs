@@ -36,7 +36,7 @@ jobs:
         with:
           path: |
             ~/.cache/bazel
-          key: ${{ runner.os }}-{{ env.version }}-bazel-cache
+          key: ${{ runner.os }}-${{ env.version }}-bazel-cache
       - name: Test
         run: |
           # build and run unit tests with coverage reporting
