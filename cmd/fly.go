@@ -20,6 +20,7 @@ import (
 
 	"github.com/muesli/coral"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/rs/zerolog/log"
 )
 
@@ -42,8 +43,17 @@ func flyServer(cmd *coral.Command, args []string) {
 	os.MkdirAll(configDir, os.ModePerm)
 
 	log.Debug().Msgf("running pocketbase with data dir %s\n", configDir)
-	app := pocketbase.NewWithConfig(pocketbase.Config{
+	app := pocketbase.NewWithConfig(&pocketbase.Config{
 		DefaultDataDir: configDir,
+	})
+
+	migrationsDir := "" // default to "pb_migrations" (for js) and "migrations" (for go)
+
+	// register the `migrate` command
+	migratecmd.MustRegister(app, app.RootCmd, &migratecmd.Options{
+		TemplateLang: migratecmd.TemplateLangGo, // or migratecmd.TemplateLangJS
+		Dir:          migrationsDir,
+		Automigrate:  true,
 	})
 
 	if err := app.Start(); err != nil {

@@ -98,9 +98,9 @@ http_archive(
 # docker_toolchain_configure with a custom attr; please read the toolchains
 # docs in /toolchains/docker/ before blindly adding this to your WORKSPACE.
 # BEGIN OPTIONAL segment:
-load("@io_bazel_rules_docker//toolchains/docker:toolchain.bzl",
-    docker_toolchain_configure="toolchain_configure"
-)
+#load("@io_bazel_rules_docker//toolchains/docker:toolchain.bzl",
+#    docker_toolchain_configure="toolchain_configure"
+#)
 # docker_toolchain_configure(
 #   name = "docker_config",
 #   # OPTIONAL: Bazel target for the build_tar tool, must be compatible with build_tar.py

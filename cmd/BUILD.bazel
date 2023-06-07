@@ -30,6 +30,7 @@ go_library(
         "//vendor/github.com/mattn/go-isatty:go_default_library",
         "//vendor/github.com/muesli/coral:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/plugins/migratecmd:go_default_library",
         "//vendor/github.com/rs/zerolog:go_default_library",
         "//vendor/github.com/rs/zerolog/log:go_default_library",
         "//vendor/github.com/spf13/viper:go_default_library",
