@@ -14,15 +14,14 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - uses: actions/checkout@v3
-        - name: Bazel cache
-          id: bazel-cache
-          uses: actions/cache@v2
-          env:
-            version: 1
+        - name: Cache Bazel
+          uses: actions/cache@v3
           with:
-            path: | 
+            path: |
               ~/.cache/bazel
-            key: ${{ runner.os }}-${{ env.version }}-bazel-cache
+            key: ${{ runner.os }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE', 'WORKSPACE.bazel', 'MODULE.bazel') }}
+            restore-keys: |
+              ${{ runner.os }}-bazel-
         - name: Login to GitHub Container Registry
           uses: docker/login-action@v2
           with:
