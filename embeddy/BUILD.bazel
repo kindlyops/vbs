@@ -1,5 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//:glue.bzl", "embed_nextjs")
+load("@npm//@playwright/test:index.bzl", "playwright_test")
 
 filegroup(
     name = "source_files",
@@ -16,6 +17,19 @@ filegroup(
         #"postcss.config.js",
         #"tailwind.config.js",
     ],
+)
+
+filegroup(
+    name = "test_files",
+    srcs = glob([
+        "tests/*.spec.ts",
+    ])
+)
+
+playwright_test(
+    args = ["test"],
+    name = "e2e_test",
+    data = [":test_files"]
 )
 
 embed_nextjs(
