@@ -346,7 +346,7 @@ github.com/pelletier/go-toml/v2/unstable
 # github.com/pocketbase/dbx v1.10.0
 ## explicit; go 1.13
 github.com/pocketbase/dbx
-# github.com/pocketbase/pocketbase v0.16.4
+# github.com/pocketbase/pocketbase v0.16.5
 ## explicit; go 1.18
 github.com/pocketbase/pocketbase
 github.com/pocketbase/pocketbase/apis

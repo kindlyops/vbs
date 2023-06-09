@@ -17,7 +17,7 @@ require (
 	github.com/charmbracelet/bubbletea v0.24.2
 	github.com/charmbracelet/lipgloss v0.7.1
 	github.com/muesli/coral v1.0.0
-	github.com/pocketbase/pocketbase v0.16.4
+	github.com/pocketbase/pocketbase v0.16.5
 )
 
 require (
