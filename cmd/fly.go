@@ -15,11 +15,17 @@
 package cmd
 
 import (
+	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/kindlyops/vbs/embeddy"
+	"github.com/labstack/echo/v5"
 	"github.com/muesli/coral"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/apis"
+	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/rs/zerolog/log"
 )
@@ -54,6 +60,40 @@ func flyServer(cmd *coral.Command, args []string) {
 		TemplateLang: migratecmd.TemplateLangGo, // or migratecmd.TemplateLangJS
 		Dir:          migrationsDir,
 		Automigrate:  true,
+	})
+
+	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
+		dist, _ := fs.Sub(embeddy.GetNextFS(), "dist")
+		assetHandler := http.FileServer(http.FS(dist))
+		e.Router.AddRoute(echo.Route{
+			Method:  http.MethodGet,
+			Path:    "/*",
+			Handler: echo.WrapHandler(assetHandler),
+			Middlewares: []echo.MiddlewareFunc{
+				apis.ActivityLogger(app),
+				//apis.RequireAdminAuth(),
+			},
+		})
+
+		e.Router.AddRoute(echo.Route{
+			Method: http.MethodPost,
+			Path:   "/api/switcher/*",
+			Middlewares: []echo.MiddlewareFunc{
+				apis.ActivityLogger(app),
+			},
+			Handler: echo.WrapHandler(&Switcher{}),
+		})
+
+		e.Router.AddRoute(echo.Route{
+			Method: http.MethodPost,
+			Path:   "/api/light/*",
+			Middlewares: []echo.MiddlewareFunc{
+				apis.ActivityLogger(app),
+			},
+			Handler: echo.WrapHandler(&Lighting{}),
+		})
+
+		return nil
 	})
 
 	if err := app.Start(); err != nil {

@@ -52,8 +52,8 @@ func lightingBridge(cmd *coral.Command, args []string) {
 	log.Debug().Msgf("Starting HTTP server at: http://%s\n", listenAddr)
 	e := echo.New()
 	e.GET("/*", echo.WrapHandler(assetHandler))
-	e.POST("/api/switcher/*", echo.WrapHandler(&switcher{}))
-	e.POST("/api/light/*", echo.WrapHandler(&lighting{}))
+	e.POST("/api/switcher/*", echo.WrapHandler(&Switcher{}))
+	e.POST("/api/light/*", echo.WrapHandler(&Lighting{}))
 	err := e.Start(listenAddr)
 
 	if err != nil {
@@ -61,17 +61,17 @@ func lightingBridge(cmd *coral.Command, args []string) {
 	}
 }
 
-type switcher struct{}
+type Switcher struct{}
 
-func (s *switcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Switcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Consider splitting to a separate map?
 	buttons := viper.GetStringMapString("companion_buttons")
 	handleOSC(w, r, "/api/switcher/", buttons)
 }
 
-type lighting struct{}
+type Lighting struct{}
 
-func (l *lighting) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (l *Lighting) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	buttons := viper.GetStringMapString("companion_buttons")
 	handleOSC(w, r, "/api/light/", buttons)
 }
