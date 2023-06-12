@@ -1,5 +1,4 @@
-//go:build neverbuild
-// +build neverbuild
+//go:build nevermain
 
 package embeddy
 

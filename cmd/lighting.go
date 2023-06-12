@@ -21,6 +21,7 @@ import (
 
 	"github.com/hypebeast/go-osc/osc"
 	"github.com/kindlyops/vbs/embeddy"
+	"github.com/labstack/echo/v5"
 	"github.com/muesli/coral"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -46,25 +47,33 @@ func lightingBridge(cmd *coral.Command, args []string) {
 
 		return nil
 	})
-
-	http.Handle("/", http.FileServer(http.FS(dist)))
-	// The API will be served under `/api`.
-	http.HandleFunc("/api/switcher/", func(w http.ResponseWriter, r *http.Request) {
-		// Consider splitting to a separate map?
-		buttons := viper.GetStringMapString("companion_buttons")
-		handleOSC(w, r, "/api/switcher/", buttons)
-	})
-	http.HandleFunc("/api/light/", func(w http.ResponseWriter, r *http.Request) {
-		buttons := viper.GetStringMapString("companion_buttons")
-		handleOSC(w, r, "/api/light/", buttons)
-	})
+	assetHandler := http.FileServer(http.FS(dist))
 
 	log.Debug().Msgf("Starting HTTP server at: http://%s\n", listenAddr)
-	err := http.ListenAndServe(listenAddr, nil)
+	e := echo.New()
+	e.GET("/*", echo.WrapHandler(assetHandler))
+	e.POST("/api/switcher/*", echo.WrapHandler(&Switcher{}))
+	e.POST("/api/light/*", echo.WrapHandler(&Lighting{}))
+	err := e.Start(listenAddr)
 
 	if err != nil {
-		log.Error().Err(err).Msg("error from ListenAndServe")
+		log.Error().Err(err).Msg("error from echo.Start")
 	}
+}
+
+type Switcher struct{}
+
+func (s *Switcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Consider splitting to a separate map?
+	buttons := viper.GetStringMapString("companion_buttons")
+	handleOSC(w, r, "/api/switcher/", buttons)
+}
+
+type Lighting struct{}
+
+func (l *Lighting) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	buttons := viper.GetStringMapString("companion_buttons")
+	handleOSC(w, r, "/api/light/", buttons)
 }
 
 func sendOSC(path string) {
