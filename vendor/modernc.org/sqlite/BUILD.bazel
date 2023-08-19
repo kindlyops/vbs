@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "doc.go",
         "mutex.go",
+        "nodmesg.go",
         "norlimit.go",
         "rlimit.go",
         "rulimit.go",

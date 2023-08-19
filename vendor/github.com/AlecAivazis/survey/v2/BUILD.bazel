@@ -24,5 +24,7 @@ go_library(
         "//vendor/github.com/AlecAivazis/survey/v2/terminal:go_default_library",
         "//vendor/github.com/kballard/go-shellquote:go_default_library",
         "//vendor/golang.org/x/term:go_default_library",
+        "//vendor/golang.org/x/text/cases:go_default_library",
+        "//vendor/golang.org/x/text/language:go_default_library",
     ],
 )

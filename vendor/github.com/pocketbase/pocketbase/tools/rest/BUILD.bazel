@@ -15,5 +15,6 @@ go_library(
         "//vendor/github.com/labstack/echo/v5:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/filesystem:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/search:go_default_library",
+        "//vendor/github.com/spf13/cast:go_default_library",
     ],
 )
