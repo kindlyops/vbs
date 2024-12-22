@@ -29,7 +29,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
         if: (github.actor == 'dependabot-preview[bot]') || (github.actor == 'renovate[bot]')
       - name: Install playwright browsers
-        run: npx playwright install --with-deps
+        run: |
+          npm install @playwright/test
+          npx playwright install --with-deps
       - name: Cache Bazel
         uses: actions/cache@v3
         with:
