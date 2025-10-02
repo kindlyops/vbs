@@ -68,7 +68,7 @@ jobs:
           POWERSHELL_TELEMETRY_OPTOUT: true
         with:
           version: latest
-          args: release --snapshot --skip-publish
+          args: release --snapshot --skip=publish
       - uses: actions/upload-artifact@v4
         with:
           name: vbs-snapshot-macos
