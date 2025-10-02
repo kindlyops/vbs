@@ -37,9 +37,9 @@ var lightingBridgeCmd = &coral.Command{
 
 func lightingBridge(cmd *coral.Command, args []string) {
 	listenAddr := "127.0.0.1:" + viper.GetString("lighting_port")
-	dist, _ := fs.Sub(embeddy.GetNextFS(), "dist")
+	public, _ := fs.Sub(embeddy.GetNextFS(), "public")
 
-	fs.WalkDir(dist, ".", func(path string, d fs.DirEntry, err error) error {
+	fs.WalkDir(public, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -47,7 +47,7 @@ func lightingBridge(cmd *coral.Command, args []string) {
 
 		return nil
 	})
-	assetHandler := http.FileServer(http.FS(dist))
+	assetHandler := http.FileServer(http.FS(public))
 
 	log.Debug().Msgf("Starting HTTP server at: http://%s\n", listenAddr)
 	e := echo.New()

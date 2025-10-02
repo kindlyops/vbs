@@ -1,47 +1,12 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("//:glue.bzl", "embed_nextjs")
-load("@npm//@playwright/test:index.bzl", "playwright_test")
-
-filegroup(
-    name = "source_files",
-    srcs = glob([
-        "public/**/*",
-        "pages/*",
-        "styles/*",
-    ]) + [
-        #"tsconfig.json",
-        #"next.config.js",
-        #"next-env.d.ts",
-        "package.json",
-        "yarn.lock",
-        #"postcss.config.js",
-        #"tailwind.config.js",
-    ],
-)
-
-filegroup(
-    name = "test_files",
-    srcs = glob([
-        "tests/*.spec.ts",
-    ]),
-)
-
-playwright_test(
-    name = "e2e_test",
-    args = ["test"],
-    data = [":test_files"],
-)
-
-embed_nextjs(
-    name = "embedder",
-    srcs = [":source_files"],
-)
 
 # keep
 go_library(
     name = "go_default_library",
-    srcs = [":embedder"],
-    embedsrcs = [":next_export"],
+    srcs = ["embedder.go"],
+    embedsrcs = glob([
+        "public/**/*",
+    ]),
     importpath = "github.com/kindlyops/vbs/embeddy",
     visibility = ["//visibility:public"],
     deps = ["//vendor/github.com/labstack/echo/v5:go_default_library"],

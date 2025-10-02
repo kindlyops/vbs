@@ -56,34 +56,6 @@ http_archive(
 load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
 bazel_skylib_workspace()
 
-http_archive(
-    name = "build_bazel_rules_nodejs",
-    sha256 = "c911b5bd8aee8b0498cc387cacdb5f917098ce477fb4182db07b0ef8a9e045c0",
-    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/4.7.1/rules_nodejs-4.7.1.tar.gz"],
-)
-
-
-load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "yarn_install")
-# NOTE: this rule installs nodejs, npm, and yarn, but does NOT install
-# your npm dependencies into your node_modules folder.
-# You must still run the package manager to do this.
-# M1 Macs require Node 16+
-node_repositories(
-    package_json = ["//embeddy:package.json"],
-    node_version = "16.13.0",
-)
-
-# Setup Bazel managed npm dependencies with the `yarn_install` rule.
-# The name of this rule should be set to `npm` so that `ts_library` and `ts_web_test_suite`
-# can find your npm dependencies by default in the `@npm` workspace. You may
-# also use the `npm_install` rule with a `package-lock.json` file if you prefer.
-# See https://github.com/bazelbuild/rules_nodejs#dependencies for more info.
-yarn_install(
-  name = "npm",
-  package_json = "//embeddy:package.json",
-  quiet = False,
-  yarn_lock = "//embeddy:yarn.lock",
-)
 
 http_archive(
     name = "io_bazel_rules_docker",
