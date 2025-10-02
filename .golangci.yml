@@ -1,66 +1,64 @@
-linters-settings:
-  gocritic:
-    # Enable multiple checks by tags, run `GL_DEBUG=gocritic golangci-lint` run to see all tags and checks.
-    # Empty list by default. See https://github.com/go-critic/go-critic#usage -> section "Tags".
-    enabled-tags:
-      - performance
-      - diagnostic
-      - style
-    settings:
-      hugeParam:
-        sizeThreshold: 256
-  gocyclo:
-    min-complexity: 10
-  golint:
-    min-confidence: 0
-  govet:
-    check-shadowing: true
-  goconst:
-    min-len: 2
-    min-occurrences: 3
-  lll:
-    line-length: 120
-  misspell:
-    locale: US
-  funlen:
-    lines: 100
-    statements: 50
-
+version: "2"
 linters:
-  enable-all: true
+  default: all
   disable:
-    # prealloc is not recommended by `golangci-lint` developers.
-    - prealloc
-    - gochecknoglobals
-    - interfacer
-    - scopelint
-    - maligned
-    - forbidigo
-    - gochecknoinits
-    - exhaustivestruct
-    - testpackage
-    - ifshort
-    - gofumpt
-    - tagliatelle
-    - structcheck
-    - staticcheck
-    - unparam
-    - wastedassign
-    - noctx
-    - nilerr
     - bodyclose
     - contextcheck
-    - stylecheck
-    - gosimple
-    - golint
-    - sqlclosecheck
+    - forbidigo
+    - gochecknoglobals
+    - gochecknoinits
+    - nilerr
+    - noctx
+    - prealloc
     - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - tagliatelle
+    - testpackage
     - tparallel
+    - unparam
     - unused
-
-run:
-  skip-dirs:
-    - vendor
-    - external
-  skip-files:
-    - dummy.go
+    - wastedassign
+  settings:
+    funlen:
+      lines: 100
+      statements: 50
+    goconst:
+      min-len: 2
+      min-occurrences: 3
+    gocritic:
+      enabled-tags:
+        - performance
+        - diagnostic
+        - style
+      settings:
+        hugeParam:
+          sizeThreshold: 256
+    gocyclo:
+      min-complexity: 10
+    lll:
+      line-length: 120
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
