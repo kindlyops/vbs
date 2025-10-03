@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "decoder.go",
+        "encoder.go",
+        "graphics.go",
+        "options.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/charmbracelet/x/ansi/kitty",
+    importpath = "github.com/charmbracelet/x/ansi/kitty",
+    visibility = ["//visibility:public"],
+)

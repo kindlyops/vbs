@@ -6,5 +6,4 @@ go_library(
     importmap = "github.com/kindlyops/vbs/vendor/github.com/charmbracelet/bubbles/key",
     importpath = "github.com/charmbracelet/bubbles/key",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/charmbracelet/bubbletea:go_default_library"],
 )

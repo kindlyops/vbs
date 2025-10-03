@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "keycodes.go",
+        "mode.go",
+        "read.go",
+        "records.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/erikgeiser/coninput",
+    importpath = "github.com/erikgeiser/coninput",
+    visibility = ["//visibility:public"],
+    deps = select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//vendor/golang.org/x/sys/windows:go_default_library",
+        ],
+        "//conditions:default": [],
+    }),
+)
