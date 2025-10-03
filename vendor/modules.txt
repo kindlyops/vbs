@@ -217,8 +217,6 @@ github.com/charmbracelet/x/term
 # github.com/charmbracelet/x/windows v0.1.0
 ## explicit; go 1.18
 github.com/charmbracelet/x/windows
-# github.com/containerd/console v1.0.4-0.20230313162750-1ae8d489ac81
-## explicit; go 1.13
 # github.com/disintegration/imaging v1.6.2
 ## explicit
 github.com/disintegration/imaging
