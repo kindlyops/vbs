@@ -107,7 +107,7 @@ oci_push(
     name = "push_image",
     image = ":vbs_image",
     repository = "ghcr.io/kindlyops/vbs",
-    remote_tags = ["$(IMAGE_TAG)"],
+    remote_tags = ["{IMAGE_TAG}"],
     tags = ["manual"],
 )
 
