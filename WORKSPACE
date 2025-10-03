@@ -94,6 +94,6 @@ oci_pull(
     image = "gcr.io/distroless/static",
     platforms = [
         "linux/amd64",
-        "linux/arm64",
+        "linux/arm64/v8",
     ],
 )

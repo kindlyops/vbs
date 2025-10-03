@@ -102,12 +102,21 @@ oci_image(
     },
 )
 
+# Generate tag file with IMAGE_TAG variable
+genrule(
+    name = "image_tags",
+    outs = ["image_tags.txt"],
+    cmd = "echo '$(IMAGE_TAG)' > $@",
+    stamp = 1,
+    tags = ["manual"],
+)
+
 # Push to registry
 oci_push(
     name = "push_image",
     image = ":vbs_image",
     repository = "ghcr.io/kindlyops/vbs",
-    remote_tags = ["{IMAGE_TAG}"],
+    remote_tags = ":image_tags",
     tags = ["manual"],
 )
 
