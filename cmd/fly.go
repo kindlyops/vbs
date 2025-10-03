@@ -63,8 +63,8 @@ func flyServer(cmd *coral.Command, args []string) {
 	})
 
 	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
-		dist, _ := fs.Sub(embeddy.GetNextFS(), "dist")
-		assetHandler := http.FileServer(http.FS(dist))
+		public, _ := fs.Sub(embeddy.GetNextFS(), "public")
+		assetHandler := http.FileServer(http.FS(public))
 		e.Router.AddRoute(echo.Route{
 			Method:  http.MethodGet,
 			Path:    "/*",

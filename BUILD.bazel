@@ -2,8 +2,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("//:version.bzl", "VERSION")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("@io_bazel_rules_docker//go:image.bzl", "go_image")
-load("@io_bazel_rules_docker//container:container.bzl", "container_image", "container_push")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_tarball")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -78,36 +78,36 @@ go_binary(
     },
 )
 
-# see https://github.com/bazelbuild/rules_docker/pull/2087 for pending multi-arch
-go_image(
-    name = "vbs_intermediate",
-    binary = ":vbs-linux",
+# Package the binary into a tar for the OCI image
+pkg_tar(
+    name = "vbs_tar",
+    srcs = [":vbs-linux"],
+    package_dir = "/usr/bin",
 )
 
-# using container_image since go_image is not forwarding
-# the labels to the underlying container_image
-container_image(
+# Create OCI image
+oci_image(
     name = "vbs_image",
-    base = ":vbs_intermediate",
+    base = "@distroless_static",
+    tars = [":vbs_tar"],
+    entrypoint = ["/usr/bin/vbs-linux"],
     cmd = [
         "serve",
         "--http=0.0.0.0:8080",
     ],
+    exposed_ports = ["8080"],
     labels = {
         "org.opencontainers.image.source": "https://github.com/kindlyops/vbs",
         "org.opencontainers.image.description": "Tools for video broadcast production",
     },
-    legacy_run_behavior = False,
-    ports = ["8080"],
 )
 
-container_push(
+# Push to registry
+oci_push(
     name = "push_image",
-    format = "Docker",
     image = ":vbs_image",
-    registry = "ghcr.io",
-    repository = "kindlyops/vbs",
-    tag = "$(IMAGE_TAG)",
+    repository = "ghcr.io/kindlyops/vbs",
+    remote_tags = ["$(IMAGE_TAG)"],
     tags = ["manual"],
 )
 
