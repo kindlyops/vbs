@@ -216,8 +216,6 @@ github.com/charmbracelet/x/cellbuf
 # github.com/charmbracelet/x/term v0.2.1
 ## explicit; go 1.18
 github.com/charmbracelet/x/term
-# github.com/containerd/console v1.0.4-0.20230313162750-1ae8d489ac81
-## explicit; go 1.13
 # github.com/disintegration/imaging v1.6.2
 ## explicit
 github.com/disintegration/imaging
@@ -343,8 +341,6 @@ github.com/muesli/cancelreader
 # github.com/muesli/coral v1.0.0
 ## explicit; go 1.15
 github.com/muesli/coral
-# github.com/muesli/reflow v0.3.0
-## explicit; go 1.13
 # github.com/muesli/termenv v0.16.0
 ## explicit; go 1.17
 github.com/muesli/termenv
