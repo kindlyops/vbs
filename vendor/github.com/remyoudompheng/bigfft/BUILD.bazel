@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "arith_decl.go",
+        "fermat.go",
+        "fft.go",
+        "scan.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/remyoudompheng/bigfft",
+    importpath = "github.com/remyoudompheng/bigfft",
+    visibility = ["//visibility:public"],
+)

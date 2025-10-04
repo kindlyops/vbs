@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "memory.go",
+        "memory32.go",
+        "memory64.go",
+        "mmap_darwin.go",
+        "mmap_freebsd_32.go",
+        "mmap_freebsd_64.go",
+        "mmap_illumos_amd64.go",
+        "mmap_linux_32.go",
+        "mmap_linux_64.go",
+        "mmap_linux_s390x.go",
+        "mmap_netbsd_32.go",
+        "mmap_netbsd_64.go",
+        "mmap_openbsd.go",
+        "mmap_unix.go",
+        "mmap_windows.go",
+        "nocounters.go",
+        "trace_disabled.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/modernc.org/memory",
+    importpath = "modernc.org/memory",
+    visibility = ["//visibility:public"],
+)

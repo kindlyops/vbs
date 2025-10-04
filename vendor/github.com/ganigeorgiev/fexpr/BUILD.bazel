@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "parser.go",
+        "scanner.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/ganigeorgiev/fexpr",
+    importpath = "github.com/ganigeorgiev/fexpr",
+    visibility = ["//visibility:public"],
+)
