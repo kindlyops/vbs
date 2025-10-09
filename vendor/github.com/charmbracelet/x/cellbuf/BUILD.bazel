@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "buffer.go",
+        "cell.go",
+        "errors.go",
+        "geom.go",
+        "hardscroll.go",
+        "hashmap.go",
+        "link.go",
+        "screen.go",
+        "sequence.go",
+        "style.go",
+        "tabstop.go",
+        "utils.go",
+        "wrap.go",
+        "writer.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/charmbracelet/x/cellbuf",
+    importpath = "github.com/charmbracelet/x/cellbuf",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/charmbracelet/colorprofile:go_default_library",
+        "//vendor/github.com/charmbracelet/x/ansi:go_default_library",
+        "//vendor/github.com/charmbracelet/x/term:go_default_library",
+        "//vendor/github.com/mattn/go-runewidth:go_default_library",
+        "//vendor/github.com/rivo/uniseg:go_default_library",
+    ],
+)
