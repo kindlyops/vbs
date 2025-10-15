@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "caps.go",
+        "capvals.go",
+        "color.go",
+        "dec.go",
+        "load.go",
+        "param.go",
+        "stack.go",
+        "terminfo.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/xo/terminfo",
+    importpath = "github.com/xo/terminfo",
+    visibility = ["//visibility:public"],
+)
