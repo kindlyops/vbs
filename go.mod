@@ -16,7 +16,7 @@ require (
 	github.com/charmbracelet/bubbles v0.16.1
 	github.com/charmbracelet/bubbletea v0.24.2
 	github.com/charmbracelet/lipgloss v0.13.1
-	github.com/labstack/echo/v5 v5.0.0-20220201181537-ed2888cfa198
+	github.com/labstack/echo/v5 53b692c4d4de
 	github.com/muesli/coral v1.0.0
 	github.com/pocketbase/pocketbase v0.16.5
 )
