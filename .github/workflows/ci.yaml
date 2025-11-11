@@ -69,19 +69,19 @@ jobs:
         with:
           version: latest
           args: release --snapshot --skip=publish
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: vbs-snapshot-macos
           path: bazel-bin/bdist/vbs_darwin_amd64/vbs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: vbs-snapshot-macos-m1
           path: bazel-bin/bdist/vbs_darwin_arm64/vbs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: vbs-snapshot-windows
           path: bazel-bin/bdist/vbs_windows_amd64/vbs.exe
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: vbs-snapshot-linux
           path:  bazel-bin/bdist/vbs_linux_amd64/vbs
