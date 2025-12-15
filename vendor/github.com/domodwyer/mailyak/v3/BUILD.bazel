@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "attachments.go",
+        "mailyak.go",
+        "mime.go",
+        "package.go",
+        "sender.go",
+        "sender_explicit_tls.go",
+        "sender_starttls.go",
+        "setters.go",
+        "splitter.go",
+        "writer.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/domodwyer/mailyak/v3",
+    importpath = "github.com/domodwyer/mailyak/v3",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,10 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["retry.go"],
+    importmap = "github.com/kindlyops/vbs/vendor/gocloud.dev/internal/retry",
+    importpath = "gocloud.dev/internal/retry",
+    visibility = ["//vendor/gocloud.dev:__subpackages__"],
+    deps = ["//vendor/github.com/googleapis/gax-go/v2:go_default_library"],
+)

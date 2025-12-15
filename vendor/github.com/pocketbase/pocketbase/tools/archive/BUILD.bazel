@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "create.go",
+        "extract.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/archive",
+    importpath = "github.com/pocketbase/pocketbase/tools/archive",
+    visibility = ["//visibility:public"],
+)
