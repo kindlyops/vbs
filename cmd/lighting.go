@@ -88,6 +88,7 @@ func sendOSC(path string) {
 func handleOSC(w http.ResponseWriter, r *http.Request, prefix string, buttons map[string]string) {
 	if r.Method != http.MethodPost {
 		sendFailureResponse(w, r)
+		return
 	}
 
 	command := strings.TrimPrefix(r.URL.Path, prefix)
