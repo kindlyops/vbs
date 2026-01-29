@@ -21,12 +21,9 @@ import (
 	"path/filepath"
 
 	"github.com/kindlyops/vbs/embeddy"
-	"github.com/labstack/echo/v5"
 	"github.com/muesli/coral"
 	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/rs/zerolog/log"
 )
 
@@ -49,48 +46,32 @@ func flyServer(cmd *coral.Command, args []string) {
 	os.MkdirAll(configDir, os.ModePerm)
 
 	log.Debug().Msgf("running pocketbase with data dir %s\n", configDir)
-	app := pocketbase.NewWithConfig(&pocketbase.Config{
+	app := pocketbase.NewWithConfig(pocketbase.Config{
 		DefaultDataDir: configDir,
 	})
 
-	migrationsDir := "" // default to "pb_migrations" (for js) and "migrations" (for go)
-
-	// register the `migrate` command
-	migratecmd.MustRegister(app, app.RootCmd, &migratecmd.Options{
-		TemplateLang: migratecmd.TemplateLangGo, // or migratecmd.TemplateLangJS
-		Dir:          migrationsDir,
-		Automigrate:  true,
-	})
-
-	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
+	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		public, _ := fs.Sub(embeddy.GetNextFS(), "public")
 		assetHandler := http.FileServer(http.FS(public))
-		e.Router.AddRoute(echo.Route{
-			Method:  http.MethodGet,
-			Path:    "/*",
-			Handler: echo.WrapHandler(assetHandler),
-			Middlewares: []echo.MiddlewareFunc{
-				apis.ActivityLogger(app),
-				//apis.RequireAdminAuth(),
-			},
+		
+		// Serve static files
+		se.Router.GET("/*", func(re *core.RequestEvent) error {
+			assetHandler.ServeHTTP(re.Response, re.Request)
+			return nil
 		})
 
-		e.Router.AddRoute(echo.Route{
-			Method: http.MethodPost,
-			Path:   "/api/switcher/*",
-			Middlewares: []echo.MiddlewareFunc{
-				apis.ActivityLogger(app),
-			},
-			Handler: echo.WrapHandler(&Switcher{}),
+		// Switcher API endpoint
+		se.Router.POST("/api/switcher/*", func(re *core.RequestEvent) error {
+			switcher := &Switcher{}
+			switcher.ServeHTTP(re.Response, re.Request)
+			return nil
 		})
 
-		e.Router.AddRoute(echo.Route{
-			Method: http.MethodPost,
-			Path:   "/api/light/*",
-			Middlewares: []echo.MiddlewareFunc{
-				apis.ActivityLogger(app),
-			},
-			Handler: echo.WrapHandler(&Lighting{}),
+		// Lighting API endpoint
+		se.Router.POST("/api/light/*", func(re *core.RequestEvent) error {
+			lighting := &Lighting{}
+			lighting.ServeHTTP(re.Response, re.Request)
+			return nil
 		})
 
 		return nil
@@ -99,16 +80,6 @@ func flyServer(cmd *coral.Command, args []string) {
 	if err := app.Start(); err != nil {
 		log.Fatal().Err(err).Msg("error starting pocketbase")
 	}
-
-	// app.RootCmd.AddCommand(&cobra.Command{
-	// 	Use: "fly",
-	// 	Run: func(command *cobra.Command, args []string) {
-	// 		log.Debug().Msgf("Pocketbase interceptor no-op")
-	// 		if err := app.Execute(); err != nil {
-	// 			log.Fatal().Err(err).Msg("error starting pocketbase")
-	// 		}
-	// 	},
-	// })
 }
 
 // Port to listen for HTTP requests.

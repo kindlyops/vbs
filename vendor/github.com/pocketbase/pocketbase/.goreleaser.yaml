@@ -1,3 +1,5 @@
+version: 2
+
 project_name: pocketbase
 
 dist: .builds
@@ -7,18 +9,6 @@ before:
     - go mod tidy
 
 builds:
-  - id: build_cgo
-    main: ./examples/base
-    binary: pocketbase
-    ldflags:
-      - -s -w -X github.com/pocketbase/pocketbase.Version={{ .Version }}
-    env:
-      - CGO_ENABLED=1
-    goos:
-      - linux
-    goarch:
-      - amd64
-
   - id: build_noncgo
     main: ./examples/base
     binary: pocketbase
@@ -34,38 +24,40 @@ builds:
       - amd64
       - arm64
       - arm
+      - s390x
+      - ppc64le
     goarm:
       - 7
     ignore:
       - goos: windows
         goarch: arm
+      - goos: windows
+        goarch: s390x
+      - goos: windows
+        goarch: ppc64le
       - goos: darwin
         goarch: arm
+      - goos: darwin
+        goarch: s390x
+      - goos: darwin
+        goarch: ppc64le
 
 release:
   draft: true
 
 archives:
-  - id: archive_cgo
-    builds: [build_cgo]
-    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}_cgo'
-    format: zip
-    files:
-      - LICENSE*
-      - CHANGELOG*
-
   - id: archive_noncgo
     builds: [build_noncgo]
     format: zip
     files:
-      - LICENSE*
-      - CHANGELOG*
+      - LICENSE.md
+      - CHANGELOG.md
 
 checksum:
   name_template: 'checksums.txt'
 
 snapshot:
-  name_template: '{{ incpatch .Version }}-next'
+  version_template: '{{ incpatch .Version }}-next'
 
 changelog:
   sort: asc

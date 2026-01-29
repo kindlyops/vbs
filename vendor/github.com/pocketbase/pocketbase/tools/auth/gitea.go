@@ -5,8 +5,13 @@ import (
 	"encoding/json"
 	"strconv"
 
+	"github.com/pocketbase/pocketbase/tools/types"
 	"golang.org/x/oauth2"
 )
+
+func init() {
+	Providers[NameGitea] = wrapFactory(NewGiteaProvider)
+}
 
 var _ Provider = (*Gitea)(nil)
 
@@ -15,17 +20,19 @@ const NameGitea string = "gitea"
 
 // Gitea allows authentication via Gitea OAuth2.
 type Gitea struct {
-	*baseProvider
+	BaseProvider
 }
 
 // NewGiteaProvider creates new Gitea provider instance with some defaults.
 func NewGiteaProvider() *Gitea {
-	return &Gitea{&baseProvider{
-		ctx:        context.Background(),
-		scopes:     []string{"read:user", "user:email"},
-		authUrl:    "https://gitea.com/login/oauth/authorize",
-		tokenUrl:   "https://gitea.com/login/oauth/access_token",
-		userApiUrl: "https://gitea.com/api/v1/user",
+	return &Gitea{BaseProvider{
+		ctx:         context.Background(),
+		displayName: "Gitea",
+		pkce:        true,
+		scopes:      []string{"read:user", "user:email"},
+		authURL:     "https://gitea.com/login/oauth/authorize",
+		tokenURL:    "https://gitea.com/login/oauth/access_token",
+		userInfoURL: "https://gitea.com/api/v1/user",
 	}}
 }
 
@@ -33,7 +40,7 @@ func NewGiteaProvider() *Gitea {
 //
 // API reference: https://try.gitea.io/api/swagger#/user/userGetCurrent
 func (p *Gitea) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
-	data, err := p.FetchRawUserData(token)
+	data, err := p.FetchRawUserInfo(token)
 	if err != nil {
 		return nil, err
 	}
@@ -44,26 +51,28 @@ func (p *Gitea) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
 	}
 
 	extracted := struct {
-		Id        int    `json:"id"`
 		Name      string `json:"full_name"`
 		Username  string `json:"login"`
 		Email     string `json:"email"`
-		AvatarUrl string `json:"avatar_url"`
+		AvatarURL string `json:"avatar_url"`
+		Id        int64  `json:"id"`
 	}{}
 	if err := json.Unmarshal(data, &extracted); err != nil {
 		return nil, err
 	}
 
 	user := &AuthUser{
-		Id:           strconv.Itoa(extracted.Id),
+		Id:           strconv.FormatInt(extracted.Id, 10),
 		Name:         extracted.Name,
 		Username:     extracted.Username,
 		Email:        extracted.Email,
-		AvatarUrl:    extracted.AvatarUrl,
+		AvatarURL:    extracted.AvatarURL,
 		RawUser:      rawUser,
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
 	}
+
+	user.Expiry, _ = types.ParseDateTime(token.Expiry)
 
 	return user, nil
 }

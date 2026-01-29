@@ -21,8 +21,9 @@ import (
 
 	"github.com/hypebeast/go-osc/osc"
 	"github.com/kindlyops/vbs/embeddy"
-	"github.com/labstack/echo/v5"
 	"github.com/muesli/coral"
+	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/core"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
@@ -50,14 +51,38 @@ func lightingBridge(cmd *coral.Command, args []string) {
 	assetHandler := http.FileServer(http.FS(public))
 
 	log.Debug().Msgf("Starting HTTP server at: http://%s\n", listenAddr)
-	e := echo.New()
-	e.GET("/*", echo.WrapHandler(assetHandler))
-	e.POST("/api/switcher/*", echo.WrapHandler(&Switcher{}))
-	e.POST("/api/light/*", echo.WrapHandler(&Lighting{}))
-	err := e.Start(listenAddr)
+	app := pocketbase.New()
+	
+	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		// Serve static files
+		se.Router.GET("/*", func(re *core.RequestEvent) error {
+			assetHandler.ServeHTTP(re.Response, re.Request)
+			return nil
+		})
 
+		// Switcher API endpoint
+		se.Router.POST("/api/switcher/*", func(re *core.RequestEvent) error {
+			switcher := &Switcher{}
+			switcher.ServeHTTP(re.Response, re.Request)
+			return nil
+		})
+
+		// Lighting API endpoint
+		se.Router.POST("/api/light/*", func(re *core.RequestEvent) error {
+			lighting := &Lighting{}
+			lighting.ServeHTTP(re.Response, re.Request)
+			return nil
+		})
+
+		// Override the server address
+		se.Server.Addr = listenAddr
+
+		return nil
+	})
+
+	err := app.Start()
 	if err != nil {
-		log.Error().Err(err).Msg("error from echo.Start")
+		log.Error().Err(err).Msg("error from app.Start")
 	}
 }
 
