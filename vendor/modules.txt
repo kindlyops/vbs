@@ -432,6 +432,10 @@ github.com/spf13/viper/internal/encoding/yaml
 # github.com/subosito/gotenv v1.4.2
 ## explicit; go 1.18
 github.com/subosito/gotenv
+# github.com/valyala/bytebufferpool v1.0.0
+## explicit
+# github.com/valyala/fasttemplate v1.2.2
+## explicit; go 1.12
 # go.opencensus.io v0.24.0
 ## explicit; go 1.13
 go.opencensus.io
