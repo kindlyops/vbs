@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "html_content.go",
+        "layout.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/mails/templates",
+    importpath = "github.com/pocketbase/pocketbase/mails/templates",
+    visibility = ["//visibility:public"],
+)

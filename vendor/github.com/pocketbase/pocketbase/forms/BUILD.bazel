@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "apple_client_secret_create.go",
+        "record_upsert.go",
+        "test_email_send.go",
+        "test_s3_filesystem.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/forms",
+    importpath = "github.com/pocketbase/pocketbase/forms",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/go-ozzo/ozzo-validation/v4:go_default_library",
+        "//vendor/github.com/go-ozzo/ozzo-validation/v4/is:go_default_library",
+        "//vendor/github.com/golang-jwt/jwt/v5:go_default_library",
+        "//vendor/github.com/pocketbase/dbx:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/core:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/core/validators:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/mails:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/filesystem:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/security:go_default_library",
+        "//vendor/github.com/spf13/cast:go_default_library",
+    ],
+)

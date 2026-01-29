@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["charset.go"],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/gabriel-vasile/mimetype/internal/charset",
+    importpath = "github.com/gabriel-vasile/mimetype/internal/charset",
+    visibility = ["//vendor/github.com/gabriel-vasile/mimetype:__subpackages__"],
+    deps = [
+        "//vendor/github.com/gabriel-vasile/mimetype/internal/markup:go_default_library",
+        "//vendor/github.com/gabriel-vasile/mimetype/internal/scan:go_default_library",
+    ],
+)

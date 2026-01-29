@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "acme.go",
+        "http.go",
+        "jws.go",
+        "rfc8555.go",
+        "types.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/golang.org/x/crypto/acme",
+    importpath = "golang.org/x/crypto/acme",
+    visibility = ["//visibility:public"],
+)

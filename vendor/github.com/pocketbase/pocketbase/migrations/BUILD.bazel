@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "1640988000_aux_init.go",
+        "1640988000_init.go",
+        "1717233556_v0.23_migrate.go",
+        "1717233557_v0.23_migrate2.go",
+        "1717233558_v0.23_migrate3.go",
+        "1717233559_v0.23_migrate4.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/migrations",
+    importpath = "github.com/pocketbase/pocketbase/migrations",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/pocketbase/dbx:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/core:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/security:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/types:go_default_library",
+        "//vendor/github.com/spf13/cast:go_default_library",
+        "//vendor/golang.org/x/crypto/bcrypt:go_default_library",
+    ],
+)
