@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "decode.go",
+        "filter.go",
+        "idct.go",
+        "partition.go",
+        "pred.go",
+        "predfunc.go",
+        "quant.go",
+        "reconstruct.go",
+        "token.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/golang.org/x/image/vp8",
+    importpath = "golang.org/x/image/vp8",
+    visibility = ["//visibility:public"],
+)

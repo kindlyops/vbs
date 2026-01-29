@@ -1,211 +1,209 @@
 package apis
 
 import (
-	"log"
+	"errors"
 	"net/http"
+	"strings"
 
-	"github.com/labstack/echo/v5"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/forms"
-	"github.com/pocketbase/pocketbase/models"
+	"github.com/pocketbase/pocketbase/tools/router"
 	"github.com/pocketbase/pocketbase/tools/search"
+	"github.com/pocketbase/pocketbase/tools/security"
 )
 
 // bindCollectionApi registers the collection api endpoints and the corresponding handlers.
-func bindCollectionApi(app core.App, rg *echo.Group) {
-	api := collectionApi{app: app}
-
-	subGroup := rg.Group("/collections", ActivityLogger(app), RequireAdminAuth())
-	subGroup.GET("", api.list)
-	subGroup.POST("", api.create)
-	subGroup.GET("/:collection", api.view)
-	subGroup.PATCH("/:collection", api.update)
-	subGroup.DELETE("/:collection", api.delete)
-	subGroup.PUT("/import", api.bulkImport)
+func bindCollectionApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
+	subGroup := rg.Group("/collections").Bind(RequireSuperuserAuth())
+	subGroup.GET("", collectionsList)
+	subGroup.POST("", collectionCreate)
+	subGroup.GET("/{collection}", collectionView)
+	subGroup.PATCH("/{collection}", collectionUpdate)
+	subGroup.DELETE("/{collection}", collectionDelete)
+	subGroup.DELETE("/{collection}/truncate", collectionTruncate)
+	subGroup.PUT("/import", collectionsImport)
+	subGroup.GET("/meta/scaffolds", collectionScaffolds)
 }
 
-type collectionApi struct {
-	app core.App
-}
-
-func (api *collectionApi) list(c echo.Context) error {
+func collectionsList(e *core.RequestEvent) error {
 	fieldResolver := search.NewSimpleFieldResolver(
 		"id", "created", "updated", "name", "system", "type",
 	)
 
-	collections := []*models.Collection{}
+	collections := []*core.Collection{}
 
 	result, err := search.NewProvider(fieldResolver).
-		Query(api.app.Dao().CollectionQuery()).
-		ParseAndExec(c.QueryParams().Encode(), &collections)
+		Query(e.App.CollectionQuery()).
+		ParseAndExec(e.Request.URL.Query().Encode(), &collections)
 
 	if err != nil {
-		return NewBadRequestError("", err)
+		return e.BadRequestError("", err)
 	}
 
-	event := new(core.CollectionsListEvent)
-	event.HttpContext = c
+	event := new(core.CollectionsListRequestEvent)
+	event.RequestEvent = e
 	event.Collections = collections
 	event.Result = result
 
-	return api.app.OnCollectionsListRequest().Trigger(event, func(e *core.CollectionsListEvent) error {
-		return e.HttpContext.JSON(http.StatusOK, e.Result)
+	return event.App.OnCollectionsListRequest().Trigger(event, func(e *core.CollectionsListRequestEvent) error {
+		return execAfterSuccessTx(true, e.App, func() error {
+			return e.JSON(http.StatusOK, e.Result)
+		})
 	})
 }
 
-func (api *collectionApi) view(c echo.Context) error {
-	collection, err := api.app.Dao().FindCollectionByNameOrId(c.PathParam("collection"))
+func collectionView(e *core.RequestEvent) error {
+	collection, err := e.App.FindCachedCollectionByNameOrId(e.Request.PathValue("collection"))
 	if err != nil || collection == nil {
-		return NewNotFoundError("", err)
+		return e.NotFoundError("", err)
 	}
 
-	event := new(core.CollectionViewEvent)
-	event.HttpContext = c
+	event := new(core.CollectionRequestEvent)
+	event.RequestEvent = e
 	event.Collection = collection
 
-	return api.app.OnCollectionViewRequest().Trigger(event, func(e *core.CollectionViewEvent) error {
-		return e.HttpContext.JSON(http.StatusOK, e.Collection)
+	return e.App.OnCollectionViewRequest().Trigger(event, func(e *core.CollectionRequestEvent) error {
+		return execAfterSuccessTx(true, e.App, func() error {
+			return e.JSON(http.StatusOK, e.Collection)
+		})
 	})
 }
 
-func (api *collectionApi) create(c echo.Context) error {
-	collection := &models.Collection{}
-
-	form := forms.NewCollectionUpsert(api.app, collection)
-
-	// load request
-	if err := c.Bind(form); err != nil {
-		return NewBadRequestError("Failed to load the submitted data due to invalid formatting.", err)
+func collectionCreate(e *core.RequestEvent) error {
+	// populate the minimal required factory collection data (if any)
+	factoryExtract := struct {
+		Type string `form:"type" json:"type"`
+		Name string `form:"name" json:"name"`
+	}{}
+	if err := e.BindBody(&factoryExtract); err != nil {
+		return e.BadRequestError("Failed to load the collection type data due to invalid formatting.", err)
 	}
 
-	event := new(core.CollectionCreateEvent)
-	event.HttpContext = c
+	// create scaffold
+	collection := core.NewCollection(factoryExtract.Type, factoryExtract.Name)
+
+	// merge the scaffold with the submitted request data
+	if err := e.BindBody(collection); err != nil {
+		return e.BadRequestError("Failed to load the submitted data due to invalid formatting.", err)
+	}
+
+	event := new(core.CollectionRequestEvent)
+	event.RequestEvent = e
 	event.Collection = collection
 
-	// create the collection
-	submitErr := form.Submit(func(next forms.InterceptorNextFunc[*models.Collection]) forms.InterceptorNextFunc[*models.Collection] {
-		return func(m *models.Collection) error {
-			event.Collection = m
+	return e.App.OnCollectionCreateRequest().Trigger(event, func(e *core.CollectionRequestEvent) error {
+		if err := e.App.Save(e.Collection); err != nil {
+			// validation failure
+			var validationErrors validation.Errors
+			if errors.As(err, &validationErrors) {
+				return e.BadRequestError("Failed to create collection.", validationErrors)
+			}
 
-			return api.app.OnCollectionBeforeCreateRequest().Trigger(event, func(e *core.CollectionCreateEvent) error {
-				if err := next(e.Collection); err != nil {
-					return NewBadRequestError("Failed to create the collection.", err)
-				}
-
-				return e.HttpContext.JSON(http.StatusOK, e.Collection)
-			})
+			// other generic db error
+			return e.BadRequestError("Failed to create collection. Raw error: \n"+err.Error(), nil)
 		}
+
+		return execAfterSuccessTx(true, e.App, func() error {
+			return e.JSON(http.StatusOK, e.Collection)
+		})
 	})
-
-	if submitErr == nil {
-		if err := api.app.OnCollectionAfterCreateRequest().Trigger(event); err != nil && api.app.IsDebug() {
-			log.Println(err)
-		}
-	}
-
-	return submitErr
 }
 
-func (api *collectionApi) update(c echo.Context) error {
-	collection, err := api.app.Dao().FindCollectionByNameOrId(c.PathParam("collection"))
+func collectionUpdate(e *core.RequestEvent) error {
+	collection, err := e.App.FindCollectionByNameOrId(e.Request.PathValue("collection"))
 	if err != nil || collection == nil {
-		return NewNotFoundError("", err)
+		return e.NotFoundError("", err)
 	}
 
-	form := forms.NewCollectionUpsert(api.app, collection)
-
-	// load request
-	if err := c.Bind(form); err != nil {
-		return NewBadRequestError("Failed to load the submitted data due to invalid formatting.", err)
+	if err := e.BindBody(collection); err != nil {
+		return e.BadRequestError("Failed to load the submitted data due to invalid formatting.", err)
 	}
 
-	event := new(core.CollectionUpdateEvent)
-	event.HttpContext = c
+	event := new(core.CollectionRequestEvent)
+	event.RequestEvent = e
 	event.Collection = collection
 
-	// update the collection
-	submitErr := form.Submit(func(next forms.InterceptorNextFunc[*models.Collection]) forms.InterceptorNextFunc[*models.Collection] {
-		return func(m *models.Collection) error {
-			event.Collection = m
+	return event.App.OnCollectionUpdateRequest().Trigger(event, func(e *core.CollectionRequestEvent) error {
+		if err := e.App.Save(e.Collection); err != nil {
+			// validation failure
+			var validationErrors validation.Errors
+			if errors.As(err, &validationErrors) {
+				return e.BadRequestError("Failed to update collection.", validationErrors)
+			}
 
-			return api.app.OnCollectionBeforeUpdateRequest().Trigger(event, func(e *core.CollectionUpdateEvent) error {
-				if err := next(e.Collection); err != nil {
-					return NewBadRequestError("Failed to update the collection.", err)
-				}
-
-				return e.HttpContext.JSON(http.StatusOK, e.Collection)
-			})
+			// other generic db error
+			return e.BadRequestError("Failed to update collection. Raw error: \n"+err.Error(), nil)
 		}
+
+		return execAfterSuccessTx(true, e.App, func() error {
+			return e.JSON(http.StatusOK, e.Collection)
+		})
 	})
-
-	if submitErr == nil {
-		if err := api.app.OnCollectionAfterUpdateRequest().Trigger(event); err != nil && api.app.IsDebug() {
-			log.Println(err)
-		}
-	}
-
-	return submitErr
 }
 
-func (api *collectionApi) delete(c echo.Context) error {
-	collection, err := api.app.Dao().FindCollectionByNameOrId(c.PathParam("collection"))
+func collectionDelete(e *core.RequestEvent) error {
+	collection, err := e.App.FindCachedCollectionByNameOrId(e.Request.PathValue("collection"))
 	if err != nil || collection == nil {
-		return NewNotFoundError("", err)
+		return e.NotFoundError("", err)
 	}
 
-	event := new(core.CollectionDeleteEvent)
-	event.HttpContext = c
+	event := new(core.CollectionRequestEvent)
+	event.RequestEvent = e
 	event.Collection = collection
 
-	handlerErr := api.app.OnCollectionBeforeDeleteRequest().Trigger(event, func(e *core.CollectionDeleteEvent) error {
-		if err := api.app.Dao().DeleteCollection(e.Collection); err != nil {
-			return NewBadRequestError("Failed to delete collection due to existing dependency.", err)
+	return e.App.OnCollectionDeleteRequest().Trigger(event, func(e *core.CollectionRequestEvent) error {
+		if err := e.App.Delete(e.Collection); err != nil {
+			msg := "Failed to delete collection"
+
+			// check fo references
+			refs, _ := e.App.FindCollectionReferences(e.Collection, e.Collection.Id)
+			if len(refs) > 0 {
+				names := make([]string, 0, len(refs))
+				for ref := range refs {
+					names = append(names, ref.Name)
+				}
+				msg += " probably due to existing reference in " + strings.Join(names, ", ")
+			}
+
+			return e.BadRequestError(msg, err)
 		}
 
-		return e.HttpContext.NoContent(http.StatusNoContent)
+		return execAfterSuccessTx(true, e.App, func() error {
+			return e.NoContent(http.StatusNoContent)
+		})
 	})
-
-	if handlerErr == nil {
-		if err := api.app.OnCollectionAfterDeleteRequest().Trigger(event); err != nil && api.app.IsDebug() {
-			log.Println(err)
-		}
-	}
-
-	return handlerErr
 }
 
-func (api *collectionApi) bulkImport(c echo.Context) error {
-	form := forms.NewCollectionsImport(api.app)
-
-	// load request data
-	if err := c.Bind(form); err != nil {
-		return NewBadRequestError("Failed to load the submitted data due to invalid formatting.", err)
+func collectionTruncate(e *core.RequestEvent) error {
+	collection, err := e.App.FindCachedCollectionByNameOrId(e.Request.PathValue("collection"))
+	if err != nil || collection == nil {
+		return e.NotFoundError("", err)
 	}
 
-	event := new(core.CollectionsImportEvent)
-	event.HttpContext = c
-	event.Collections = form.Collections
-
-	// import collections
-	submitErr := form.Submit(func(next forms.InterceptorNextFunc[[]*models.Collection]) forms.InterceptorNextFunc[[]*models.Collection] {
-		return func(imports []*models.Collection) error {
-			event.Collections = imports
-
-			return api.app.OnCollectionsBeforeImportRequest().Trigger(event, func(e *core.CollectionsImportEvent) error {
-				if err := next(e.Collections); err != nil {
-					return NewBadRequestError("Failed to import the submitted collections.", err)
-				}
-
-				return e.HttpContext.NoContent(http.StatusNoContent)
-			})
-		}
-	})
-
-	if submitErr == nil {
-		if err := api.app.OnCollectionsAfterImportRequest().Trigger(event); err != nil && api.app.IsDebug() {
-			log.Println(err)
-		}
+	if collection.IsView() {
+		return e.BadRequestError("View collections cannot be truncated since they don't store their own records.", nil)
 	}
 
-	return submitErr
+	err = e.App.TruncateCollection(collection)
+	if err != nil {
+		return e.BadRequestError("Failed to truncate collection (most likely due to required cascade delete record references).", err)
+	}
+
+	return e.NoContent(http.StatusNoContent)
+}
+
+func collectionScaffolds(e *core.RequestEvent) error {
+	randomId := security.RandomStringWithAlphabet(10, core.DefaultIdAlphabet) // could be used as part of the default indexes name
+
+	collections := map[string]*core.Collection{
+		core.CollectionTypeBase: core.NewBaseCollection("", randomId),
+		core.CollectionTypeAuth: core.NewAuthCollection("", randomId),
+		core.CollectionTypeView: core.NewViewCollection("", randomId),
+	}
+
+	for _, c := range collections {
+		c.Id = "" // clear random id
+	}
+
+	return e.JSON(http.StatusOK, collections)
 }

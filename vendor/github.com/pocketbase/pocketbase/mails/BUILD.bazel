@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = [
-        "admin.go",
         "base.go",
         "record.go",
     ],
@@ -13,10 +12,6 @@ go_library(
     deps = [
         "//vendor/github.com/pocketbase/pocketbase/core:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/mails/templates:go_default_library",
-        "//vendor/github.com/pocketbase/pocketbase/models:go_default_library",
-        "//vendor/github.com/pocketbase/pocketbase/models/settings:go_default_library",
-        "//vendor/github.com/pocketbase/pocketbase/tokens:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/mailer:go_default_library",
-        "//vendor/github.com/pocketbase/pocketbase/tools/rest:go_default_library",
     ],
 )

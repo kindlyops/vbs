@@ -5,8 +5,13 @@ import (
 	"encoding/json"
 	"strconv"
 
+	"github.com/pocketbase/pocketbase/tools/types"
 	"golang.org/x/oauth2"
 )
+
+func init() {
+	Providers[NameStrava] = wrapFactory(NewStravaProvider)
+}
 
 var _ Provider = (*Strava)(nil)
 
@@ -15,19 +20,21 @@ const NameStrava string = "strava"
 
 // Strava allows authentication via Strava OAuth2.
 type Strava struct {
-	*baseProvider
+	BaseProvider
 }
 
 // NewStravaProvider creates new Strava provider instance with some defaults.
 func NewStravaProvider() *Strava {
-	return &Strava{&baseProvider{
-		ctx: context.Background(),
+	return &Strava{BaseProvider{
+		ctx:         context.Background(),
+		displayName: "Strava",
+		pkce:        true,
 		scopes: []string{
 			"profile:read_all",
 		},
-		authUrl:    "https://www.strava.com/oauth/authorize",
-		tokenUrl:   "https://www.strava.com/api/v3/oauth/token",
-		userApiUrl: "https://www.strava.com/api/v3/athlete",
+		authURL:     "https://www.strava.com/oauth/authorize",
+		tokenURL:    "https://www.strava.com/api/v3/oauth/token",
+		userInfoURL: "https://www.strava.com/api/v3/athlete",
 	}}
 }
 
@@ -35,7 +42,7 @@ func NewStravaProvider() *Strava {
 //
 // API reference: https://developers.strava.com/docs/authentication/
 func (p *Strava) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
-	data, err := p.FetchRawUserData(token)
+	data, err := p.FetchRawUserInfo(token)
 	if err != nil {
 		return nil, err
 	}
@@ -46,11 +53,11 @@ func (p *Strava) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
 	}
 
 	extracted := struct {
-		Id              int    `json:"id"`
+		Id              int64  `json:"id"`
 		FirstName       string `json:"firstname"`
 		LastName        string `json:"lastname"`
 		Username        string `json:"username"`
-		ProfileImageUrl string `json:"profile"`
+		ProfileImageURL string `json:"profile"`
 
 		// At the time of writing, Strava OAuth2 doesn't support returning the user email address
 		// Email string `json:"email"`
@@ -62,14 +69,16 @@ func (p *Strava) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
 	user := &AuthUser{
 		Name:         extracted.FirstName + " " + extracted.LastName,
 		Username:     extracted.Username,
-		AvatarUrl:    extracted.ProfileImageUrl,
+		AvatarURL:    extracted.ProfileImageURL,
 		RawUser:      rawUser,
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
 	}
 
+	user.Expiry, _ = types.ParseDateTime(token.Expiry)
+
 	if extracted.Id != 0 {
-		user.Id = strconv.Itoa(extracted.Id)
+		user.Id = strconv.FormatInt(extracted.Id, 10)
 	}
 
 	return user, nil

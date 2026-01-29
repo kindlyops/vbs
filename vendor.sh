@@ -11,7 +11,7 @@ echo "$gazelle"
 
 cd "$BUILD_WORKSPACE_DIRECTORY"
 
-go mod tidy -compat=1.18
+go mod tidy -compat=1.24
 go mod vendor
 $gazelle
 

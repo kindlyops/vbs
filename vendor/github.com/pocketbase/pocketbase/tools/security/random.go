@@ -3,15 +3,10 @@ package security
 import (
 	cryptoRand "crypto/rand"
 	"math/big"
-	mathRand "math/rand"
-	"time"
+	mathRand "math/rand/v2"
 )
 
 const defaultRandomAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-
-func init() {
-	mathRand.Seed(time.Now().UnixNano())
-}
 
 // RandomString generates a cryptographically random string with the specified length.
 //
@@ -57,7 +52,7 @@ func PseudorandomStringWithAlphabet(length int, alphabet string) string {
 	max := len(alphabet)
 
 	for i := range b {
-		b[i] = alphabet[mathRand.Intn(max)]
+		b[i] = alphabet[mathRand.IntN(max)]
 	}
 
 	return string(b)

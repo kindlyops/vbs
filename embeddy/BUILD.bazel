@@ -9,5 +9,5 @@ go_library(
     ]),
     importpath = "github.com/kindlyops/vbs/embeddy",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/labstack/echo/v5:go_default_library"],
+    deps = [],
 )

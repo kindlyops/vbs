@@ -8,22 +8,30 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/disintegration/imaging"
+	"github.com/fatih/color"
 	"github.com/gabriel-vasile/mimetype"
+	"github.com/pocketbase/pocketbase/tools/filesystem/blob"
+	"github.com/pocketbase/pocketbase/tools/filesystem/internal/fileblob"
+	"github.com/pocketbase/pocketbase/tools/filesystem/internal/s3blob"
+	"github.com/pocketbase/pocketbase/tools/filesystem/internal/s3blob/s3"
 	"github.com/pocketbase/pocketbase/tools/list"
-	"gocloud.dev/blob"
-	"gocloud.dev/blob/fileblob"
-	"gocloud.dev/blob/s3blob"
+
+	// explicit webp decoder because disintegration/imaging does not support webp
+	_ "golang.org/x/image/webp"
 )
+
+// note: the same as blob.ErrNotFound for backward compatibility with earlier versions
+var ErrNotFound = blob.ErrNotFound
+
+const metadataOriginalName = "original-filename"
 
 type System struct {
 	ctx    context.Context
@@ -43,24 +51,21 @@ func NewS3(
 ) (*System, error) {
 	ctx := context.Background() // default context
 
-	cred := credentials.NewStaticCredentials(accessKey, secretKey, "")
+	client := &s3.S3{
+		Bucket:       bucketName,
+		Region:       region,
+		Endpoint:     endpoint,
+		AccessKey:    accessKey,
+		SecretKey:    secretKey,
+		UsePathStyle: s3ForcePathStyle,
+	}
 
-	sess, err := session.NewSession(&aws.Config{
-		Region:           aws.String(region),
-		Endpoint:         aws.String(endpoint),
-		Credentials:      cred,
-		S3ForcePathStyle: aws.Bool(s3ForcePathStyle),
-	})
+	drv, err := s3blob.New(client)
 	if err != nil {
 		return nil, err
 	}
 
-	bucket, err := s3blob.OpenBucket(ctx, sess, bucketName, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return &System{ctx: ctx, bucket: bucket}, nil
+	return &System{ctx: ctx, bucket: blob.NewBucket(drv)}, nil
 }
 
 // NewLocal initializes a new local filesystem instance.
@@ -74,12 +79,14 @@ func NewLocal(dirPath string) (*System, error) {
 		return nil, err
 	}
 
-	bucket, err := fileblob.OpenBucket(dirPath, nil)
+	drv, err := fileblob.New(dirPath, &fileblob.Options{
+		NoTempDir: true,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &System{ctx: ctx, bucket: bucket}, nil
+	return &System{ctx: ctx, bucket: blob.NewBucket(drv)}, nil
 }
 
 // SetContext assigns the specified context to the current filesystem.
@@ -98,20 +105,73 @@ func (s *System) Exists(fileKey string) (bool, error) {
 }
 
 // Attributes returns the attributes for the file with fileKey path.
+//
+// If the file doesn't exist it returns ErrNotFound.
 func (s *System) Attributes(fileKey string) (*blob.Attributes, error) {
 	return s.bucket.Attributes(s.ctx, fileKey)
 }
 
-// GetFile returns a file content reader for the given fileKey.
+// GetReader returns a file content reader for the given fileKey.
 //
-// NB! Make sure to call `Close()` after you are done working with it.
+// NB! Make sure to call Close() on the file after you are done working with it.
+//
+// If the file doesn't exist returns ErrNotFound.
+func (s *System) GetReader(fileKey string) (*blob.Reader, error) {
+	return s.bucket.NewReader(s.ctx, fileKey)
+}
+
+// Deprecated: Please use GetReader(fileKey) instead.
 func (s *System) GetFile(fileKey string) (*blob.Reader, error) {
-	br, err := s.bucket.NewReader(s.ctx, fileKey, nil)
+	color.Yellow("Deprecated: Please replace GetFile with GetReader.")
+	return s.GetReader(fileKey)
+}
+
+// GetReuploadableFile constructs a new reuploadable File value
+// from the associated fileKey blob.Reader.
+//
+// If preserveName is false then the returned File.Name will have
+// a new randomly generated suffix, otherwise it will reuse the original one.
+//
+// This method could be useful in case you want to clone an existing
+// Record file and assign it to a new Record (e.g. in a Record duplicate action).
+//
+// If you simply want to copy an existing file to a new location you
+// could check the Copy(srcKey, dstKey) method.
+func (s *System) GetReuploadableFile(fileKey string, preserveName bool) (*File, error) {
+	attrs, err := s.Attributes(fileKey)
 	if err != nil {
 		return nil, err
 	}
 
-	return br, nil
+	name := path.Base(fileKey)
+	originalName := attrs.Metadata[metadataOriginalName]
+	if originalName == "" {
+		originalName = name
+	}
+
+	file := &File{}
+	file.Size = attrs.Size
+	file.OriginalName = originalName
+	file.Reader = openFuncAsReader(func() (io.ReadSeekCloser, error) {
+		return s.GetReader(fileKey)
+	})
+
+	if preserveName {
+		file.Name = name
+	} else {
+		file.Name = normalizeName(file.Reader, originalName)
+	}
+
+	return file, nil
+}
+
+// Copy copies the file stored at srcKey to dstKey.
+//
+// If srcKey file doesn't exist, it returns ErrNotFound.
+//
+// If dstKey file already exists, it is overwritten.
+func (s *System) Copy(srcKey, dstKey string) error {
+	return s.bucket.Copy(s.ctx, dstKey, srcKey)
 }
 
 // List returns a flat list with info for all files under the specified prefix.
@@ -125,7 +185,7 @@ func (s *System) List(prefix string) ([]*blob.ListObject, error) {
 	for {
 		obj, err := iter.Next(s.ctx)
 		if err != nil {
-			if err != io.EOF {
+			if !errors.Is(err, io.EOF) {
 				return nil, err
 			}
 			break
@@ -148,14 +208,13 @@ func (s *System) Upload(content []byte, fileKey string) error {
 	}
 
 	if _, err := w.Write(content); err != nil {
-		w.Close()
-		return err
+		return errors.Join(err, w.Close())
 	}
 
 	return w.Close()
 }
 
-// UploadFile uploads the provided multipart file to the fileKey location.
+// UploadFile uploads the provided File to the fileKey location.
 func (s *System) UploadFile(file *File, fileKey string) error {
 	f, err := file.Reader.Open()
 	if err != nil {
@@ -180,7 +239,7 @@ func (s *System) UploadFile(file *File, fileKey string) error {
 	opts := &blob.WriterOptions{
 		ContentType: mt.String(),
 		Metadata: map[string]string{
-			"original-filename": originalName,
+			metadataOriginalName: originalName,
 		},
 	}
 
@@ -222,7 +281,7 @@ func (s *System) UploadMultipart(fh *multipart.FileHeader, fileKey string) error
 	opts := &blob.WriterOptions{
 		ContentType: mt.String(),
 		Metadata: map[string]string{
-			"original-filename": originalName,
+			metadataOriginalName: originalName,
 		},
 	}
 
@@ -231,7 +290,8 @@ func (s *System) UploadMultipart(fh *multipart.FileHeader, fileKey string) error
 		return err
 	}
 
-	if _, err := w.ReadFrom(f); err != nil {
+	_, err = w.ReadFrom(f)
+	if err != nil {
 		w.Close()
 		return err
 	}
@@ -240,21 +300,32 @@ func (s *System) UploadMultipart(fh *multipart.FileHeader, fileKey string) error
 }
 
 // Delete deletes stored file at fileKey location.
+//
+// If the file doesn't exist returns ErrNotFound.
 func (s *System) Delete(fileKey string) error {
 	return s.bucket.Delete(s.ctx, fileKey)
 }
 
 // DeletePrefix deletes everything starting with the specified prefix.
+//
+// The prefix could be subpath (ex. "/a/b/") or filename prefix (ex. "/a/b/file_").
 func (s *System) DeletePrefix(prefix string) []error {
 	failed := []error{}
 
 	if prefix == "" {
-		failed = append(failed, errors.New("Prefix mustn't be empty."))
+		failed = append(failed, errors.New("prefix mustn't be empty"))
 		return failed
 	}
 
 	dirsMap := map[string]struct{}{}
-	dirsMap[prefix] = struct{}{}
+
+	var isPrefixDir bool
+
+	// treat the prefix as directory only if it ends with trailing slash
+	if strings.HasSuffix(prefix, "/") {
+		isPrefixDir = true
+		dirsMap[strings.TrimRight(prefix, "/")] = struct{}{}
+	}
 
 	// delete all files with the prefix
 	// ---
@@ -264,7 +335,7 @@ func (s *System) DeletePrefix(prefix string) []error {
 	for {
 		obj, err := iter.Next(s.ctx)
 		if err != nil {
-			if err != io.EOF {
+			if !errors.Is(err, io.EOF) {
 				failed = append(failed, err)
 			}
 			break
@@ -272,8 +343,11 @@ func (s *System) DeletePrefix(prefix string) []error {
 
 		if err := s.Delete(obj.Key); err != nil {
 			failed = append(failed, err)
-		} else {
-			dirsMap[filepath.Dir(obj.Key)] = struct{}{}
+		} else if isPrefixDir {
+			slashIdx := strings.LastIndex(obj.Key, "/")
+			if slashIdx > -1 {
+				dirsMap[obj.Key[:slashIdx]] = struct{}{}
+			}
 		}
 	}
 	// ---
@@ -303,6 +377,26 @@ func (s *System) DeletePrefix(prefix string) []error {
 	return failed
 }
 
+// Checks if the provided dir prefix doesn't have any files.
+//
+// A trailing slash will be appended to a non-empty dir string argument
+// to ensure that the checked prefix is a "directory".
+//
+// Returns "false" in case the has at least one file, otherwise - "true".
+func (s *System) IsEmptyDir(dir string) bool {
+	if dir != "" && !strings.HasSuffix(dir, "/") {
+		dir += "/"
+	}
+
+	iter := s.bucket.List(&blob.ListOptions{
+		Prefix: dir,
+	})
+
+	_, err := iter.Next(s.ctx)
+
+	return err != nil && errors.Is(err, io.EOF)
+}
+
 var inlineServeContentTypes = []string{
 	// image
 	"image/png", "image/jpg", "image/jpeg", "image/gif", "image/webp", "image/x-icon", "image/bmp",
@@ -317,28 +411,45 @@ var inlineServeContentTypes = []string{
 
 // manualExtensionContentTypes is a map of file extensions to content types.
 var manualExtensionContentTypes = map[string]string{
-	".svg": "image/svg+xml", // (see https://github.com/whatwg/mimesniff/issues/7)
-	".css": "text/css",      // (see https://github.com/gabriel-vasile/mimetype/pull/113)
+	".svg": "image/svg+xml",   // (see https://github.com/whatwg/mimesniff/issues/7)
+	".css": "text/css",        // (see https://github.com/gabriel-vasile/mimetype/pull/113)
+	".js":  "text/javascript", // (see https://github.com/pocketbase/pocketbase/issues/6597)
+	".mjs": "text/javascript",
 }
 
+// forceAttachmentParam is the name of the request query parameter to
+// force "Content-Disposition: attachment" header.
+const forceAttachmentParam = "download"
+
 // Serve serves the file at fileKey location to an HTTP response.
+//
+// If the `download` query parameter is used the file will be always served for
+// download no matter of its type (aka. with "Content-Disposition: attachment").
+//
+// Internally this method uses [http.ServeContent] so Range requests,
+// If-Match, If-Unmodified-Since, etc. headers are handled transparently.
 func (s *System) Serve(res http.ResponseWriter, req *http.Request, fileKey string, name string) error {
-	br, readErr := s.bucket.NewReader(s.ctx, fileKey, nil)
+	br, readErr := s.GetReader(fileKey)
 	if readErr != nil {
 		return readErr
 	}
 	defer br.Close()
 
+	var forceAttachment bool
+	if raw := req.URL.Query().Get(forceAttachmentParam); raw != "" {
+		forceAttachment, _ = strconv.ParseBool(raw)
+	}
+
 	disposition := "attachment"
 	realContentType := br.ContentType()
-	if list.ExistInSlice(realContentType, inlineServeContentTypes) {
+	if !forceAttachment && list.ExistInSlice(realContentType, inlineServeContentTypes) {
 		disposition = "inline"
 	}
 
 	// make an exception for specific content types and force a custom
 	// content type to send in the response so that it can be loaded properly
 	extContentType := realContentType
-	if ct, found := manualExtensionContentTypes[filepath.Ext(name)]; found && extContentType != ct {
+	if ct, found := manualExtensionContentTypes[filepath.Ext(name)]; found {
 		extContentType = ct
 	}
 
@@ -378,7 +489,7 @@ var ThumbSizeRegex = regexp.MustCompile(`^(\d+)x(\d+)(t|b|f)?$`)
 func (s *System) CreateThumb(originalKey string, thumbKey, thumbSize string) error {
 	sizeParts := ThumbSizeRegex.FindStringSubmatch(thumbSize)
 	if len(sizeParts) != 4 {
-		return errors.New("Thumb size must be in WxH, WxHt, WxHb or WxHf format.")
+		return errors.New("thumb size must be in WxH, WxHt, WxHb or WxHf format")
 	}
 
 	width, _ := strconv.Atoi(sizeParts[1])
@@ -386,11 +497,11 @@ func (s *System) CreateThumb(originalKey string, thumbKey, thumbSize string) err
 	resizeType := sizeParts[3]
 
 	if width == 0 && height == 0 {
-		return errors.New("Thumb width and height cannot be zero at the same time.")
+		return errors.New("thumb width and height cannot be zero at the same time")
 	}
 
 	// fetch the original
-	r, readErr := s.bucket.NewReader(s.ctx, originalKey, nil)
+	r, readErr := s.GetReader(originalKey)
 	if readErr != nil {
 		return readErr
 	}
@@ -407,43 +518,56 @@ func (s *System) CreateThumb(originalKey string, thumbKey, thumbSize string) err
 
 	if width == 0 || height == 0 {
 		// force resize preserving aspect ratio
-		thumbImg = imaging.Resize(img, width, height, imaging.CatmullRom)
+		thumbImg = imaging.Resize(img, width, height, imaging.Linear)
 	} else {
 		switch resizeType {
 		case "f":
 			// fit
-			thumbImg = imaging.Fit(img, width, height, imaging.CatmullRom)
+			thumbImg = imaging.Fit(img, width, height, imaging.Linear)
 		case "t":
 			// fill and crop from top
-			thumbImg = imaging.Fill(img, width, height, imaging.Top, imaging.CatmullRom)
+			thumbImg = imaging.Fill(img, width, height, imaging.Top, imaging.Linear)
 		case "b":
 			// fill and crop from bottom
-			thumbImg = imaging.Fill(img, width, height, imaging.Bottom, imaging.CatmullRom)
+			thumbImg = imaging.Fill(img, width, height, imaging.Bottom, imaging.Linear)
 		default:
 			// fill and crop from center
-			thumbImg = imaging.Fill(img, width, height, imaging.Center, imaging.CatmullRom)
+			thumbImg = imaging.Fill(img, width, height, imaging.Center, imaging.Linear)
 		}
 	}
 
+	originalContentType := r.ContentType()
+
 	opts := &blob.WriterOptions{
-		ContentType: r.ContentType(),
+		ContentType: originalContentType,
 	}
 
-	// open a thumb storage writer (aka. prepare for upload)
-	w, writerErr := s.bucket.NewWriter(s.ctx, thumbKey, opts)
-	if writerErr != nil {
-		return writerErr
-	}
+	var format imaging.Format
 
-	// try to detect the thumb format based on the original file name
-	// (fallbacks to png on error)
-	format, err := imaging.FormatFromFilename(thumbKey)
-	if err != nil {
+	switch originalContentType {
+	case "image/jpeg":
+		format = imaging.JPEG
+	case "image/gif":
+		format = imaging.GIF
+	case "image/tiff":
+		format = imaging.TIFF
+	case "image/bmp":
+		format = imaging.BMP
+	default:
+		// fallback to PNG (this includes webp!)
+		opts.ContentType = "image/png"
 		format = imaging.PNG
 	}
 
+	// open a thumb storage writer (aka. prepare for upload)
+	w, err := s.bucket.NewWriter(s.ctx, thumbKey, opts)
+	if err != nil {
+		return err
+	}
+
 	// thumb encode (aka. upload)
-	if err := imaging.Encode(w, thumbImg, format); err != nil {
+	err = imaging.Encode(w, thumbImg, format)
+	if err != nil {
 		w.Close()
 		return err
 	}

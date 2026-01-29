@@ -22,8 +22,8 @@ package main
 import github.com/ganigeorgiev/fexpr
 
 func main() {
+    // [{&& {{identifier id} = {number 123}}} {&& {{identifier status} = {text active}}}]
     result, err := fexpr.Parse("id=123 && status='active'")
-    // result: [{&& {{identifier id} = {number 123}}} {&& {{identifier status} = {text active}}}]
 }
 ```
 
@@ -31,12 +31,12 @@ func main() {
 
 > See the [package documentation](https://pkg.go.dev/github.com/ganigeorgiev/fexpr) for more details and examples.
 
+
 ## Grammar
 
 **fexpr** grammar resembles the SQL `WHERE` expression syntax. It recognizes several token types (identifiers, numbers, quoted text, expression operators, whitespaces, etc.).
 
 > You could find all supported tokens in [`scanner.go`](https://github.com/ganigeorgiev/fexpr/blob/master/scanner.go).
-
 
 #### Operators
 
@@ -60,19 +60,10 @@ func main() {
 - **`||`** OR join operator (eg. `a=b || c=d`)
 - **`()`** Parenthesis (eg. `(a=1 && b=2) || (a=3 && b=4)`)
 
-
 #### Numbers
 Number tokens are any integer or decimal numbers.
 
 _Example_: `123`, `10.50`, `-14`.
-
-
-#### Identifiers
-
-Identifier tokens are literals that start with a letter, `_`, `@` or `#` and could contain further any number of letters, digits, `.` (usually used as a separator) or `:` (usually used as modifier) characters.
-
-_Example_: `id`, `a.b.c`, `field123`, `@request.method`, `author.name:length`.
-
 
 #### Quoted text
 
@@ -80,13 +71,33 @@ Text tokens are any literals that are wrapped by `'` or `"` quotes.
 
 _Example_: `'Lorem ipsum dolor 123!'`, `"escaped \"word\""`, `"mixed 'quotes' are fine"`.
 
+#### Identifiers
+
+Identifier tokens are literals that start with a letter, `_`, `@` or `#` and could contain further any number of letters, digits, `.` (usually used as a separator) or `:` (usually used as modifier) characters.
+
+_Example_: `id`, `a.b.c`, `field123`, `@request.method`, `author.name:length`.
+
+#### Functions
+
+Function tokens are similar to the identifiers but in addition accept a list of arguments enclosed in parenthesis `()`.
+The function arguments must be separated by comma (_a single trailing comma is also allowed_) and each argument can be an identifier, quoted text, number or another nested function (_up to 2 nested_).
+
+_Example_: `test()`, `test(a.b, 123, "abc")`, `@a.b.c:test(true)`, `a(b(c(1, 2)))`.
+
+#### Comments
+
+Comment tokens are any single line text literals starting with `//`.
+Similar to whitespaces, comments are ignored by `fexpr.Parse()`.
+
+_Example_: `// test`.
+
 
 ## Using only the scanner
 
 The tokenizer (aka. `fexpr.Scanner`) could be used without the parser's state machine so that you can write your own custom tokens processing:
 
 ```go
-s := fexpr.NewScanner(strings.NewReader("id > 123"))
+s := fexpr.NewScanner([]byte("id > 123"))
 
 // scan single token at a time until EOF or error is reached
 for {
@@ -99,9 +110,9 @@ for {
 }
 
 // Output:
-// {identifier id}
-// {whitespace  }
-// {sign >}
-// {whitespace  }
-// {number 123}
+// {<nil> identifier id}
+// {<nil> whitespace  }
+// {<nil> sign >}
+// {<nil> whitespace  }
+// {<nil> number 123}
 ```

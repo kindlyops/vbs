@@ -1,0 +1,10 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["jwk.go"],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/auth/internal/jwk",
+    importpath = "github.com/pocketbase/pocketbase/tools/auth/internal/jwk",
+    visibility = ["//vendor/github.com/pocketbase/pocketbase/tools/auth:__subpackages__"],
+    deps = ["//vendor/github.com/golang-jwt/jwt/v5:go_default_library"],
+)

@@ -2,8 +2,12 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "go_default_library",
-    srcs = ["inflector.go"],
+    srcs = [
+        "inflector.go",
+        "singularize.go",
+    ],
     importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/inflector",
     importpath = "github.com/pocketbase/pocketbase/tools/inflector",
     visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/pocketbase/pocketbase/tools/store:go_default_library"],
 )

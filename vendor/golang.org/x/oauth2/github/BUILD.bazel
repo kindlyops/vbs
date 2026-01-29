@@ -6,5 +6,5 @@ go_library(
     importmap = "github.com/kindlyops/vbs/vendor/golang.org/x/oauth2/github",
     importpath = "golang.org/x/oauth2/github",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/golang.org/x/oauth2:go_default_library"],
+    deps = ["//vendor/golang.org/x/oauth2/endpoints:go_default_library"],
 )

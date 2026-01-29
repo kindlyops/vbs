@@ -5,9 +5,16 @@ go_library(
     srcs = [
         "broker.go",
         "client.go",
+        "message.go",
     ],
     importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/subscriptions",
     importpath = "github.com/pocketbase/pocketbase/tools/subscriptions",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/pocketbase/pocketbase/tools/security:go_default_library"],
+    deps = [
+        "//vendor/github.com/pocketbase/pocketbase/tools/inflector:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/list:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/security:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/store:go_default_library",
+        "//vendor/github.com/spf13/cast:go_default_library",
+    ],
 )
