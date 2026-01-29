@@ -7,52 +7,63 @@ import (
 	"strings"
 
 	"github.com/domodwyer/mailyak/v3"
+	"github.com/pocketbase/pocketbase/tools/hook"
 	"github.com/pocketbase/pocketbase/tools/security"
 )
 
-var _ Mailer = (*SmtpClient)(nil)
+var _ Mailer = (*SMTPClient)(nil)
 
 const (
-	SmtpAuthPlain = "PLAIN"
-	SmtpAuthLogin = "LOGIN"
+	SMTPAuthPlain = "PLAIN"
+	SMTPAuthLogin = "LOGIN"
 )
 
-// Deprecated: Use directly the SmtpClient struct literal.
-//
-// NewSmtpClient creates new SmtpClient with the provided configuration.
-func NewSmtpClient(
-	host string,
-	port int,
-	username string,
-	password string,
-	tls bool,
-) *SmtpClient {
-	return &SmtpClient{
-		Host:     host,
-		Port:     port,
-		Username: username,
-		Password: password,
-		Tls:      tls,
-	}
-}
-
-// SmtpClient defines a SMTP mail client structure that implements
+// SMTPClient defines a SMTP mail client structure that implements
 // `mailer.Mailer` interface.
-type SmtpClient struct {
-	Host       string
-	Port       int
-	Username   string
-	Password   string
-	Tls        bool
-	AuthMethod string // default to "PLAIN"
+type SMTPClient struct {
+	onSend *hook.Hook[*SendEvent]
+
+	TLS      bool
+	Port     int
+	Host     string
+	Username string
+	Password string
+
+	// SMTP auth method to use
+	// (if not explicitly set, defaults to "PLAIN")
+	AuthMethod string
+
+	// LocalName is optional domain name used for the EHLO/HELO exchange
+	// (if not explicitly set, defaults to "localhost").
+	//
+	// This is required only by some SMTP servers, such as Gmail SMTP-relay.
+	LocalName string
 }
 
-// Send implements `mailer.Mailer` interface.
-func (c *SmtpClient) Send(m *Message) error {
+// OnSend implements [mailer.SendInterceptor] interface.
+func (c *SMTPClient) OnSend() *hook.Hook[*SendEvent] {
+	if c.onSend == nil {
+		c.onSend = &hook.Hook[*SendEvent]{}
+	}
+	return c.onSend
+}
+
+// Send implements [mailer.Mailer] interface.
+func (c *SMTPClient) Send(m *Message) error {
+	if c.onSend != nil {
+		return c.onSend.Trigger(&SendEvent{Message: m}, func(e *SendEvent) error {
+			return c.send(e.Message)
+		})
+	}
+
+	return c.send(m)
+}
+
+func (c *SMTPClient) send(m *Message) error {
 	var smtpAuth smtp.Auth
 	if c.Username != "" || c.Password != "" {
 		switch c.AuthMethod {
-		case SmtpAuthLogin:
+		case SMTPAuthLogin:
 			smtpAuth = &smtpLoginAuth{c.Username, c.Password}
 		default:
 			smtpAuth = smtp.PlainAuth("", c.Username, c.Password, c.Host)
@@ -61,7 +72,7 @@ func (c *SmtpClient) Send(m *Message) error {
 
 	// create mail instance
 	var yak *mailyak.MailYak
-	if c.Tls {
+	if c.TLS {
 		var tlsErr error
 		yak, tlsErr = mailyak.NewWithTLS(fmt.Sprintf("%s:%d", c.Host, c.Port), smtpAuth, nil)
 		if tlsErr != nil {
@@ -69,6 +80,10 @@ func (c *SmtpClient) Send(m *Message) error {
 		}
 	} else {
 		yak = mailyak.New(fmt.Sprintf("%s:%d", c.Host, c.Port), smtpAuth)
+	}
+
+	if c.LocalName != "" {
+		yak.LocalName(c.LocalName)
 	}
 
 	if m.From.Name != "" {
@@ -99,9 +114,22 @@ func (c *SmtpClient) Send(m *Message) error {
 		yak.Cc(addressesToStrings(m.Cc, true)...)
 	}
 
-	// add attachements (if any)
+	// add regular attachements (if any)
 	for name, data := range m.Attachments {
-		yak.Attach(name, data)
+		r, mime, err := detectReaderMimeType(data)
+		if err != nil {
+			return err
+		}
+		yak.AttachWithMimeType(name, r, mime)
+	}
+
+	// add inline attachments (if any)
+	for name, data := range m.InlineAttachments {
+		r, mime, err := detectReaderMimeType(data)
+		if err != nil {
+			return err
+		}
+		yak.AttachInlineWithMimeType(name, r, mime)
 	}
 
 	// add custom headers (if any)
