@@ -50,27 +50,30 @@ func flyServer(cmd *coral.Command, args []string) {
 		DefaultDataDir: configDir,
 	})
 
-	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+	app.OnServe().BindFunc(func(serveEvent *core.ServeEvent) error {
 		public, _ := fs.Sub(embeddy.GetNextFS(), "public")
 		assetHandler := http.FileServer(http.FS(public))
-		
+
 		// Serve static files
-		se.Router.GET("/*", func(re *core.RequestEvent) error {
+		serveEvent.Router.GET("/*", func(re *core.RequestEvent) error {
 			assetHandler.ServeHTTP(re.Response, re.Request)
+
 			return nil
 		})
 
 		// Switcher API endpoint
-		se.Router.POST("/api/switcher/*", func(re *core.RequestEvent) error {
+		serveEvent.Router.POST("/api/switcher/*", func(re *core.RequestEvent) error {
 			switcher := &Switcher{}
 			switcher.ServeHTTP(re.Response, re.Request)
+
 			return nil
 		})
 
 		// Lighting API endpoint
-		se.Router.POST("/api/light/*", func(re *core.RequestEvent) error {
+		serveEvent.Router.POST("/api/light/*", func(re *core.RequestEvent) error {
 			lighting := &Lighting{}
 			lighting.ServeHTTP(re.Response, re.Request)
+
 			return nil
 		})
 

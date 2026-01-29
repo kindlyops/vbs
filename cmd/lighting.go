@@ -52,30 +52,33 @@ func lightingBridge(cmd *coral.Command, args []string) {
 
 	log.Debug().Msgf("Starting HTTP server at: http://%s\n", listenAddr)
 	app := pocketbase.New()
-	
-	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+
+	app.OnServe().BindFunc(func(serveEvent *core.ServeEvent) error {
 		// Serve static files
-		se.Router.GET("/*", func(re *core.RequestEvent) error {
+		serveEvent.Router.GET("/*", func(re *core.RequestEvent) error {
 			assetHandler.ServeHTTP(re.Response, re.Request)
+
 			return nil
 		})
 
 		// Switcher API endpoint
-		se.Router.POST("/api/switcher/*", func(re *core.RequestEvent) error {
+		serveEvent.Router.POST("/api/switcher/*", func(re *core.RequestEvent) error {
 			switcher := &Switcher{}
 			switcher.ServeHTTP(re.Response, re.Request)
+
 			return nil
 		})
 
 		// Lighting API endpoint
-		se.Router.POST("/api/light/*", func(re *core.RequestEvent) error {
+		serveEvent.Router.POST("/api/light/*", func(re *core.RequestEvent) error {
 			lighting := &Lighting{}
 			lighting.ServeHTTP(re.Response, re.Request)
+
 			return nil
 		})
 
 		// Override the server address
-		se.Server.Addr = listenAddr
+		serveEvent.Server.Addr = listenAddr
 
 		return nil
 	})
