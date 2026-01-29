@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package echo
 
 import (
@@ -7,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -16,181 +20,6 @@ import (
 	"sync"
 )
 
-// Context represents the context of the current HTTP request. It holds request and
-// response objects, path, path parameters, data and registered handler.
-type Context interface {
-	// Request returns `*http.Request`.
-	Request() *http.Request
-
-	// SetRequest sets `*http.Request`.
-	SetRequest(r *http.Request)
-
-	// SetResponse sets `*Response`.
-	SetResponse(r *Response)
-
-	// Response returns `*Response`.
-	Response() *Response
-
-	// IsTLS returns true if HTTP connection is TLS otherwise false.
-	IsTLS() bool
-
-	// IsWebSocket returns true if HTTP connection is WebSocket otherwise false.
-	IsWebSocket() bool
-
-	// Scheme returns the HTTP protocol scheme, `http` or `https`.
-	Scheme() string
-
-	// RealIP returns the client's network address based on `X-Forwarded-For`
-	// or `X-Real-IP` request header.
-	// The behavior can be configured using `Echo#IPExtractor`.
-	RealIP() string
-
-	// RouteInfo returns current request route information. Method, Path, Name and params if they exist for matched route.
-	// In case of 404 (route not found) and 405 (method not allowed) RouteInfo returns generic struct for these cases.
-	RouteInfo() RouteInfo
-
-	// Path returns the registered path for the handler.
-	Path() string
-
-	// PathParam returns path parameter by name.
-	PathParam(name string) string
-
-	// PathParams returns path parameter values.
-	PathParams() PathParams
-
-	// SetPathParams sets path parameters for current request.
-	SetPathParams(params PathParams)
-
-	// QueryParam returns the query param for the provided name.
-	QueryParam(name string) string
-
-	// QueryParamDefault returns the query param or default value for the provided name.
-	QueryParamDefault(name, defaultValue string) string
-
-	// QueryParams returns the query parameters as `url.Values`.
-	QueryParams() url.Values
-
-	// QueryString returns the URL query string.
-	QueryString() string
-
-	// FormValue returns the form field value for the provided name.
-	FormValue(name string) string
-
-	// FormValueDefault returns the form field value or default value for the provided name.
-	FormValueDefault(name, defaultValue string) string
-
-	// FormValues returns the form field values as `url.Values`.
-	FormValues() (url.Values, error)
-
-	// FormFile returns the multipart form file for the provided name.
-	FormFile(name string) (*multipart.FileHeader, error)
-
-	// MultipartForm returns the multipart form.
-	MultipartForm() (*multipart.Form, error)
-
-	// Cookie returns the named cookie provided in the request.
-	Cookie(name string) (*http.Cookie, error)
-
-	// SetCookie adds a `Set-Cookie` header in HTTP response.
-	SetCookie(cookie *http.Cookie)
-
-	// Cookies returns the HTTP cookies sent with the request.
-	Cookies() []*http.Cookie
-
-	// Get retrieves data from the context.
-	Get(key string) interface{}
-
-	// Set saves data in the context.
-	Set(key string, val interface{})
-
-	// Bind binds the request body into provided type `i`. The default binder
-	// does it based on Content-Type header.
-	Bind(i interface{}) error
-
-	// Validate validates provided `i`. It is usually called after `Context#Bind()`.
-	// Validator must be registered using `Echo#Validator`.
-	Validate(i interface{}) error
-
-	// Render renders a template with data and sends a text/html response with status
-	// code. Renderer must be registered using `Echo.Renderer`.
-	Render(code int, name string, data interface{}) error
-
-	// HTML sends an HTTP response with status code.
-	HTML(code int, html string) error
-
-	// HTMLBlob sends an HTTP blob response with status code.
-	HTMLBlob(code int, b []byte) error
-
-	// String sends a string response with status code.
-	String(code int, s string) error
-
-	// JSON sends a JSON response with status code.
-	JSON(code int, i interface{}) error
-
-	// JSONPretty sends a pretty-print JSON with status code.
-	JSONPretty(code int, i interface{}, indent string) error
-
-	// JSONBlob sends a JSON blob response with status code.
-	JSONBlob(code int, b []byte) error
-
-	// JSONP sends a JSONP response with status code. It uses `callback` to construct
-	// the JSONP payload.
-	JSONP(code int, callback string, i interface{}) error
-
-	// JSONPBlob sends a JSONP blob response with status code. It uses `callback`
-	// to construct the JSONP payload.
-	JSONPBlob(code int, callback string, b []byte) error
-
-	// XML sends an XML response with status code.
-	XML(code int, i interface{}) error
-
-	// XMLPretty sends a pretty-print XML with status code.
-	XMLPretty(code int, i interface{}, indent string) error
-
-	// XMLBlob sends an XML blob response with status code.
-	XMLBlob(code int, b []byte) error
-
-	// Blob sends a blob response with status code and content type.
-	Blob(code int, contentType string, b []byte) error
-
-	// Stream sends a streaming response with status code and content type.
-	Stream(code int, contentType string, r io.Reader) error
-
-	// File sends a response with the content of the file.
-	File(file string) error
-
-	// FileFS sends a response with the content of the file from given filesystem.
-	FileFS(file string, filesystem fs.FS) error
-
-	// Attachment sends a response as attachment, prompting client to save the
-	// file.
-	Attachment(file string, name string) error
-
-	// Inline sends a response as inline, opening the file in the browser.
-	Inline(file string, name string) error
-
-	// NoContent sends a response with no body and a status code.
-	NoContent(code int) error
-
-	// Redirect redirects the request to a provided URL with status code.
-	Redirect(code int, url string) error
-
-	// Echo returns the `Echo` instance.
-	Echo() *Echo
-}
-
-// ServableContext is interface that Echo context implementation must implement to be usable in middleware/handlers and
-// be able to be routed by Router.
-type ServableContext interface {
-	Context         // minimal set of methods for middlewares and handler
-	RoutableContext // minimal set for routing. These methods should not be accessed in middlewares/handlers
-
-	// Reset resets the context after request completes. It must be called along
-	// with `Echo#AcquireContext()` and `Echo#ReleaseContext()`.
-	// See `Echo#ServeHTTP()`
-	Reset(r *http.Request, w http.ResponseWriter)
-}
-
 const (
 	// ContextKeyHeaderAllow is set by Router for getting value for `Allow` header in later stages of handler call chain.
 	// Allow header is mandatory for status 405 (method not found) and useful for OPTIONS method requests.
@@ -199,100 +28,137 @@ const (
 )
 
 const (
-	defaultMemory = 32 << 20 // 32 MB
-	indexPage     = "index.html"
-	defaultIndent = "  "
+	// defaultMemory is default value for memory limit that is used when
+	// parsing multipart forms (See (*http.Request).ParseMultipartForm)
+	defaultMemory int64 = 32 << 20 // 32 MB
+	indexPage           = "index.html"
 )
 
-// DefaultContext is default implementation of Context interface and can be embedded into structs to compose
-// new Contexts with extended/modified behaviour.
-type DefaultContext struct {
-	request  *http.Request
-	response *Response
+// Context represents the context of the current HTTP request. It holds request and
+// response objects, path, path parameters, data and registered handler.
+type Context struct {
+	request     *http.Request
+	orgResponse *Response
+	response    http.ResponseWriter
+	query       url.Values
 
-	route RouteInfo
-	path  string
+	// formParseMaxMemory is used for http.Request.ParseMultipartForm
+	formParseMaxMemory int64
 
-	// pathParams holds path/uri parameters determined by Router. Lifecycle is handled by Echo to reduce allocations.
-	pathParams *PathParams
-	// currentParams hold path parameters set by non-Echo implementation (custom middlewares, handlers) during the lifetime of Request.
-	// Lifecycle is not handle by Echo and could have excess allocations per served Request
-	currentParams PathParams
+	route      *RouteInfo
+	pathValues *PathValues
 
-	query url.Values
-	store Map
-	echo  *Echo
-	lock  sync.RWMutex
+	store  map[string]any
+	echo   *Echo
+	logger *slog.Logger
+
+	path string
+	lock sync.RWMutex
 }
 
-// NewDefaultContext creates new instance of DefaultContext.
-// Argument pathParamAllocSize must be value that is stored in Echo.contextPathParamAllocSize field and is used
-// to preallocate PathParams slice.
-func NewDefaultContext(e *Echo, pathParamAllocSize int) *DefaultContext {
-	p := make(PathParams, pathParamAllocSize)
-	return &DefaultContext{
-		pathParams: &p,
-		store:      make(Map),
-		echo:       e,
+// NewContext returns a new Context instance.
+//
+// Note: request,response and e can be left to nil as Echo.ServeHTTP will call c.Reset(req,resp) anyway
+// these arguments are useful when creating context for tests and cases like that.
+func NewContext(r *http.Request, w http.ResponseWriter, opts ...any) *Context {
+	var e *Echo
+	for _, opt := range opts {
+		switch v := opt.(type) {
+		case *Echo:
+			e = v
+		}
 	}
+	return newContext(r, w, e)
+}
+
+func newContext(r *http.Request, w http.ResponseWriter, e *Echo) *Context {
+	c := &Context{
+		pathValues: nil,
+		store:      make(map[string]any),
+		echo:       e,
+		logger:     nil,
+	}
+	var logger *slog.Logger
+	paramLen := int32(0)
+	formParseMaxMemory := defaultMemory
+	if e != nil {
+		paramLen = e.contextPathParamAllocSize.Load()
+		logger = e.Logger
+		formParseMaxMemory = e.formParseMaxMemory
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	c.logger = logger
+	p := make(PathValues, 0, paramLen)
+	c.pathValues = &p
+
+	c.SetRequest(r)
+	c.orgResponse = NewResponse(w, logger)
+	c.response = c.orgResponse
+	c.formParseMaxMemory = formParseMaxMemory
+	return c
 }
 
 // Reset resets the context after request completes. It must be called along
 // with `Echo#AcquireContext()` and `Echo#ReleaseContext()`.
 // See `Echo#ServeHTTP()`
-func (c *DefaultContext) Reset(r *http.Request, w http.ResponseWriter) {
+func (c *Context) Reset(r *http.Request, w http.ResponseWriter) {
 	c.request = r
-	c.response.reset(w)
+	c.orgResponse.reset(w)
+	c.response = c.orgResponse
 	c.query = nil
 	c.store = nil
+	c.logger = c.echo.Logger
 
 	c.route = nil
 	c.path = ""
-	// NOTE: Don't reset because it has to have length of c.echo.contextPathParamAllocSize at all times
-	*c.pathParams = (*c.pathParams)[:0]
-	c.currentParams = nil
+	// NOTE: empty by setting length to 0. PathValues has to have capacity of c.echo.contextPathParamAllocSize at all times
+	*c.pathValues = (*c.pathValues)[:0]
 }
 
-func (c *DefaultContext) writeContentType(value string) {
-	header := c.Response().Header()
+func (c *Context) writeContentType(value string) {
+	header := c.response.Header()
 	if header.Get(HeaderContentType) == "" {
 		header.Set(HeaderContentType, value)
 	}
 }
 
 // Request returns `*http.Request`.
-func (c *DefaultContext) Request() *http.Request {
+func (c *Context) Request() *http.Request {
 	return c.request
 }
 
 // SetRequest sets `*http.Request`.
-func (c *DefaultContext) SetRequest(r *http.Request) {
+func (c *Context) SetRequest(r *http.Request) {
 	c.request = r
 }
 
 // Response returns `*Response`.
-func (c *DefaultContext) Response() *Response {
+func (c *Context) Response() http.ResponseWriter {
 	return c.response
 }
 
-// SetResponse sets `*Response`.
-func (c *DefaultContext) SetResponse(r *Response) {
+// SetResponse sets `*http.ResponseWriter`. Some context methods and/or middleware require that given ResponseWriter implements following
+// method `Unwrap() http.ResponseWriter` which eventually should return *echo.Response instance.
+func (c *Context) SetResponse(r http.ResponseWriter) {
 	c.response = r
 }
 
 // IsTLS returns true if HTTP connection is TLS otherwise false.
-func (c *DefaultContext) IsTLS() bool {
+func (c *Context) IsTLS() bool {
 	return c.request.TLS != nil
 }
 
 // IsWebSocket returns true if HTTP connection is WebSocket otherwise false.
-func (c *DefaultContext) IsWebSocket() bool {
+func (c *Context) IsWebSocket() bool {
 	upgrade := c.request.Header.Get(HeaderUpgrade)
-	return strings.EqualFold(upgrade, "websocket")
+	connection := c.request.Header.Get(HeaderConnection)
+	return strings.EqualFold(upgrade, "websocket") && strings.Contains(strings.ToLower(connection), "upgrade")
 }
 
 // Scheme returns the HTTP protocol scheme, `http` or `https`.
-func (c *DefaultContext) Scheme() string {
+func (c *Context) Scheme() string {
 	// Can't use `r.Request.URL.Scheme`
 	// See: https://groups.google.com/forum/#!topic/golang-nuts/pMUkBlQBDF0
 	if c.IsTLS() {
@@ -316,7 +182,7 @@ func (c *DefaultContext) Scheme() string {
 // RealIP returns the client's network address based on `X-Forwarded-For`
 // or `X-Real-IP` request header.
 // The behavior can be configured using `Echo#IPExtractor`.
-func (c *DefaultContext) RealIP() string {
+func (c *Context) RealIP() string {
 	if c.echo != nil && c.echo.IPExtractor != nil {
 		return c.echo.IPExtractor(c.request)
 	}
@@ -324,11 +190,16 @@ func (c *DefaultContext) RealIP() string {
 	if ip := c.request.Header.Get(HeaderXForwardedFor); ip != "" {
 		i := strings.IndexAny(ip, ",")
 		if i > 0 {
-			return strings.TrimSpace(ip[:i])
+			xffip := strings.TrimSpace(ip[:i])
+			xffip = strings.TrimPrefix(xffip, "[")
+			xffip = strings.TrimSuffix(xffip, "]")
+			return xffip
 		}
 		return ip
 	}
 	if ip := c.request.Header.Get(HeaderXRealIP); ip != "" {
+		ip = strings.TrimPrefix(ip, "[")
+		ip = strings.TrimSuffix(ip, "]")
 		return ip
 	}
 	ra, _, _ := net.SplitHostPort(c.request.RemoteAddr)
@@ -336,78 +207,94 @@ func (c *DefaultContext) RealIP() string {
 }
 
 // Path returns the registered path for the handler.
-func (c *DefaultContext) Path() string {
+func (c *Context) Path() string {
 	return c.path
 }
 
 // SetPath sets the registered path for the handler.
-func (c *DefaultContext) SetPath(p string) {
+func (c *Context) SetPath(p string) {
 	c.path = p
 }
 
 // RouteInfo returns current request route information. Method, Path, Name and params if they exist for matched route.
-// In case of 404 (route not found) and 405 (method not allowed) RouteInfo returns generic struct for these cases.
-func (c *DefaultContext) RouteInfo() RouteInfo {
-	return c.route
-}
-
-// SetRouteInfo sets the route info of this request to the context.
-func (c *DefaultContext) SetRouteInfo(ri RouteInfo) {
-	c.route = ri
-}
-
-// RawPathParams returns raw path pathParams value. Allocation of PathParams is handled by Context.
-func (c *DefaultContext) RawPathParams() *PathParams {
-	return c.pathParams
-}
-
-// SetRawPathParams replaces any existing param values with new values for this context lifetime (request).
 //
-// DO NOT USE!
-// Do not set any other value than what you got from RawPathParams as allocation of PathParams is handled by Context.
-// If you mess up size of pathParams size your application will panic/crash during routing
-func (c *DefaultContext) SetRawPathParams(params *PathParams) {
-	c.pathParams = params
-}
-
-// PathParam returns path parameter by name.
-func (c *DefaultContext) PathParam(name string) string {
-	if c.currentParams != nil {
-		return c.currentParams.Get(name, "")
+// RouteInfo returns generic "empty" struct for these cases:
+// * Context is accessed before Routing is done. For example inside Pre middlewares (`e.Pre()`)
+// * Router did not find matching route - 404 (route not found)
+// * Router did not find matching route with same method - 405 (method not allowed)
+func (c *Context) RouteInfo() RouteInfo {
+	if c.route != nil {
+		return c.route.Clone()
 	}
-
-	return c.pathParams.Get(name, "")
+	return RouteInfo{}
 }
 
-// PathParamDefault does not exist as expecting empty path param makes no sense
+// Param returns path parameter by name.
+func (c *Context) Param(name string) string {
+	return c.pathValues.GetOr(name, "")
+}
 
-// PathParams returns path parameter values.
-func (c *DefaultContext) PathParams() PathParams {
-	if c.currentParams != nil {
-		return c.currentParams
+// ParamOr returns the path parameter or default value for the provided name.
+//
+// Notes for DefaultRouter implementation:
+// Path parameter could be empty for cases like that:
+// * route `/release-:version/bin` and request URL is `/release-/bin`
+// * route `/api/:version/image.jpg` and request URL is `/api//image.jpg`
+// but not when path parameter is last part of route path
+// * route `/download/file.:ext` will not match request `/download/file.`
+func (c *Context) ParamOr(name, defaultValue string) string {
+	return c.pathValues.GetOr(name, defaultValue)
+}
+
+// PathValues returns path parameter values.
+func (c *Context) PathValues() PathValues {
+	return *c.pathValues
+}
+
+// SetPathValues sets path parameters for current request.
+func (c *Context) SetPathValues(pathValues PathValues) {
+	if pathValues == nil {
+		panic("context SetPathValues called with nil PathValues")
 	}
-
-	result := make(PathParams, len(*c.pathParams))
-	copy(result, *c.pathParams)
-	return result
+	c.setPathValues(&pathValues)
 }
 
-// SetPathParams sets path parameters for current request.
-func (c *DefaultContext) SetPathParams(params PathParams) {
-	c.currentParams = params
+// InitializeRoute sets the route related variables of this request to the context.
+func (c *Context) InitializeRoute(ri *RouteInfo, pathValues *PathValues) {
+	c.route = ri
+	c.path = ri.Path
+	c.setPathValues(pathValues)
+}
+
+func (c *Context) setPathValues(pv *PathValues) {
+	// Router accesses c.pathValues by index and may resize it to full capacity during routing
+	// for that to work without going out-of-bounds we must make sure that c.pathValues slice is not replaced with smaller
+	// slice than Router can set when routing Route with maximum amount of parameters.
+	pathValues := c.pathValues
+	if cap(*c.pathValues) < len(*pv) {
+		// normally we should not end up here. pathValues is normally sized to Echo.contextPathParamAllocSize which should not
+		// be smaller than anything router knows as maximum path parameter count to be.
+		tmp := make(PathValues, len(*pv))
+		c.pathValues = &tmp
+		pathValues = c.pathValues
+	} else if len(*c.pathValues) != len(*pv) {
+		*pathValues = (*pathValues)[0:len(*pv)] // resize slice to given params length for copy to work
+	}
+	copy(*pathValues, *pv)
 }
 
 // QueryParam returns the query param for the provided name.
-func (c *DefaultContext) QueryParam(name string) string {
+func (c *Context) QueryParam(name string) string {
 	if c.query == nil {
 		c.query = c.request.URL.Query()
 	}
 	return c.query.Get(name)
 }
 
-// QueryParamDefault returns the query param or default value for the provided name.
-// Note: QueryParamDefault does not distinguish if form had no value by that name or value was empty string
-func (c *DefaultContext) QueryParamDefault(name, defaultValue string) string {
+// QueryParamOr returns the query param or default value for the provided name.
+// Note: QueryParamOr does not distinguish if query had no value by that name or value was empty string
+// This means URLs `/test?search=` and `/test` would both return `1` for `c.QueryParamOr("search", "1")`
+func (c *Context) QueryParamOr(name, defaultValue string) string {
 	value := c.QueryParam(name)
 	if value == "" {
 		value = defaultValue
@@ -416,7 +303,7 @@ func (c *DefaultContext) QueryParamDefault(name, defaultValue string) string {
 }
 
 // QueryParams returns the query parameters as `url.Values`.
-func (c *DefaultContext) QueryParams() url.Values {
+func (c *Context) QueryParams() url.Values {
 	if c.query == nil {
 		c.query = c.request.URL.Query()
 	}
@@ -424,18 +311,18 @@ func (c *DefaultContext) QueryParams() url.Values {
 }
 
 // QueryString returns the URL query string.
-func (c *DefaultContext) QueryString() string {
+func (c *Context) QueryString() string {
 	return c.request.URL.RawQuery
 }
 
 // FormValue returns the form field value for the provided name.
-func (c *DefaultContext) FormValue(name string) string {
+func (c *Context) FormValue(name string) string {
 	return c.request.FormValue(name)
 }
 
-// FormValueDefault returns the form field value or default value for the provided name.
-// Note: FormValueDefault does not distinguish if form had no value by that name or value was empty string
-func (c *DefaultContext) FormValueDefault(name, defaultValue string) string {
+// FormValueOr returns the form field value or default value for the provided name.
+// Note: FormValueOr does not distinguish if form had no value by that name or value was empty string
+func (c *Context) FormValueOr(name, defaultValue string) string {
 	value := c.FormValue(name)
 	if value == "" {
 		value = defaultValue
@@ -444,9 +331,9 @@ func (c *DefaultContext) FormValueDefault(name, defaultValue string) string {
 }
 
 // FormValues returns the form field values as `url.Values`.
-func (c *DefaultContext) FormValues() (url.Values, error) {
+func (c *Context) FormValues() (url.Values, error) {
 	if strings.HasPrefix(c.request.Header.Get(HeaderContentType), MIMEMultipartForm) {
-		if err := c.request.ParseMultipartForm(defaultMemory); err != nil {
+		if err := c.request.ParseMultipartForm(c.formParseMaxMemory); err != nil {
 			return nil, err
 		}
 	} else {
@@ -458,63 +345,64 @@ func (c *DefaultContext) FormValues() (url.Values, error) {
 }
 
 // FormFile returns the multipart form file for the provided name.
-func (c *DefaultContext) FormFile(name string) (*multipart.FileHeader, error) {
+func (c *Context) FormFile(name string) (*multipart.FileHeader, error) {
 	f, fh, err := c.request.FormFile(name)
 	if err != nil {
 		return nil, err
 	}
-	f.Close()
+	_ = f.Close()
 	return fh, nil
 }
 
 // MultipartForm returns the multipart form.
-func (c *DefaultContext) MultipartForm() (*multipart.Form, error) {
-	err := c.request.ParseMultipartForm(defaultMemory)
+func (c *Context) MultipartForm() (*multipart.Form, error) {
+	err := c.request.ParseMultipartForm(c.formParseMaxMemory)
 	return c.request.MultipartForm, err
 }
 
 // Cookie returns the named cookie provided in the request.
-func (c *DefaultContext) Cookie(name string) (*http.Cookie, error) {
+func (c *Context) Cookie(name string) (*http.Cookie, error) {
 	return c.request.Cookie(name)
 }
 
 // SetCookie adds a `Set-Cookie` header in HTTP response.
-func (c *DefaultContext) SetCookie(cookie *http.Cookie) {
+func (c *Context) SetCookie(cookie *http.Cookie) {
 	http.SetCookie(c.Response(), cookie)
 }
 
 // Cookies returns the HTTP cookies sent with the request.
-func (c *DefaultContext) Cookies() []*http.Cookie {
+func (c *Context) Cookies() []*http.Cookie {
 	return c.request.Cookies()
 }
 
 // Get retrieves data from the context.
-func (c *DefaultContext) Get(key string) interface{} {
+// Method returns any(nil) when key does not exist which is different from typed nil (eg. []byte(nil)).
+func (c *Context) Get(key string) any {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return c.store[key]
 }
 
 // Set saves data in the context.
-func (c *DefaultContext) Set(key string, val interface{}) {
+func (c *Context) Set(key string, val any) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	if c.store == nil {
-		c.store = make(Map)
+		c.store = make(map[string]any)
 	}
 	c.store[key] = val
 }
 
-// Bind binds the request body into provided type `i`. The default binder
-// does it based on Content-Type header.
-func (c *DefaultContext) Bind(i interface{}) error {
+// Bind binds path params, query params and the request body into provided type `i`. The default binder
+// binds body based on Content-Type header.
+func (c *Context) Bind(i any) error {
 	return c.echo.Binder.Bind(c, i)
 }
 
 // Validate validates provided `i`. It is usually called after `Context#Bind()`.
 // Validator must be registered using `Echo#Validator`.
-func (c *DefaultContext) Validate(i interface{}) error {
+func (c *Context) Validate(i any) error {
 	if c.echo.Validator == nil {
 		return ErrValidatorNotRegistered
 	}
@@ -523,43 +411,48 @@ func (c *DefaultContext) Validate(i interface{}) error {
 
 // Render renders a template with data and sends a text/html response with status
 // code. Renderer must be registered using `Echo.Renderer`.
-func (c *DefaultContext) Render(code int, name string, data interface{}) (err error) {
+func (c *Context) Render(code int, name string, data any) (err error) {
 	if c.echo.Renderer == nil {
 		return ErrRendererNotRegistered
 	}
+	// as Renderer.Render can fail, and in that case we need to delay sending status code to the client until
+	// (global) error handler decides the correct status code for the error to be sent to the client, so we need to write
+	//  the rendered template to the buffer first.
+	//
+	// html.Template.ExecuteTemplate() documentations writes:
+	// > If an error occurs executing the template or writing its output,
+	// > execution stops, but partial results may already have been written to
+	// > the output writer.
+
 	buf := new(bytes.Buffer)
-	if err = c.echo.Renderer.Render(buf, name, data, c); err != nil {
+	if err = c.echo.Renderer.Render(c, buf, name, data); err != nil {
 		return
 	}
 	return c.HTMLBlob(code, buf.Bytes())
 }
 
 // HTML sends an HTTP response with status code.
-func (c *DefaultContext) HTML(code int, html string) (err error) {
+func (c *Context) HTML(code int, html string) (err error) {
 	return c.HTMLBlob(code, []byte(html))
 }
 
 // HTMLBlob sends an HTTP blob response with status code.
-func (c *DefaultContext) HTMLBlob(code int, b []byte) (err error) {
+func (c *Context) HTMLBlob(code int, b []byte) (err error) {
 	return c.Blob(code, MIMETextHTMLCharsetUTF8, b)
 }
 
 // String sends a string response with status code.
-func (c *DefaultContext) String(code int, s string) (err error) {
+func (c *Context) String(code int, s string) (err error) {
 	return c.Blob(code, MIMETextPlainCharsetUTF8, []byte(s))
 }
 
-func (c *DefaultContext) jsonPBlob(code int, callback string, i interface{}) (err error) {
-	indent := ""
-	if _, pretty := c.QueryParams()["pretty"]; c.echo.Debug || pretty {
-		indent = defaultIndent
-	}
+func (c *Context) jsonPBlob(code int, callback string, i any) (err error) {
 	c.writeContentType(MIMEApplicationJavaScriptCharsetUTF8)
 	c.response.WriteHeader(code)
 	if _, err = c.response.Write([]byte(callback + "(")); err != nil {
 		return
 	}
-	if err = c.echo.JSONSerializer.Serialize(c, i, indent); err != nil {
+	if err = c.echo.JSONSerializer.Serialize(c, i, ""); err != nil {
 		return
 	}
 	if _, err = c.response.Write([]byte(");")); err != nil {
@@ -568,40 +461,47 @@ func (c *DefaultContext) jsonPBlob(code int, callback string, i interface{}) (er
 	return
 }
 
-func (c *DefaultContext) json(code int, i interface{}, indent string) error {
-	c.writeContentType(MIMEApplicationJSONCharsetUTF8)
-	c.response.Status = code
+func (c *Context) json(code int, i any, indent string) error {
+	c.writeContentType(MIMEApplicationJSON)
+
+	// as JSONSerializer.Serialize can fail, and in that case we need to delay sending status code to the client until
+	// (global) error handler decides correct status code for the error to be sent to the client.
+	// For that we need to use writer that can store the proposed status code until the first Write is called.
+	if r, err := UnwrapResponse(c.response); err == nil {
+		r.Status = code
+	} else {
+		resp := c.Response()
+		c.SetResponse(&delayedStatusWriter{ResponseWriter: resp, status: code})
+		defer c.SetResponse(resp)
+	}
+
 	return c.echo.JSONSerializer.Serialize(c, i, indent)
 }
 
 // JSON sends a JSON response with status code.
-func (c *DefaultContext) JSON(code int, i interface{}) (err error) {
-	indent := ""
-	if _, pretty := c.QueryParams()["pretty"]; c.echo.Debug || pretty {
-		indent = defaultIndent
-	}
-	return c.json(code, i, indent)
+func (c *Context) JSON(code int, i any) (err error) {
+	return c.json(code, i, "")
 }
 
 // JSONPretty sends a pretty-print JSON with status code.
-func (c *DefaultContext) JSONPretty(code int, i interface{}, indent string) (err error) {
+func (c *Context) JSONPretty(code int, i any, indent string) (err error) {
 	return c.json(code, i, indent)
 }
 
 // JSONBlob sends a JSON blob response with status code.
-func (c *DefaultContext) JSONBlob(code int, b []byte) (err error) {
-	return c.Blob(code, MIMEApplicationJSONCharsetUTF8, b)
+func (c *Context) JSONBlob(code int, b []byte) (err error) {
+	return c.Blob(code, MIMEApplicationJSON, b)
 }
 
 // JSONP sends a JSONP response with status code. It uses `callback` to construct
 // the JSONP payload.
-func (c *DefaultContext) JSONP(code int, callback string, i interface{}) (err error) {
+func (c *Context) JSONP(code int, callback string, i any) (err error) {
 	return c.jsonPBlob(code, callback, i)
 }
 
 // JSONPBlob sends a JSONP blob response with status code. It uses `callback`
 // to construct the JSONP payload.
-func (c *DefaultContext) JSONPBlob(code int, callback string, b []byte) (err error) {
+func (c *Context) JSONPBlob(code int, callback string, b []byte) (err error) {
 	c.writeContentType(MIMEApplicationJavaScriptCharsetUTF8)
 	c.response.WriteHeader(code)
 	if _, err = c.response.Write([]byte(callback + "(")); err != nil {
@@ -614,7 +514,7 @@ func (c *DefaultContext) JSONPBlob(code int, callback string, b []byte) (err err
 	return
 }
 
-func (c *DefaultContext) xml(code int, i interface{}, indent string) (err error) {
+func (c *Context) xml(code int, i any, indent string) (err error) {
 	c.writeContentType(MIMEApplicationXMLCharsetUTF8)
 	c.response.WriteHeader(code)
 	enc := xml.NewEncoder(c.response)
@@ -628,21 +528,17 @@ func (c *DefaultContext) xml(code int, i interface{}, indent string) (err error)
 }
 
 // XML sends an XML response with status code.
-func (c *DefaultContext) XML(code int, i interface{}) (err error) {
-	indent := ""
-	if _, pretty := c.QueryParams()["pretty"]; c.echo.Debug || pretty {
-		indent = defaultIndent
-	}
-	return c.xml(code, i, indent)
+func (c *Context) XML(code int, i any) (err error) {
+	return c.xml(code, i, "")
 }
 
 // XMLPretty sends a pretty-print XML with status code.
-func (c *DefaultContext) XMLPretty(code int, i interface{}, indent string) (err error) {
+func (c *Context) XMLPretty(code int, i any, indent string) (err error) {
 	return c.xml(code, i, indent)
 }
 
 // XMLBlob sends an XML blob response with status code.
-func (c *DefaultContext) XMLBlob(code int, b []byte) (err error) {
+func (c *Context) XMLBlob(code int, b []byte) (err error) {
 	c.writeContentType(MIMEApplicationXMLCharsetUTF8)
 	c.response.WriteHeader(code)
 	if _, err = c.response.Write([]byte(xml.Header)); err != nil {
@@ -653,7 +549,7 @@ func (c *DefaultContext) XMLBlob(code int, b []byte) (err error) {
 }
 
 // Blob sends a blob response with status code and content type.
-func (c *DefaultContext) Blob(code int, contentType string, b []byte) (err error) {
+func (c *Context) Blob(code int, contentType string, b []byte) (err error) {
 	c.writeContentType(contentType)
 	c.response.WriteHeader(code)
 	_, err = c.response.Write(b)
@@ -661,7 +557,7 @@ func (c *DefaultContext) Blob(code int, contentType string, b []byte) (err error
 }
 
 // Stream sends a streaming response with status code and content type.
-func (c *DefaultContext) Stream(code int, contentType string, r io.Reader) (err error) {
+func (c *Context) Stream(code int, contentType string, r io.Reader) (err error) {
 	c.writeContentType(contentType)
 	c.response.WriteHeader(code)
 	_, err = io.Copy(c.response, r)
@@ -669,7 +565,7 @@ func (c *DefaultContext) Stream(code int, contentType string, r io.Reader) (err 
 }
 
 // File sends a response with the content of the file.
-func (c *DefaultContext) File(file string) error {
+func (c *Context) File(file string) error {
 	return fsFile(c, file, c.echo.Filesystem)
 }
 
@@ -678,11 +574,11 @@ func (c *DefaultContext) File(file string) error {
 // When dealing with `embed.FS` use `fs := echo.MustSubFS(fs, "rootDirectory") to create sub fs which uses necessary
 // prefix for directory path. This is necessary as `//go:embed assets/images` embeds files with paths
 // including `assets/images` as their prefix.
-func (c *DefaultContext) FileFS(file string, filesystem fs.FS) error {
+func (c *Context) FileFS(file string, filesystem fs.FS) error {
 	return fsFile(c, file, filesystem)
 }
 
-func fsFile(c Context, file string, filesystem fs.FS) error {
+func fsFile(c *Context, file string, filesystem fs.FS) error {
 	f, err := filesystem.Open(file)
 	if err != nil {
 		return ErrNotFound
@@ -710,28 +606,30 @@ func fsFile(c Context, file string, filesystem fs.FS) error {
 }
 
 // Attachment sends a response as attachment, prompting client to save the file.
-func (c *DefaultContext) Attachment(file, name string) error {
+func (c *Context) Attachment(file, name string) error {
 	return c.contentDisposition(file, name, "attachment")
 }
 
 // Inline sends a response as inline, opening the file in the browser.
-func (c *DefaultContext) Inline(file, name string) error {
+func (c *Context) Inline(file, name string) error {
 	return c.contentDisposition(file, name, "inline")
 }
 
-func (c *DefaultContext) contentDisposition(file, name, dispositionType string) error {
-	c.response.Header().Set(HeaderContentDisposition, fmt.Sprintf("%s; filename=%q", dispositionType, name))
+var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
+
+func (c *Context) contentDisposition(file, name, dispositionType string) error {
+	c.response.Header().Set(HeaderContentDisposition, fmt.Sprintf(`%s; filename="%s"`, dispositionType, quoteEscaper.Replace(name)))
 	return c.File(file)
 }
 
 // NoContent sends a response with no body and a status code.
-func (c *DefaultContext) NoContent(code int) error {
+func (c *Context) NoContent(code int) error {
 	c.response.WriteHeader(code)
 	return nil
 }
 
 // Redirect redirects the request to a provided URL with status code.
-func (c *DefaultContext) Redirect(code int, url string) error {
+func (c *Context) Redirect(code int, url string) error {
 	if code < 300 || code > 308 {
 		return ErrInvalidRedirectCode
 	}
@@ -740,7 +638,20 @@ func (c *DefaultContext) Redirect(code int, url string) error {
 	return nil
 }
 
+// Logger returns logger in Context
+func (c *Context) Logger() *slog.Logger {
+	if c.logger != nil {
+		return c.logger
+	}
+	return c.echo.Logger
+}
+
+// SetLogger sets logger in Context
+func (c *Context) SetLogger(logger *slog.Logger) {
+	c.logger = logger
+}
+
 // Echo returns the `Echo` instance.
-func (c *DefaultContext) Echo() *Echo {
+func (c *Context) Echo() *Echo {
 	return c.echo
 }
