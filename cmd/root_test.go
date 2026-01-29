@@ -63,6 +63,9 @@ func TestRootCommand_HasSubcommands(t *testing.T) {
 }
 
 func TestDebugFlag_EnablesDebugLogging(t *testing.T) {
+	// Set HOME so os.UserConfigDir() works in sandboxed environments (e.g. Bazel)
+	t.Setenv("HOME", t.TempDir())
+
 	// Save original state
 	originalDebug := Debug
 	originalLevel := zerolog.GlobalLevel()
