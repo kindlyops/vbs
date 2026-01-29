@@ -1,6 +1,11 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package echo
 
 import (
+	"encoding"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,7 +16,7 @@ import (
 /**
 	Following functions provide handful of methods for binding to Go native types from request query or path parameters.
     * QueryParamsBinder(c) - binds query parameters (source URL)
-    * PathParamsBinder(c) - binds path parameters (source URL)
+    * PathValuesBinder(c) - binds path parameters (source URL)
     * FormFieldBinder(c) - binds form fields (source URL + body)
 
 	Example:
@@ -52,8 +57,11 @@ import (
 		* time
 		* duration
 		* BindUnmarshaler() interface
+		* TextUnmarshaler() interface
+		* JSONUnmarshaler() interface
 		* UnixTime() - converts unix time (integer) to time.Time
-		* UnixTimeNano() - converts unix time with nano second precision (integer) to time.Time
+		* UnixTimeMilli() - converts unix time with millisecond precision (integer) to time.Time
+		* UnixTimeNano() - converts unix time with nanosecond precision (integer) to time.Time
 		* CustomFunc() - callback function for your custom conversion logic. Signature `func(values []string) []error`
 */
 
@@ -61,21 +69,17 @@ import (
 type BindingError struct {
 	// Field is the field name where value binding failed
 	Field string `json:"field"`
+	*HTTPError
 	// Values of parameter that failed to bind.
 	Values []string `json:"-"`
-	*HTTPError
 }
 
 // NewBindingError creates new instance of binding error
-func NewBindingError(sourceParam string, values []string, message interface{}, internalError error) error {
+func NewBindingError(sourceParam string, values []string, message string, err error) error {
 	return &BindingError{
-		Field:  sourceParam,
-		Values: values,
-		HTTPError: &HTTPError{
-			Code:     http.StatusBadRequest,
-			Message:  message,
-			Internal: internalError,
-		},
+		Field:     sourceParam,
+		Values:    values,
+		HTTPError: &HTTPError{Code: http.StatusBadRequest, Message: message, err: err},
 	}
 }
 
@@ -86,20 +90,19 @@ func (be *BindingError) Error() string {
 
 // ValueBinder provides utility methods for binding query or path parameter to various Go built-in types
 type ValueBinder struct {
-	// failFast is flag for binding methods to return without attempting to bind when previous binding already failed
-	failFast bool
-	errors   []error
-
 	// ValueFunc is used to get single parameter (first) value from request
 	ValueFunc func(sourceParam string) string
 	// ValuesFunc is used to get all values for parameter from request. i.e. `/api/search?ids=1&ids=2`
 	ValuesFunc func(sourceParam string) []string
 	// ErrorFunc is used to create errors. Allows you to use your own error type, that for example marshals to your specific json response
-	ErrorFunc func(sourceParam string, values []string, message interface{}, internalError error) error
+	ErrorFunc func(sourceParam string, values []string, message string, internalError error) error
+	errors    []error
+	// failFast is flag for binding methods to return without attempting to bind when previous binding already failed
+	failFast bool
 }
 
 // QueryParamsBinder creates query parameter value binder
-func QueryParamsBinder(c Context) *ValueBinder {
+func QueryParamsBinder(c *Context) *ValueBinder {
 	return &ValueBinder{
 		failFast:  true,
 		ValueFunc: c.QueryParam,
@@ -114,14 +117,14 @@ func QueryParamsBinder(c Context) *ValueBinder {
 	}
 }
 
-// PathParamsBinder creates path parameter value binder
-func PathParamsBinder(c Context) *ValueBinder {
+// PathValuesBinder creates path parameter value binder
+func PathValuesBinder(c *Context) *ValueBinder {
 	return &ValueBinder{
 		failFast:  true,
-		ValueFunc: c.PathParam,
+		ValueFunc: c.Param,
 		ValuesFunc: func(sourceParam string) []string {
 			// path parameter should not have multiple values so getting values does not make sense but lets not error out here
-			value := c.PathParam(sourceParam)
+			value := c.Param(sourceParam)
 			if value == "" {
 				return nil
 			}
@@ -141,7 +144,7 @@ func PathParamsBinder(c Context) *ValueBinder {
 // NB: when binding forms take note that this implementation uses standard library form parsing
 // which parses form data from BOTH URL and BODY if content type is not MIMEMultipartForm
 // See https://golang.org/pkg/net/http/#Request.ParseForm
-func FormFieldBinder(c Context) *ValueBinder {
+func FormFieldBinder(c *Context) *ValueBinder {
 	vb := &ValueBinder{
 		failFast: true,
 		ValueFunc: func(sourceParam string) string {
@@ -152,7 +155,7 @@ func FormFieldBinder(c Context) *ValueBinder {
 	vb.ValuesFunc = func(sourceParam string) []string {
 		if c.Request().Form == nil {
 			// this is same as `Request().FormValue()` does internally
-			_ = c.Request().ParseMultipartForm(32 << 20)
+			_, _ = c.MultipartForm() // we want to trigger c.request.ParseMultipartForm(c.formParseMaxMemory)
 		}
 		values, ok := c.Request().Form[sourceParam]
 		if !ok {
@@ -204,7 +207,7 @@ func (b *ValueBinder) CustomFunc(sourceParam string, customFunc func(values []st
 	return b.customFunc(sourceParam, customFunc, false)
 }
 
-// MustCustomFunc requires parameter values to exist to be bind with Func. Returns error when value does not exist.
+// MustCustomFunc requires parameter values to exist to bind with Func. Returns error when value does not exist.
 func (b *ValueBinder) MustCustomFunc(sourceParam string, customFunc func(values []string) []error) *ValueBinder {
 	return b.customFunc(sourceParam, customFunc, true)
 }
@@ -241,7 +244,7 @@ func (b *ValueBinder) String(sourceParam string, dest *string) *ValueBinder {
 	return b
 }
 
-// MustString requires parameter value to exist to be bind to string variable. Returns error when value does not exist
+// MustString requires parameter value to exist to bind to string variable. Returns error when value does not exist
 func (b *ValueBinder) MustString(sourceParam string, dest *string) *ValueBinder {
 	if b.failFast && b.errors != nil {
 		return b
@@ -270,7 +273,7 @@ func (b *ValueBinder) Strings(sourceParam string, dest *[]string) *ValueBinder {
 	return b
 }
 
-// MustStrings requires parameter values to exist to be bind to slice of string variables. Returns error when value does not exist
+// MustStrings requires parameter values to exist to bind to slice of string variables. Returns error when value does not exist
 func (b *ValueBinder) MustStrings(sourceParam string, dest *[]string) *ValueBinder {
 	if b.failFast && b.errors != nil {
 		return b
@@ -302,7 +305,7 @@ func (b *ValueBinder) BindUnmarshaler(sourceParam string, dest BindUnmarshaler) 
 	return b
 }
 
-// MustBindUnmarshaler requires parameter value to exist to be bind to destination implementing BindUnmarshaler interface.
+// MustBindUnmarshaler requires parameter value to exist to bind to destination implementing BindUnmarshaler interface.
 // Returns error when value does not exist
 func (b *ValueBinder) MustBindUnmarshaler(sourceParam string, dest BindUnmarshaler) *ValueBinder {
 	if b.failFast && b.errors != nil {
@@ -321,19 +324,91 @@ func (b *ValueBinder) MustBindUnmarshaler(sourceParam string, dest BindUnmarshal
 	return b
 }
 
+// JSONUnmarshaler binds parameter to destination implementing json.Unmarshaler interface
+func (b *ValueBinder) JSONUnmarshaler(sourceParam string, dest json.Unmarshaler) *ValueBinder {
+	if b.failFast && b.errors != nil {
+		return b
+	}
+
+	tmp := b.ValueFunc(sourceParam)
+	if tmp == "" {
+		return b
+	}
+
+	if err := dest.UnmarshalJSON([]byte(tmp)); err != nil {
+		b.setError(b.ErrorFunc(sourceParam, []string{tmp}, "failed to bind field value to json.Unmarshaler interface", err))
+	}
+	return b
+}
+
+// MustJSONUnmarshaler requires parameter value to exist to bind to destination implementing json.Unmarshaler interface.
+// Returns error when value does not exist
+func (b *ValueBinder) MustJSONUnmarshaler(sourceParam string, dest json.Unmarshaler) *ValueBinder {
+	if b.failFast && b.errors != nil {
+		return b
+	}
+
+	tmp := b.ValueFunc(sourceParam)
+	if tmp == "" {
+		b.setError(b.ErrorFunc(sourceParam, []string{tmp}, "required field value is empty", nil))
+		return b
+	}
+
+	if err := dest.UnmarshalJSON([]byte(tmp)); err != nil {
+		b.setError(b.ErrorFunc(sourceParam, []string{tmp}, "failed to bind field value to json.Unmarshaler interface", err))
+	}
+	return b
+}
+
+// TextUnmarshaler binds parameter to destination implementing encoding.TextUnmarshaler interface
+func (b *ValueBinder) TextUnmarshaler(sourceParam string, dest encoding.TextUnmarshaler) *ValueBinder {
+	if b.failFast && b.errors != nil {
+		return b
+	}
+
+	tmp := b.ValueFunc(sourceParam)
+	if tmp == "" {
+		return b
+	}
+
+	if err := dest.UnmarshalText([]byte(tmp)); err != nil {
+		b.setError(b.ErrorFunc(sourceParam, []string{tmp}, "failed to bind field value to encoding.TextUnmarshaler interface", err))
+	}
+	return b
+}
+
+// MustTextUnmarshaler requires parameter value to exist to bind to destination implementing encoding.TextUnmarshaler interface.
+// Returns error when value does not exist
+func (b *ValueBinder) MustTextUnmarshaler(sourceParam string, dest encoding.TextUnmarshaler) *ValueBinder {
+	if b.failFast && b.errors != nil {
+		return b
+	}
+
+	tmp := b.ValueFunc(sourceParam)
+	if tmp == "" {
+		b.setError(b.ErrorFunc(sourceParam, []string{tmp}, "required field value is empty", nil))
+		return b
+	}
+
+	if err := dest.UnmarshalText([]byte(tmp)); err != nil {
+		b.setError(b.ErrorFunc(sourceParam, []string{tmp}, "failed to bind field value to encoding.TextUnmarshaler interface", err))
+	}
+	return b
+}
+
 // BindWithDelimiter binds parameter to destination by suitable conversion function.
 // Delimiter is used before conversion to split parameter value to separate values
-func (b *ValueBinder) BindWithDelimiter(sourceParam string, dest interface{}, delimiter string) *ValueBinder {
+func (b *ValueBinder) BindWithDelimiter(sourceParam string, dest any, delimiter string) *ValueBinder {
 	return b.bindWithDelimiter(sourceParam, dest, delimiter, false)
 }
 
-// MustBindWithDelimiter requires parameter value to exist to be bind destination by suitable conversion function.
+// MustBindWithDelimiter requires parameter value to exist to bind destination by suitable conversion function.
 // Delimiter is used before conversion to split parameter value to separate values
-func (b *ValueBinder) MustBindWithDelimiter(sourceParam string, dest interface{}, delimiter string) *ValueBinder {
+func (b *ValueBinder) MustBindWithDelimiter(sourceParam string, dest any, delimiter string) *ValueBinder {
 	return b.bindWithDelimiter(sourceParam, dest, delimiter, true)
 }
 
-func (b *ValueBinder) bindWithDelimiter(sourceParam string, dest interface{}, delimiter string, valueMustExist bool) *ValueBinder {
+func (b *ValueBinder) bindWithDelimiter(sourceParam string, dest any, delimiter string, valueMustExist bool) *ValueBinder {
 	if b.failFast && b.errors != nil {
 		return b
 	}
@@ -376,7 +451,7 @@ func (b *ValueBinder) Int64(sourceParam string, dest *int64) *ValueBinder {
 	return b.intValue(sourceParam, dest, 64, false)
 }
 
-// MustInt64 requires parameter value to exist to be bind to int64 variable. Returns error when value does not exist
+// MustInt64 requires parameter value to exist to bind to int64 variable. Returns error when value does not exist
 func (b *ValueBinder) MustInt64(sourceParam string, dest *int64) *ValueBinder {
 	return b.intValue(sourceParam, dest, 64, true)
 }
@@ -386,7 +461,7 @@ func (b *ValueBinder) Int32(sourceParam string, dest *int32) *ValueBinder {
 	return b.intValue(sourceParam, dest, 32, false)
 }
 
-// MustInt32 requires parameter value to exist to be bind to int32 variable. Returns error when value does not exist
+// MustInt32 requires parameter value to exist to bind to int32 variable. Returns error when value does not exist
 func (b *ValueBinder) MustInt32(sourceParam string, dest *int32) *ValueBinder {
 	return b.intValue(sourceParam, dest, 32, true)
 }
@@ -396,7 +471,7 @@ func (b *ValueBinder) Int16(sourceParam string, dest *int16) *ValueBinder {
 	return b.intValue(sourceParam, dest, 16, false)
 }
 
-// MustInt16 requires parameter value to exist to be bind to int16 variable. Returns error when value does not exist
+// MustInt16 requires parameter value to exist to bind to int16 variable. Returns error when value does not exist
 func (b *ValueBinder) MustInt16(sourceParam string, dest *int16) *ValueBinder {
 	return b.intValue(sourceParam, dest, 16, true)
 }
@@ -406,7 +481,7 @@ func (b *ValueBinder) Int8(sourceParam string, dest *int8) *ValueBinder {
 	return b.intValue(sourceParam, dest, 8, false)
 }
 
-// MustInt8 requires parameter value to exist to be bind to int8 variable. Returns error when value does not exist
+// MustInt8 requires parameter value to exist to bind to int8 variable. Returns error when value does not exist
 func (b *ValueBinder) MustInt8(sourceParam string, dest *int8) *ValueBinder {
 	return b.intValue(sourceParam, dest, 8, true)
 }
@@ -416,12 +491,12 @@ func (b *ValueBinder) Int(sourceParam string, dest *int) *ValueBinder {
 	return b.intValue(sourceParam, dest, 0, false)
 }
 
-// MustInt requires parameter value to exist to be bind to int variable. Returns error when value does not exist
+// MustInt requires parameter value to exist to bind to int variable. Returns error when value does not exist
 func (b *ValueBinder) MustInt(sourceParam string, dest *int) *ValueBinder {
 	return b.intValue(sourceParam, dest, 0, true)
 }
 
-func (b *ValueBinder) intValue(sourceParam string, dest interface{}, bitSize int, valueMustExist bool) *ValueBinder {
+func (b *ValueBinder) intValue(sourceParam string, dest any, bitSize int, valueMustExist bool) *ValueBinder {
 	if b.failFast && b.errors != nil {
 		return b
 	}
@@ -437,7 +512,7 @@ func (b *ValueBinder) intValue(sourceParam string, dest interface{}, bitSize int
 	return b.int(sourceParam, value, dest, bitSize)
 }
 
-func (b *ValueBinder) int(sourceParam string, value string, dest interface{}, bitSize int) *ValueBinder {
+func (b *ValueBinder) int(sourceParam string, value string, dest any, bitSize int) *ValueBinder {
 	n, err := strconv.ParseInt(value, 10, bitSize)
 	if err != nil {
 		if bitSize == 0 {
@@ -452,18 +527,18 @@ func (b *ValueBinder) int(sourceParam string, value string, dest interface{}, bi
 	case *int64:
 		*d = n
 	case *int32:
-		*d = int32(n)
+		*d = int32(n) // #nosec G115
 	case *int16:
-		*d = int16(n)
+		*d = int16(n) // #nosec G115
 	case *int8:
-		*d = int8(n)
+		*d = int8(n) // #nosec G115
 	case *int:
 		*d = int(n)
 	}
 	return b
 }
 
-func (b *ValueBinder) intsValue(sourceParam string, dest interface{}, valueMustExist bool) *ValueBinder {
+func (b *ValueBinder) intsValue(sourceParam string, dest any, valueMustExist bool) *ValueBinder {
 	if b.failFast && b.errors != nil {
 		return b
 	}
@@ -478,7 +553,7 @@ func (b *ValueBinder) intsValue(sourceParam string, dest interface{}, valueMustE
 	return b.ints(sourceParam, values, dest)
 }
 
-func (b *ValueBinder) ints(sourceParam string, values []string, dest interface{}) *ValueBinder {
+func (b *ValueBinder) ints(sourceParam string, values []string, dest any) *ValueBinder {
 	switch d := dest.(type) {
 	case *[]int64:
 		tmp := make([]int64, len(values))
@@ -544,7 +619,7 @@ func (b *ValueBinder) Int64s(sourceParam string, dest *[]int64) *ValueBinder {
 	return b.intsValue(sourceParam, dest, false)
 }
 
-// MustInt64s requires parameter value to exist to be bind to int64 slice variable. Returns error when value does not exist
+// MustInt64s requires parameter value to exist to bind to int64 slice variable. Returns error when value does not exist
 func (b *ValueBinder) MustInt64s(sourceParam string, dest *[]int64) *ValueBinder {
 	return b.intsValue(sourceParam, dest, true)
 }
@@ -554,7 +629,7 @@ func (b *ValueBinder) Int32s(sourceParam string, dest *[]int32) *ValueBinder {
 	return b.intsValue(sourceParam, dest, false)
 }
 
-// MustInt32s requires parameter value to exist to be bind to int32 slice variable. Returns error when value does not exist
+// MustInt32s requires parameter value to exist to bind to int32 slice variable. Returns error when value does not exist
 func (b *ValueBinder) MustInt32s(sourceParam string, dest *[]int32) *ValueBinder {
 	return b.intsValue(sourceParam, dest, true)
 }
@@ -564,7 +639,7 @@ func (b *ValueBinder) Int16s(sourceParam string, dest *[]int16) *ValueBinder {
 	return b.intsValue(sourceParam, dest, false)
 }
 
-// MustInt16s requires parameter value to exist to be bind to int16 slice variable. Returns error when value does not exist
+// MustInt16s requires parameter value to exist to bind to int16 slice variable. Returns error when value does not exist
 func (b *ValueBinder) MustInt16s(sourceParam string, dest *[]int16) *ValueBinder {
 	return b.intsValue(sourceParam, dest, true)
 }
@@ -574,7 +649,7 @@ func (b *ValueBinder) Int8s(sourceParam string, dest *[]int8) *ValueBinder {
 	return b.intsValue(sourceParam, dest, false)
 }
 
-// MustInt8s requires parameter value to exist to be bind to int8 slice variable. Returns error when value does not exist
+// MustInt8s requires parameter value to exist to bind to int8 slice variable. Returns error when value does not exist
 func (b *ValueBinder) MustInt8s(sourceParam string, dest *[]int8) *ValueBinder {
 	return b.intsValue(sourceParam, dest, true)
 }
@@ -584,7 +659,7 @@ func (b *ValueBinder) Ints(sourceParam string, dest *[]int) *ValueBinder {
 	return b.intsValue(sourceParam, dest, false)
 }
 
-// MustInts requires parameter value to exist to be bind to int slice variable. Returns error when value does not exist
+// MustInts requires parameter value to exist to bind to int slice variable. Returns error when value does not exist
 func (b *ValueBinder) MustInts(sourceParam string, dest *[]int) *ValueBinder {
 	return b.intsValue(sourceParam, dest, true)
 }
@@ -594,7 +669,7 @@ func (b *ValueBinder) Uint64(sourceParam string, dest *uint64) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 64, false)
 }
 
-// MustUint64 requires parameter value to exist to be bind to uint64 variable. Returns error when value does not exist
+// MustUint64 requires parameter value to exist to bind to uint64 variable. Returns error when value does not exist
 func (b *ValueBinder) MustUint64(sourceParam string, dest *uint64) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 64, true)
 }
@@ -604,7 +679,7 @@ func (b *ValueBinder) Uint32(sourceParam string, dest *uint32) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 32, false)
 }
 
-// MustUint32 requires parameter value to exist to be bind to uint32 variable. Returns error when value does not exist
+// MustUint32 requires parameter value to exist to bind to uint32 variable. Returns error when value does not exist
 func (b *ValueBinder) MustUint32(sourceParam string, dest *uint32) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 32, true)
 }
@@ -614,7 +689,7 @@ func (b *ValueBinder) Uint16(sourceParam string, dest *uint16) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 16, false)
 }
 
-// MustUint16 requires parameter value to exist to be bind to uint16 variable. Returns error when value does not exist
+// MustUint16 requires parameter value to exist to bind to uint16 variable. Returns error when value does not exist
 func (b *ValueBinder) MustUint16(sourceParam string, dest *uint16) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 16, true)
 }
@@ -624,7 +699,7 @@ func (b *ValueBinder) Uint8(sourceParam string, dest *uint8) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 8, false)
 }
 
-// MustUint8 requires parameter value to exist to be bind to uint8 variable. Returns error when value does not exist
+// MustUint8 requires parameter value to exist to bind to uint8 variable. Returns error when value does not exist
 func (b *ValueBinder) MustUint8(sourceParam string, dest *uint8) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 8, true)
 }
@@ -634,7 +709,7 @@ func (b *ValueBinder) Byte(sourceParam string, dest *byte) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 8, false)
 }
 
-// MustByte requires parameter value to exist to be bind to byte variable. Returns error when value does not exist
+// MustByte requires parameter value to exist to bind to byte variable. Returns error when value does not exist
 func (b *ValueBinder) MustByte(sourceParam string, dest *byte) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 8, true)
 }
@@ -644,12 +719,12 @@ func (b *ValueBinder) Uint(sourceParam string, dest *uint) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 0, false)
 }
 
-// MustUint requires parameter value to exist to be bind to uint variable. Returns error when value does not exist
+// MustUint requires parameter value to exist to bind to uint variable. Returns error when value does not exist
 func (b *ValueBinder) MustUint(sourceParam string, dest *uint) *ValueBinder {
 	return b.uintValue(sourceParam, dest, 0, true)
 }
 
-func (b *ValueBinder) uintValue(sourceParam string, dest interface{}, bitSize int, valueMustExist bool) *ValueBinder {
+func (b *ValueBinder) uintValue(sourceParam string, dest any, bitSize int, valueMustExist bool) *ValueBinder {
 	if b.failFast && b.errors != nil {
 		return b
 	}
@@ -665,7 +740,7 @@ func (b *ValueBinder) uintValue(sourceParam string, dest interface{}, bitSize in
 	return b.uint(sourceParam, value, dest, bitSize)
 }
 
-func (b *ValueBinder) uint(sourceParam string, value string, dest interface{}, bitSize int) *ValueBinder {
+func (b *ValueBinder) uint(sourceParam string, value string, dest any, bitSize int) *ValueBinder {
 	n, err := strconv.ParseUint(value, 10, bitSize)
 	if err != nil {
 		if bitSize == 0 {
@@ -680,18 +755,18 @@ func (b *ValueBinder) uint(sourceParam string, value string, dest interface{}, b
 	case *uint64:
 		*d = n
 	case *uint32:
-		*d = uint32(n)
+		*d = uint32(n) // #nosec G115
 	case *uint16:
-		*d = uint16(n)
+		*d = uint16(n) // #nosec G115
 	case *uint8: // byte is alias to uint8
-		*d = uint8(n)
+		*d = uint8(n) // #nosec G115
 	case *uint:
-		*d = uint(n)
+		*d = uint(n) // #nosec G115
 	}
 	return b
 }
 
-func (b *ValueBinder) uintsValue(sourceParam string, dest interface{}, valueMustExist bool) *ValueBinder {
+func (b *ValueBinder) uintsValue(sourceParam string, dest any, valueMustExist bool) *ValueBinder {
 	if b.failFast && b.errors != nil {
 		return b
 	}
@@ -706,7 +781,7 @@ func (b *ValueBinder) uintsValue(sourceParam string, dest interface{}, valueMust
 	return b.uints(sourceParam, values, dest)
 }
 
-func (b *ValueBinder) uints(sourceParam string, values []string, dest interface{}) *ValueBinder {
+func (b *ValueBinder) uints(sourceParam string, values []string, dest any) *ValueBinder {
 	switch d := dest.(type) {
 	case *[]uint64:
 		tmp := make([]uint64, len(values))
@@ -772,7 +847,7 @@ func (b *ValueBinder) Uint64s(sourceParam string, dest *[]uint64) *ValueBinder {
 	return b.uintsValue(sourceParam, dest, false)
 }
 
-// MustUint64s requires parameter value to exist to be bind to uint64 slice variable. Returns error when value does not exist
+// MustUint64s requires parameter value to exist to bind to uint64 slice variable. Returns error when value does not exist
 func (b *ValueBinder) MustUint64s(sourceParam string, dest *[]uint64) *ValueBinder {
 	return b.uintsValue(sourceParam, dest, true)
 }
@@ -782,7 +857,7 @@ func (b *ValueBinder) Uint32s(sourceParam string, dest *[]uint32) *ValueBinder {
 	return b.uintsValue(sourceParam, dest, false)
 }
 
-// MustUint32s requires parameter value to exist to be bind to uint32 slice variable. Returns error when value does not exist
+// MustUint32s requires parameter value to exist to bind to uint32 slice variable. Returns error when value does not exist
 func (b *ValueBinder) MustUint32s(sourceParam string, dest *[]uint32) *ValueBinder {
 	return b.uintsValue(sourceParam, dest, true)
 }
@@ -792,7 +867,7 @@ func (b *ValueBinder) Uint16s(sourceParam string, dest *[]uint16) *ValueBinder {
 	return b.uintsValue(sourceParam, dest, false)
 }
 
-// MustUint16s requires parameter value to exist to be bind to uint16 slice variable. Returns error when value does not exist
+// MustUint16s requires parameter value to exist to bind to uint16 slice variable. Returns error when value does not exist
 func (b *ValueBinder) MustUint16s(sourceParam string, dest *[]uint16) *ValueBinder {
 	return b.uintsValue(sourceParam, dest, true)
 }
@@ -802,7 +877,7 @@ func (b *ValueBinder) Uint8s(sourceParam string, dest *[]uint8) *ValueBinder {
 	return b.uintsValue(sourceParam, dest, false)
 }
 
-// MustUint8s requires parameter value to exist to be bind to uint8 slice variable. Returns error when value does not exist
+// MustUint8s requires parameter value to exist to bind to uint8 slice variable. Returns error when value does not exist
 func (b *ValueBinder) MustUint8s(sourceParam string, dest *[]uint8) *ValueBinder {
 	return b.uintsValue(sourceParam, dest, true)
 }
@@ -812,7 +887,7 @@ func (b *ValueBinder) Uints(sourceParam string, dest *[]uint) *ValueBinder {
 	return b.uintsValue(sourceParam, dest, false)
 }
 
-// MustUints requires parameter value to exist to be bind to uint slice variable. Returns error when value does not exist
+// MustUints requires parameter value to exist to bind to uint slice variable. Returns error when value does not exist
 func (b *ValueBinder) MustUints(sourceParam string, dest *[]uint) *ValueBinder {
 	return b.uintsValue(sourceParam, dest, true)
 }
@@ -822,7 +897,7 @@ func (b *ValueBinder) Bool(sourceParam string, dest *bool) *ValueBinder {
 	return b.boolValue(sourceParam, dest, false)
 }
 
-// MustBool requires parameter value to exist to be bind to bool variable. Returns error when value does not exist
+// MustBool requires parameter value to exist to bind to bool variable. Returns error when value does not exist
 func (b *ValueBinder) MustBool(sourceParam string, dest *bool) *ValueBinder {
 	return b.boolValue(sourceParam, dest, true)
 }
@@ -887,7 +962,7 @@ func (b *ValueBinder) Bools(sourceParam string, dest *[]bool) *ValueBinder {
 	return b.boolsValue(sourceParam, dest, false)
 }
 
-// MustBools requires parameter values to exist to be bind to slice of bool variables. Returns error when values does not exist
+// MustBools requires parameter values to exist to bind to slice of bool variables. Returns error when values does not exist
 func (b *ValueBinder) MustBools(sourceParam string, dest *[]bool) *ValueBinder {
 	return b.boolsValue(sourceParam, dest, true)
 }
@@ -897,7 +972,7 @@ func (b *ValueBinder) Float64(sourceParam string, dest *float64) *ValueBinder {
 	return b.floatValue(sourceParam, dest, 64, false)
 }
 
-// MustFloat64 requires parameter value to exist to be bind to float64 variable. Returns error when value does not exist
+// MustFloat64 requires parameter value to exist to bind to float64 variable. Returns error when value does not exist
 func (b *ValueBinder) MustFloat64(sourceParam string, dest *float64) *ValueBinder {
 	return b.floatValue(sourceParam, dest, 64, true)
 }
@@ -907,12 +982,12 @@ func (b *ValueBinder) Float32(sourceParam string, dest *float32) *ValueBinder {
 	return b.floatValue(sourceParam, dest, 32, false)
 }
 
-// MustFloat32 requires parameter value to exist to be bind to float32 variable. Returns error when value does not exist
+// MustFloat32 requires parameter value to exist to bind to float32 variable. Returns error when value does not exist
 func (b *ValueBinder) MustFloat32(sourceParam string, dest *float32) *ValueBinder {
 	return b.floatValue(sourceParam, dest, 32, true)
 }
 
-func (b *ValueBinder) floatValue(sourceParam string, dest interface{}, bitSize int, valueMustExist bool) *ValueBinder {
+func (b *ValueBinder) floatValue(sourceParam string, dest any, bitSize int, valueMustExist bool) *ValueBinder {
 	if b.failFast && b.errors != nil {
 		return b
 	}
@@ -928,7 +1003,7 @@ func (b *ValueBinder) floatValue(sourceParam string, dest interface{}, bitSize i
 	return b.float(sourceParam, value, dest, bitSize)
 }
 
-func (b *ValueBinder) float(sourceParam string, value string, dest interface{}, bitSize int) *ValueBinder {
+func (b *ValueBinder) float(sourceParam string, value string, dest any, bitSize int) *ValueBinder {
 	n, err := strconv.ParseFloat(value, bitSize)
 	if err != nil {
 		b.setError(b.ErrorFunc(sourceParam, []string{value}, fmt.Sprintf("failed to bind field value to float%v", bitSize), err))
@@ -944,7 +1019,7 @@ func (b *ValueBinder) float(sourceParam string, value string, dest interface{}, 
 	return b
 }
 
-func (b *ValueBinder) floatsValue(sourceParam string, dest interface{}, valueMustExist bool) *ValueBinder {
+func (b *ValueBinder) floatsValue(sourceParam string, dest any, valueMustExist bool) *ValueBinder {
 	if b.failFast && b.errors != nil {
 		return b
 	}
@@ -959,7 +1034,7 @@ func (b *ValueBinder) floatsValue(sourceParam string, dest interface{}, valueMus
 	return b.floats(sourceParam, values, dest)
 }
 
-func (b *ValueBinder) floats(sourceParam string, values []string, dest interface{}) *ValueBinder {
+func (b *ValueBinder) floats(sourceParam string, values []string, dest any) *ValueBinder {
 	switch d := dest.(type) {
 	case *[]float64:
 		tmp := make([]float64, len(values))
@@ -992,7 +1067,7 @@ func (b *ValueBinder) Float64s(sourceParam string, dest *[]float64) *ValueBinder
 	return b.floatsValue(sourceParam, dest, false)
 }
 
-// MustFloat64s requires parameter values to exist to be bind to slice of float64 variables. Returns error when values does not exist
+// MustFloat64s requires parameter values to exist to bind to slice of float64 variables. Returns error when values does not exist
 func (b *ValueBinder) MustFloat64s(sourceParam string, dest *[]float64) *ValueBinder {
 	return b.floatsValue(sourceParam, dest, true)
 }
@@ -1002,7 +1077,7 @@ func (b *ValueBinder) Float32s(sourceParam string, dest *[]float32) *ValueBinder
 	return b.floatsValue(sourceParam, dest, false)
 }
 
-// MustFloat32s requires parameter values to exist to be bind to slice of float32 variables. Returns error when values does not exist
+// MustFloat32s requires parameter values to exist to bind to slice of float32 variables. Returns error when values does not exist
 func (b *ValueBinder) MustFloat32s(sourceParam string, dest *[]float32) *ValueBinder {
 	return b.floatsValue(sourceParam, dest, true)
 }
@@ -1012,7 +1087,7 @@ func (b *ValueBinder) Time(sourceParam string, dest *time.Time, layout string) *
 	return b.time(sourceParam, dest, layout, false)
 }
 
-// MustTime requires parameter value to exist to be bind to time.Time variable. Returns error when value does not exist
+// MustTime requires parameter value to exist to bind to time.Time variable. Returns error when value does not exist
 func (b *ValueBinder) MustTime(sourceParam string, dest *time.Time, layout string) *ValueBinder {
 	return b.time(sourceParam, dest, layout, true)
 }
@@ -1043,7 +1118,7 @@ func (b *ValueBinder) Times(sourceParam string, dest *[]time.Time, layout string
 	return b.times(sourceParam, dest, layout, false)
 }
 
-// MustTimes requires parameter values to exist to be bind to slice of time.Time variables. Returns error when values does not exist
+// MustTimes requires parameter values to exist to bind to slice of time.Time variables. Returns error when values does not exist
 func (b *ValueBinder) MustTimes(sourceParam string, dest *[]time.Time, layout string) *ValueBinder {
 	return b.times(sourceParam, dest, layout, true)
 }
@@ -1084,7 +1159,7 @@ func (b *ValueBinder) Duration(sourceParam string, dest *time.Duration) *ValueBi
 	return b.duration(sourceParam, dest, false)
 }
 
-// MustDuration requires parameter value to exist to be bind to time.Duration variable. Returns error when value does not exist
+// MustDuration requires parameter value to exist to bind to time.Duration variable. Returns error when value does not exist
 func (b *ValueBinder) MustDuration(sourceParam string, dest *time.Duration) *ValueBinder {
 	return b.duration(sourceParam, dest, true)
 }
@@ -1115,7 +1190,7 @@ func (b *ValueBinder) Durations(sourceParam string, dest *[]time.Duration) *Valu
 	return b.durationsValue(sourceParam, dest, false)
 }
 
-// MustDurations requires parameter values to exist to be bind to slice of time.Duration variables. Returns error when values does not exist
+// MustDurations requires parameter values to exist to bind to slice of time.Duration variables. Returns error when values does not exist
 func (b *ValueBinder) MustDurations(sourceParam string, dest *[]time.Duration) *ValueBinder {
 	return b.durationsValue(sourceParam, dest, true)
 }
@@ -1159,36 +1234,57 @@ func (b *ValueBinder) durations(sourceParam string, values []string, dest *[]tim
 // Example: 1609180603 bind to 2020-12-28T18:36:43.000000000+00:00
 //
 // Note:
-//  * time.Time{} (param is empty) and time.Unix(0,0) (param = "0") are not equal
+//   - time.Time{} (param is empty) and time.Unix(0,0) (param = "0") are not equal
 func (b *ValueBinder) UnixTime(sourceParam string, dest *time.Time) *ValueBinder {
-	return b.unixTime(sourceParam, dest, false, false)
+	return b.unixTime(sourceParam, dest, false, time.Second)
 }
 
-// MustUnixTime requires parameter value to exist to be bind to time.Duration variable  (in local Time corresponding
+// MustUnixTime requires parameter value to exist to bind to time.Duration variable (in local time corresponding
 // to the given Unix time). Returns error when value does not exist.
 //
 // Example: 1609180603 bind to 2020-12-28T18:36:43.000000000+00:00
 //
 // Note:
-//  * time.Time{} (param is empty) and time.Unix(0,0) (param = "0") are not equal
+//   - time.Time{} (param is empty) and time.Unix(0,0) (param = "0") are not equal
 func (b *ValueBinder) MustUnixTime(sourceParam string, dest *time.Time) *ValueBinder {
-	return b.unixTime(sourceParam, dest, true, false)
+	return b.unixTime(sourceParam, dest, true, time.Second)
 }
 
-// UnixTimeNano binds parameter to time.Time variable (in local Time corresponding to the given Unix time in nano second precision).
+// UnixTimeMilli binds parameter to time.Time variable (in local time corresponding to the given Unix time in millisecond precision).
+//
+// Example: 1647184410140 bind to 2022-03-13T15:13:30.140000000+00:00
+//
+// Note:
+//   - time.Time{} (param is empty) and time.Unix(0,0) (param = "0") are not equal
+func (b *ValueBinder) UnixTimeMilli(sourceParam string, dest *time.Time) *ValueBinder {
+	return b.unixTime(sourceParam, dest, false, time.Millisecond)
+}
+
+// MustUnixTimeMilli requires parameter value to exist to bind to time.Duration variable  (in local time corresponding
+// to the given Unix time in millisecond precision). Returns error when value does not exist.
+//
+// Example: 1647184410140 bind to 2022-03-13T15:13:30.140000000+00:00
+//
+// Note:
+//   - time.Time{} (param is empty) and time.Unix(0,0) (param = "0") are not equal
+func (b *ValueBinder) MustUnixTimeMilli(sourceParam string, dest *time.Time) *ValueBinder {
+	return b.unixTime(sourceParam, dest, true, time.Millisecond)
+}
+
+// UnixTimeNano binds parameter to time.Time variable (in local time corresponding to the given Unix time in nanosecond precision).
 //
 // Example: 1609180603123456789 binds to 2020-12-28T18:36:43.123456789+00:00
 // Example:          1000000000 binds to 1970-01-01T00:00:01.000000000+00:00
 // Example:           999999999 binds to 1970-01-01T00:00:00.999999999+00:00
 //
 // Note:
-//  * time.Time{} (param is empty) and time.Unix(0,0) (param = "0") are not equal
-//  * Javascript's Number type only has about 53 bits of precision (Number.MAX_SAFE_INTEGER = 9007199254740991). Compare it to 1609180603123456789 in example.
+//   - time.Time{} (param is empty) and time.Unix(0,0) (param = "0") are not equal
+//   - Javascript's Number type only has about 53 bits of precision (Number.MAX_SAFE_INTEGER = 9007199254740991). Compare it to 1609180603123456789 in example.
 func (b *ValueBinder) UnixTimeNano(sourceParam string, dest *time.Time) *ValueBinder {
-	return b.unixTime(sourceParam, dest, false, true)
+	return b.unixTime(sourceParam, dest, false, time.Nanosecond)
 }
 
-// MustUnixTimeNano requires parameter value to exist to be bind to time.Duration variable  (in local Time corresponding
+// MustUnixTimeNano requires parameter value to exist to bind to time.Duration variable  (in local Time corresponding
 // to the given Unix time value in nano second precision). Returns error when value does not exist.
 //
 // Example: 1609180603123456789 binds to 2020-12-28T18:36:43.123456789+00:00
@@ -1196,13 +1292,13 @@ func (b *ValueBinder) UnixTimeNano(sourceParam string, dest *time.Time) *ValueBi
 // Example:           999999999 binds to 1970-01-01T00:00:00.999999999+00:00
 //
 // Note:
-//  * time.Time{} (param is empty) and time.Unix(0,0) (param = "0") are not equal
-//  * Javascript's Number type only has about 53 bits of precision (Number.MAX_SAFE_INTEGER = 9007199254740991). Compare it to 1609180603123456789 in example.
+//   - time.Time{} (param is empty) and time.Unix(0,0) (param = "0") are not equal
+//   - Javascript's Number type only has about 53 bits of precision (Number.MAX_SAFE_INTEGER = 9007199254740991). Compare it to 1609180603123456789 in example.
 func (b *ValueBinder) MustUnixTimeNano(sourceParam string, dest *time.Time) *ValueBinder {
-	return b.unixTime(sourceParam, dest, true, true)
+	return b.unixTime(sourceParam, dest, true, time.Nanosecond)
 }
 
-func (b *ValueBinder) unixTime(sourceParam string, dest *time.Time, valueMustExist bool, isNano bool) *ValueBinder {
+func (b *ValueBinder) unixTime(sourceParam string, dest *time.Time, valueMustExist bool, precision time.Duration) *ValueBinder {
 	if b.failFast && b.errors != nil {
 		return b
 	}
@@ -1221,10 +1317,13 @@ func (b *ValueBinder) unixTime(sourceParam string, dest *time.Time, valueMustExi
 		return b
 	}
 
-	if isNano {
-		*dest = time.Unix(0, n)
-	} else {
+	switch precision {
+	case time.Second:
 		*dest = time.Unix(n, 0)
+	case time.Millisecond:
+		*dest = time.UnixMilli(n)
+	case time.Nanosecond:
+		*dest = time.Unix(0, n)
 	}
 	return b
 }
