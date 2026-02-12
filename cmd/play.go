@@ -532,7 +532,11 @@ func play(cmd *coral.Command, args []string) {
 		log.Fatal().Err(err).Msg("Could not find mpv. Please install mpv player.")
 	}
 
-	target, _ := filepath.Abs(args[0])
+	target, err := filepath.Abs(args[0])
+	if err != nil {
+		log.Fatal().Err(err).Msgf("Could not resolve path %s", args[0])
+	}
+
 	_, err = os.Stat(target)
 
 	if err != nil {

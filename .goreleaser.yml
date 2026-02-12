@@ -74,7 +74,7 @@ scoops:
     # Default for github is "https://github.com/<repo_owner>/<repo_name>/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     # Default for gitlab is "https://gitlab.com/<repo_owner>/<repo_name>/uploads/{{ .ArtifactUploadHash }}/{{ .ArtifactName }}"
     # Gitea is not supported yet, but the support coming
-    url_template: "http://github.com/kindlyops/vbs/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    url_template: "https://github.com/kindlyops/vbs/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
 
     # Repository to push the app manifest to.
     repository:
