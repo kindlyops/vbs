@@ -311,6 +311,25 @@ const (
 	PlaytimeRemaining
 )
 
+// readMpvEvents reads IPC responses from the mpv connection and sends parsed
+// events on the sub channel. It returns when the connection is closed or a
+// read error occurs.
+func readMpvEvents(c net.Conn, sub chan<- responseMsg) {
+	response := make([]byte, 4096)
+	for {
+		count, err := c.Read(response)
+		if err != nil {
+			log.Error().Err(err).Msg("mpv IPC read ended")
+			return
+		}
+
+		responseEvent := string(response[:count])
+		sub <- responseMsg{
+			event: strings.Split(responseEvent, "\n")[0],
+		}
+	}
+}
+
 func cmdInitializeControlSocket(m *model) tea.Cmd {
 	return func() tea.Msg {
 		i := 0
@@ -332,21 +351,7 @@ func cmdInitializeControlSocket(m *model) tea.Cmd {
 			m.controlSocket = c
 		}
 
-		go func() {
-			response := make([]byte, 4096)
-			for {
-				count, err := c.Read(response)
-				if err != nil {
-					log.Error().Err(err).Msg("mpv IPC read ended")
-					return
-				}
-
-				responseEvent := string(response[:count])
-				m.sub <- responseMsg{
-					event: strings.Split(responseEvent, "\n")[0],
-				}
-			}
-		}()
+		go readMpvEvents(c, m.sub)
 
 		// request notification of percent remaining events
 		posData, _ := json.Marshal(mpvIPCCommand{
