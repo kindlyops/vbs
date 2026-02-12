@@ -226,18 +226,24 @@ func writeMpvSocket(m model, msg string) {
 
 func genericMpvCommand(m model, command string, id int, msg tea.Msg, args ...string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := fmt.Sprintf("{ \"command\": [\"%s\"", command)
+		cmdArgs := []interface{}{command}
 		if id != 0 {
-			cmd += fmt.Sprintf(", %d", id)
+			cmdArgs = append(cmdArgs, id)
 		}
 
 		for _, arg := range args {
-			cmd += fmt.Sprintf(", \"%s\"", arg)
+			cmdArgs = append(cmdArgs, arg)
 		}
 
-		cmd += "] }\n"
-		pushDebugList(&m, cmd)
-		writeMpvSocket(m, cmd)
+		data, err := json.Marshal(mpvIPCCommand{Command: cmdArgs})
+		if err != nil {
+			log.Error().Err(err).Msg("Could not marshal mpv command")
+			return msg
+		}
+
+		cmdStr := string(data) + "\n"
+		pushDebugList(&m, cmdStr)
+		writeMpvSocket(m, cmdStr)
 
 		return msg
 	}
@@ -279,11 +285,23 @@ func cmdBackwardFiveSecondsMpv(m model) tea.Cmd {
 
 func cmdPlayMpv(m model) tea.Cmd {
 	return func() tea.Msg {
-		cmd := fmt.Sprintf("{ \"command\": [\"set_property\", \"pause\", %t] }\n", m.playing)
-		writeMpvSocket(m, cmd)
+		data, err := json.Marshal(mpvIPCCommand{
+			Command: []interface{}{"set_property", "pause", m.playing},
+		})
+		if err != nil {
+			log.Error().Err(err).Msg("Could not marshal play command")
+			return nil
+		}
+
+		writeMpvSocket(m, string(data)+"\n")
 
 		return nil
 	}
+}
+
+// mpvIPCCommand represents a JSON-RPC command for the mpv IPC protocol.
+type mpvIPCCommand struct {
+	Command []interface{} `json:"command"`
 }
 
 type MpvCommandId int
@@ -315,16 +333,14 @@ func cmdInitializeControlSocket(m *model) tea.Cmd {
 		}
 
 		go func() {
+			response := make([]byte, 4096)
 			for {
-				bufferSize := 4096
-				response := make([]byte, bufferSize)
 				count, err := c.Read(response)
-
 				if err != nil {
-					log.Error().Err(err).Msg("Could not read response")
+					log.Error().Err(err).Msg("mpv IPC read ended")
+					return
 				}
 
-				//log.Debug().Msgf("Got %v byte response: %s", count, response[:count])
 				responseEvent := string(response[:count])
 				m.sub <- responseMsg{
 					event: strings.Split(responseEvent, "\n")[0],
@@ -333,11 +349,15 @@ func cmdInitializeControlSocket(m *model) tea.Cmd {
 		}()
 
 		// request notification of percent remaining events
-		cmd := fmt.Sprintf("{ \"command\": [\"observe_property_string\", %d, \"percent-pos\"]}\n", Position)
-		writeMpvSocket(*m, cmd)
+		posData, _ := json.Marshal(mpvIPCCommand{
+			Command: []interface{}{"observe_property_string", Position, "percent-pos"},
+		})
+		writeMpvSocket(*m, string(posData)+"\n")
 		// request notification of time-remaining events
-		cmd = fmt.Sprintf("{ \"command\": [\"observe_property_string\", %d, \"time-remaining\"]}\n", PlaytimeRemaining)
-		writeMpvSocket(*m, cmd)
+		timeData, _ := json.Marshal(mpvIPCCommand{
+			Command: []interface{}{"observe_property_string", PlaytimeRemaining, "time-remaining"},
+		})
+		writeMpvSocket(*m, string(timeData)+"\n")
 
 		return vbsSetControlSocket{Socket: c}
 	}
