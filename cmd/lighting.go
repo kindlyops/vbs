@@ -52,17 +52,17 @@ func lightingBridge(cmd *coral.Command, args []string) {
 	assetHandler := http.FileServer(http.FS(public))
 
 	log.Debug().Msgf("Starting HTTP server at: http://%s\n", listenAddr)
-	
+
 	mux := http.NewServeMux()
 	mux.Handle("/", assetHandler)
 	mux.Handle("/api/switcher/", &Switcher{})
 	mux.Handle("/api/light/", &Lighting{})
-	
+
 	server := &http.Server{
 		Addr:    listenAddr,
 		Handler: mux,
 	}
-	
+
 	err = server.ListenAndServe()
 
 	if err != nil {
