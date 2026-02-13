@@ -6,9 +6,14 @@ import (
 	"io"
 	"strconv"
 
+	"github.com/pocketbase/pocketbase/tools/types"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 )
+
+func init() {
+	Providers[NameGithub] = wrapFactory(NewGithubProvider)
+}
 
 var _ Provider = (*Github)(nil)
 
@@ -17,17 +22,19 @@ const NameGithub string = "github"
 
 // Github allows authentication via Github OAuth2.
 type Github struct {
-	*baseProvider
+	BaseProvider
 }
 
 // NewGithubProvider creates new Github provider instance with some defaults.
 func NewGithubProvider() *Github {
-	return &Github{&baseProvider{
-		ctx:        context.Background(),
-		scopes:     []string{"read:user", "user:email"},
-		authUrl:    github.Endpoint.AuthURL,
-		tokenUrl:   github.Endpoint.TokenURL,
-		userApiUrl: "https://api.github.com/user",
+	return &Github{BaseProvider{
+		ctx:         context.Background(),
+		displayName: "GitHub",
+		pkce:        true, // technically is not supported yet but it is safe as the PKCE params are just ignored
+		scopes:      []string{"read:user", "user:email"},
+		authURL:     github.Endpoint.AuthURL,
+		tokenURL:    github.Endpoint.TokenURL,
+		userInfoURL: "https://api.github.com/user",
 	}}
 }
 
@@ -35,7 +42,7 @@ func NewGithubProvider() *Github {
 //
 // API reference: https://docs.github.com/en/rest/reference/users#get-the-authenticated-user
 func (p *Github) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
-	data, err := p.FetchRawUserData(token)
+	data, err := p.FetchRawUserInfo(token)
 	if err != nil {
 		return nil, err
 	}
@@ -47,25 +54,27 @@ func (p *Github) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
 
 	extracted := struct {
 		Login     string `json:"login"`
-		Id        int    `json:"id"`
 		Name      string `json:"name"`
 		Email     string `json:"email"`
-		AvatarUrl string `json:"avatar_url"`
+		AvatarURL string `json:"avatar_url"`
+		Id        int64  `json:"id"`
 	}{}
 	if err := json.Unmarshal(data, &extracted); err != nil {
 		return nil, err
 	}
 
 	user := &AuthUser{
-		Id:           strconv.Itoa(extracted.Id),
+		Id:           strconv.FormatInt(extracted.Id, 10),
 		Name:         extracted.Name,
 		Username:     extracted.Login,
 		Email:        extracted.Email,
-		AvatarUrl:    extracted.AvatarUrl,
+		AvatarURL:    extracted.AvatarURL,
 		RawUser:      rawUser,
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
 	}
+
+	user.Expiry, _ = types.ParseDateTime(token.Expiry)
 
 	// in case user has set "Keep my email address private", send an
 	// **optional** API request to retrieve the verified primary email
@@ -90,7 +99,7 @@ func (p *Github) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
 func (p *Github) fetchPrimaryEmail(token *oauth2.Token) (string, error) {
 	client := p.Client(token)
 
-	response, err := client.Get(p.userApiUrl + "/emails")
+	response, err := client.Get(p.userInfoURL + "/emails")
 	if err != nil {
 		return "", err
 	}

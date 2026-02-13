@@ -27,7 +27,6 @@ go_library(
         "//vendor/github.com/charmbracelet/lipgloss:go_default_library",
         "//vendor/github.com/hypebeast/go-osc/osc:go_default_library",
         "//vendor/github.com/kennygrant/sanitize:go_default_library",
-        "//vendor/github.com/labstack/echo/v5:go_default_library",
         "//vendor/github.com/mattn/go-isatty:go_default_library",
         "//vendor/github.com/muesli/coral:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase:go_default_library",

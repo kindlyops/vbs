@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "copy_object.go",
+        "delete_object.go",
+        "error.go",
+        "get_object.go",
+        "head_object.go",
+        "list_objects.go",
+        "s3.go",
+        "uploader.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/filesystem/internal/s3blob/s3",
+    importpath = "github.com/pocketbase/pocketbase/tools/filesystem/internal/s3blob/s3",
+    visibility = ["//vendor/github.com/pocketbase/pocketbase/tools/filesystem:__subpackages__"],
+    deps = ["//vendor/golang.org/x/sync/errgroup:go_default_library"],
+)

@@ -4,23 +4,13 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	crand "crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"io"
-	"strings"
 )
 
-// S256Challenge creates base64 encoded sha256 challenge string derived from code.
-// The padding of the result base64 string is stripped per [RFC 7636].
+// Encrypt encrypts "data" with the specified "key" (must be valid 32 char AES key).
 //
-// [RFC 7636]: https://datatracker.ietf.org/doc/html/rfc7636#section-4.2
-func S256Challenge(code string) string {
-	h := sha256.New()
-	h.Write([]byte(code))
-	return strings.TrimRight(base64.URLEncoding.EncodeToString(h.Sum(nil)), "=")
-}
-
-// Encrypt encrypts data with key (must be valid 32 char aes key).
+// This method uses AES-256-GCM block cypher mode.
 func Encrypt(data []byte, key string) (string, error) {
 	block, err := aes.NewCipher([]byte(key))
 	if err != nil {
@@ -46,7 +36,9 @@ func Encrypt(data []byte, key string) (string, error) {
 	return result, nil
 }
 
-// Decrypt decrypts encrypted text with key (must be valid 32 chars aes key).
+// Decrypt decrypts encrypted text with key (must be valid 32 chars AES key).
+//
+// This method uses AES-256-GCM block cypher mode.
 func Decrypt(cipherText string, key string) ([]byte, error) {
 	block, err := aes.NewCipher([]byte(key))
 	if err != nil {

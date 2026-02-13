@@ -13,6 +13,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//vendor/github.com/domodwyer/mailyak/v3:go_default_library",
+        "//vendor/github.com/gabriel-vasile/mimetype:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/hook:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/list:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/security:go_default_library",
         "//vendor/golang.org/x/net/html:go_default_library",

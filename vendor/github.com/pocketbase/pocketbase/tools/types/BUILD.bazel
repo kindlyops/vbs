@@ -4,6 +4,7 @@ go_library(
     name = "go_default_library",
     srcs = [
         "datetime.go",
+        "geo_point.go",
         "json_array.go",
         "json_map.go",
         "json_raw.go",

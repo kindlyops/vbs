@@ -3,8 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = [
-        "admin.go",
         "serve.go",
+        "superuser.go",
     ],
     importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/cmd",
     importpath = "github.com/pocketbase/pocketbase/cmd",
@@ -14,7 +14,7 @@ go_library(
         "//vendor/github.com/go-ozzo/ozzo-validation/v4/is:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/apis:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/core:go_default_library",
-        "//vendor/github.com/pocketbase/pocketbase/models:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/security:go_default_library",
         "//vendor/github.com/spf13/cobra:go_default_library",
     ],
 )
