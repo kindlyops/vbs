@@ -38,3 +38,5 @@ yarn-error.log*
 .env.production.local
 
 .claude/settings.local.json
+user.bazelrc
+.bazel-distdir
