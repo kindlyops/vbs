@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "env.go",
+        "env_other.go",
+        "env_windows.go",
+        "profile.go",
+        "writer.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/charmbracelet/colorprofile",
+    importpath = "github.com/charmbracelet/colorprofile",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/charmbracelet/x/ansi:go_default_library",
+        "//vendor/github.com/charmbracelet/x/term:go_default_library",
+        "//vendor/github.com/lucasb-eyer/go-colorful:go_default_library",
+        "//vendor/github.com/xo/terminfo:go_default_library",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//vendor/golang.org/x/sys/windows:go_default_library",
+        ],
+        "//conditions:default": [],
+    }),
+)
