@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"log"
+	"errors"
 	"net/http"
 
 	"github.com/pocketbase/pocketbase/apis"
@@ -17,19 +17,38 @@ func NewServeCommand(app core.App, showStartBanner bool) *cobra.Command {
 	var httpsAddr string
 
 	command := &cobra.Command{
-		Use:   "serve",
-		Short: "Starts the web server (default to 127.0.0.1:8090)",
-		Run: func(command *cobra.Command, args []string) {
-			err := apis.Serve(app, &apis.ServeOptions{
-				HttpAddr:        httpAddr,
-				HttpsAddr:       httpsAddr,
-				ShowStartBanner: showStartBanner,
-				AllowedOrigins:  allowedOrigins,
+		Use:          "serve [domain(s)]",
+		Args:         cobra.ArbitraryArgs,
+		Short:        "Starts the web server (default to 127.0.0.1:8090 if no domain is specified)",
+		SilenceUsage: true,
+		RunE: func(command *cobra.Command, args []string) error {
+			// set default listener addresses if at least one domain is specified
+			if len(args) > 0 {
+				if httpAddr == "" {
+					httpAddr = "0.0.0.0:80"
+				}
+				if httpsAddr == "" {
+					httpsAddr = "0.0.0.0:443"
+				}
+			} else {
+				if httpAddr == "" {
+					httpAddr = "127.0.0.1:8090"
+				}
+			}
+
+			err := apis.Serve(app, apis.ServeConfig{
+				HttpAddr:           httpAddr,
+				HttpsAddr:          httpsAddr,
+				ShowStartBanner:    showStartBanner,
+				AllowedOrigins:     allowedOrigins,
+				CertificateDomains: args,
 			})
 
-			if err != http.ErrServerClosed {
-				log.Fatalln(err)
+			if errors.Is(err, http.ErrServerClosed) {
+				return nil
 			}
+
+			return err
 		},
 	}
 
@@ -43,15 +62,15 @@ func NewServeCommand(app core.App, showStartBanner bool) *cobra.Command {
 	command.PersistentFlags().StringVar(
 		&httpAddr,
 		"http",
-		"127.0.0.1:8090",
-		"api HTTP server address",
+		"",
+		"TCP address to listen for the HTTP server\n(if domain args are specified - default to 0.0.0.0:80, otherwise - default to 127.0.0.1:8090)",
 	)
 
 	command.PersistentFlags().StringVar(
 		&httpsAddr,
 		"https",
 		"",
-		"api HTTPS server address (auto TLS via Let's Encrypt)\nthe incoming --http address traffic also will be redirected to this address",
+		"TCP address to listen for the HTTPS server\n(if domain args are specified - default to 0.0.0.0:443, otherwise - default to empty string, aka. no TLS)\nThe incoming HTTP traffic also will be auto redirected to the HTTPS version",
 	)
 
 	return command

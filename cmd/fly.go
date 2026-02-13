@@ -16,12 +16,10 @@ package cmd
 
 import (
 	"io/fs"
-	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/kindlyops/vbs/embeddy"
-	"github.com/labstack/echo/v5"
 	"github.com/muesli/coral"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
@@ -52,54 +50,33 @@ func flyServer(cmd *coral.Command, args []string) {
 	}
 
 	log.Debug().Msgf("running pocketbase with data dir %s\n", configDir)
-	app := pocketbase.NewWithConfig(&pocketbase.Config{
+	app := pocketbase.NewWithConfig(pocketbase.Config{
 		DefaultDataDir: configDir,
 	})
 
 	migrationsDir := "" // default to "pb_migrations" (for js) and "migrations" (for go)
 
 	// register the `migrate` command
-	migratecmd.MustRegister(app, app.RootCmd, &migratecmd.Options{
+	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
 		TemplateLang: migratecmd.TemplateLangGo, // or migratecmd.TemplateLangJS
 		Dir:          migrationsDir,
 		Automigrate:  true,
 	})
 
-	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
+	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		public, err := fs.Sub(embeddy.GetNextFS(), "public")
 		if err != nil {
 			log.Fatal().Err(err).Msg("Could not access embedded public directory")
 		}
-		assetHandler := http.FileServer(http.FS(public))
-		e.Router.AddRoute(echo.Route{
-			Method:  http.MethodGet,
-			Path:    "/*",
-			Handler: echo.WrapHandler(assetHandler),
-			Middlewares: []echo.MiddlewareFunc{
-				apis.ActivityLogger(app),
-				//apis.RequireAdminAuth(),
-			},
-		})
 
-		e.Router.AddRoute(echo.Route{
-			Method: http.MethodPost,
-			Path:   "/api/switcher/*",
-			Middlewares: []echo.MiddlewareFunc{
-				apis.ActivityLogger(app),
-			},
-			Handler: echo.WrapHandler(&Switcher{}),
-		})
+		// Serve static files
+		e.Router.GET("/*", apis.Static(public, true))
 
-		e.Router.AddRoute(echo.Route{
-			Method: http.MethodPost,
-			Path:   "/api/light/*",
-			Middlewares: []echo.MiddlewareFunc{
-				apis.ActivityLogger(app),
-			},
-			Handler: echo.WrapHandler(&Lighting{}),
-		})
+		// Custom API routes
+		e.Router.POST("/api/switcher/*", apis.WrapStdHandler(&Switcher{}))
+		e.Router.POST("/api/light/*", apis.WrapStdHandler(&Lighting{}))
 
-		return nil
+		return e.Next()
 	})
 
 	if err := app.Start(); err != nil {

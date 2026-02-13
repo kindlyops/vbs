@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cast"
 )
 
-var cachedPatterns = store.New[*regexp.Regexp](nil)
+var cachedPatterns = store.New[string, *regexp.Regexp](nil)
 
 // SubtractSlice returns a new slice with only the "base" elements
 // that don't exist in "subtract".
@@ -27,7 +27,6 @@ func SubtractSlice[T comparable](base []T, subtract []T) []T {
 
 // ExistInSlice checks whether a comparable element exists in a slice of the same type.
 func ExistInSlice[T comparable](item T, list []T) bool {
-
 	for _, v := range list {
 		if v == item {
 			return true
@@ -40,7 +39,7 @@ func ExistInSlice[T comparable](item T, list []T) bool {
 // ExistInSliceWithRegex checks whether a string exists in a slice
 // either by direct match, or by a regular expression (eg. `^\w+$`).
 //
-// _Note: Only list items starting with '^' and ending with '$' are treated as regular expressions!_
+// Note: Only list items starting with '^' and ending with '$' are treated as regular expressions!
 func ExistInSliceWithRegex(str string, list []string) bool {
 	for _, field := range list {
 		isRegex := strings.HasPrefix(field, "^") && strings.HasSuffix(field, "$")
@@ -65,7 +64,7 @@ func ExistInSliceWithRegex(str string, list []string) bool {
 			// (the limit size is arbitrary and it is there to prevent the cache growing too big)
 			//
 			// @todo consider replacing with TTL or LRU type cache
-			cachedPatterns.SetIfLessThanLimit(field, pattern, 5000)
+			cachedPatterns.SetIfLessThanLimit(field, pattern, 500)
 		}
 
 		if pattern != nil && pattern.MatchString(str) {
@@ -130,7 +129,7 @@ func ToUniqueStringSlice(value any) (result []string) {
 			// just add the string as single array element
 			result = append(result, val)
 		}
-	case json.Marshaler: // eg. JsonArray
+	case json.Marshaler: // eg. JSONArray
 		raw, _ := val.MarshalJSON()
 		_ = json.Unmarshal(raw, &result)
 	default:
@@ -138,4 +137,27 @@ func ToUniqueStringSlice(value any) (result []string) {
 	}
 
 	return NonzeroUniques(result)
+}
+
+// ToChunks splits list into chunks.
+//
+// Zero or negative chunkSize argument is normalized to 1.
+//
+// See https://go.dev/wiki/SliceTricks#batching-with-minimal-allocation.
+func ToChunks[T any](list []T, chunkSize int) [][]T {
+	if chunkSize <= 0 {
+		chunkSize = 1
+	}
+
+	chunks := make([][]T, 0, (len(list)+chunkSize-1)/chunkSize)
+
+	if len(list) == 0 {
+		return chunks
+	}
+
+	for chunkSize < len(list) {
+		list, chunks = list[chunkSize:], append(chunks, list[0:chunkSize:chunkSize])
+	}
+
+	return append(chunks, list)
 }

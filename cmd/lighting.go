@@ -21,7 +21,6 @@ import (
 
 	"github.com/hypebeast/go-osc/osc"
 	"github.com/kindlyops/vbs/embeddy"
-	"github.com/labstack/echo/v5"
 	"github.com/muesli/coral"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -53,14 +52,21 @@ func lightingBridge(cmd *coral.Command, args []string) {
 	assetHandler := http.FileServer(http.FS(public))
 
 	log.Debug().Msgf("Starting HTTP server at: http://%s\n", listenAddr)
-	e := echo.New()
-	e.GET("/*", echo.WrapHandler(assetHandler))
-	e.POST("/api/switcher/*", echo.WrapHandler(&Switcher{}))
-	e.POST("/api/light/*", echo.WrapHandler(&Lighting{}))
-	err = e.Start(listenAddr)
+	
+	mux := http.NewServeMux()
+	mux.Handle("/", assetHandler)
+	mux.Handle("/api/switcher/", &Switcher{})
+	mux.Handle("/api/light/", &Lighting{})
+	
+	server := &http.Server{
+		Addr:    listenAddr,
+		Handler: mux,
+	}
+	
+	err = server.ListenAndServe()
 
 	if err != nil {
-		log.Error().Err(err).Msg("error from echo.Start")
+		log.Error().Err(err).Msg("error from http server")
 	}
 }
 

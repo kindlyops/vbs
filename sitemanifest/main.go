@@ -76,7 +76,8 @@ package {{.Package}}
 
 import (
 	"embed"
-	"github.com/labstack/echo/v5"
+	"fmt"
+	"io/fs"
 )
 
 {{range .Embeds}}
@@ -86,10 +87,20 @@ import (
 var distDir embed.FS
 
 // DistDirFS contains the embedded dist directory files (without the "dist" prefix)
-var DistDirFS = echo.MustSubFS(distDir, "dist")
+var DistDirFS = MustSubFS(distDir, "dist")
 
 func GetNextFS() embed.FS {
 	return distDir
+}
+
+// MustSubFS returns an fs.FS corresponding to the subtree rooted at dir.
+// It panics if there's an error.
+func MustSubFS(fsys fs.FS, dir string) fs.FS {
+	sub, err := fs.Sub(fsys, dir)
+	if err != nil {
+		panic(fmt.Errorf("failed to create sub FS: %%w", err))
+	}
+	return sub
 }`
 	tmpl, err := template.New("generated").Parse(t)
 	if err != nil {
