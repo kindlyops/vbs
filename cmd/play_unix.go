@@ -18,7 +18,6 @@
 package cmd
 
 import (
-	"io/ioutil"
 	"net"
 	"os"
 
@@ -26,12 +25,13 @@ import (
 )
 
 func GetIPCName() string {
-	f, err := ioutil.TempFile("", "vbs-player")
+	f, err := os.CreateTemp("", "vbs-player")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create temp file")
 	}
 
 	socketName := f.Name()
+	f.Close()
 	os.Remove(socketName)
 
 	return socketName

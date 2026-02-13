@@ -1,0 +1,19 @@
+name: Label Check
+on:
+  pull_request:
+    types: [opened, reopened, labeled, unlabeled, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  verify-labels:
+    name: verify labels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: jesusvasquez333/verify-pr-label-action@v1.4.0
+        with:
+          github-token: '${{ secrets.GITHUB_TOKEN }}'
+          disable-reviews: true
+          valid-labels: 'bug, feature, security, maintenance, documentation, dependencies'

@@ -59,7 +59,11 @@ func chapterSplit(cmd *coral.Command, args []string) {
 		log.Fatal().Err(err).Msg("Could not find ffmpeg. Please install ffmpeg.")
 	}
 
-	target, _ := filepath.Abs(args[0])
+	target, err := filepath.Abs(args[0])
+	if err != nil {
+		log.Fatal().Err(err).Msgf("Could not resolve path %s", args[0])
+	}
+
 	_, err = os.Stat(target)
 
 	if err != nil {
@@ -71,7 +75,7 @@ func chapterSplit(cmd *coral.Command, args []string) {
 		log.Fatal().Err(err).Msg("Could not extract chapters")
 	}
 
-	base := strings.Trim(path.Base(target), path.Ext(target))
+	base := strings.TrimSuffix(path.Base(target), path.Ext(target))
 	targetdir := fmt.Sprintf("split_%s", base)
 
 	var global fs.FileMode = 0777

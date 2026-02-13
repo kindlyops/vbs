@@ -44,7 +44,10 @@ func flyServer(cmd *coral.Command, args []string) {
 
 	configDir = filepath.Join(configDir, "vbs")
 
-	os.MkdirAll(configDir, os.ModePerm)
+	err = os.MkdirAll(configDir, os.ModePerm)
+	if err != nil {
+		log.Fatal().Stack().Err(err).Msg("Couldn't create config dir")
+	}
 
 	log.Debug().Msgf("running pocketbase with data dir %s\n", configDir)
 	app := pocketbase.NewWithConfig(pocketbase.Config{
@@ -61,7 +64,10 @@ func flyServer(cmd *coral.Command, args []string) {
 	})
 
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
-		public, _ := fs.Sub(embeddy.GetNextFS(), "public")
+		public, err := fs.Sub(embeddy.GetNextFS(), "public")
+		if err != nil {
+			log.Fatal().Err(err).Msg("Could not access embedded public directory")
+		}
 
 		e.Router.GET("/{path...}", apis.Static(public, true))
 		e.Router.POST("/api/switcher/{path...}", apis.WrapStdHandler(&Switcher{}))

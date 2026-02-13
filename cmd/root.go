@@ -71,8 +71,7 @@ func saveConfig(cmd *coral.Command, args []string) {
 
 	configDir = filepath.Join(configDir, "vbs")
 
-	os.MkdirAll(configDir, os.ModePerm)
-
+	err = os.MkdirAll(configDir, os.ModePerm)
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Couldn't create config dir")
 	}

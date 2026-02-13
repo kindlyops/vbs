@@ -3,3 +3,6 @@ test --test_verbose_timeout_warnings
 
 build --spawn_strategy=local
 build --verbose_failures
+
+# Import user-specific settings (auto-generated in remote environments)
+try-import %workspace%/user.bazelrc

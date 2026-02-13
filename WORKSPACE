@@ -6,7 +6,8 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-# Keep the version of rules_go in sync with go.mod
+load("//:go_version.bzl", "go_version")
+
 http_archive(
     name = "io_bazel_rules_go",
     sha256 = "0936c9bc3c4321ee372cb8f66dd972d368cb940ed01a9ba9fd7debcf0093f09b",
@@ -20,7 +21,11 @@ load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_depe
 
 go_rules_dependencies()
 
-go_register_toolchains(version = "1.24.0")
+go_version(name = "go_version_info")
+
+load("@go_version_info//:def.bzl", "GO_VERSION")
+
+go_register_toolchains(version = GO_VERSION)
 
 http_archive(
     name = "bazel_gazelle",
