@@ -6,7 +6,7 @@ def _go_version_impl(repository_ctx):
     for line in go_mod_content.split("\n"):
         line = line.strip()
         if line.startswith("go "):
-            parts = line.split()
+            parts = line.split(" ")
             if len(parts) >= 2:
                 go_version = parts[1]
                 break
