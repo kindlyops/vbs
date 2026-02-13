@@ -37,7 +37,10 @@ var lightingBridgeCmd = &coral.Command{
 
 func lightingBridge(cmd *coral.Command, args []string) {
 	listenAddr := "127.0.0.1:" + viper.GetString("lighting_port")
-	public, _ := fs.Sub(embeddy.GetNextFS(), "public")
+	public, err := fs.Sub(embeddy.GetNextFS(), "public")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not access embedded public directory")
+	}
 
 	fs.WalkDir(public, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -54,7 +57,7 @@ func lightingBridge(cmd *coral.Command, args []string) {
 	e.GET("/*", echo.WrapHandler(assetHandler))
 	e.POST("/api/switcher/*", echo.WrapHandler(&Switcher{}))
 	e.POST("/api/light/*", echo.WrapHandler(&Lighting{}))
-	err := e.Start(listenAddr)
+	err = e.Start(listenAddr)
 
 	if err != nil {
 		log.Error().Err(err).Msg("error from echo.Start")

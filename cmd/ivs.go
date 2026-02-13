@@ -54,6 +54,10 @@ func ivsOscBridge(cmd *coral.Command, args []string) {
 	d := osc.NewStandardDispatcher()
 	_ = d.AddMsgHandler("/vbs/ivsbridge", func(msg *osc.Message) {
 		log.Debug().Msg(msg.String())
+		if len(msg.Arguments) == 0 {
+			log.Error().Msg("Received OSC message with no arguments")
+			return
+		}
 		data := fmt.Sprintf("%v", msg.Arguments[0])
 		input := &ivs.PutMetadataInput{
 			ChannelArn: aws.String(arn),

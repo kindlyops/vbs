@@ -19,20 +19,22 @@ package cmd
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
+	"os"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/rs/zerolog/log"
 )
 
 func GetIPCName() string {
-	f, err := ioutil.TempFile("", "vbs-player")
+	f, err := os.CreateTemp("", "vbs-player")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create temp file")
 	}
 
 	socketName := f.Name()
+	f.Close()
+	os.Remove(socketName)
 	pipeName := fmt.Sprintf(`\\.\pipe\%s`, socketName)
 
 	return pipeName
