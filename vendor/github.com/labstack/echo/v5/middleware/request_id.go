@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package middleware
 
 import (
@@ -14,18 +17,23 @@ type RequestIDConfig struct {
 	Generator func() string
 
 	// RequestIDHandler defines a function which is executed for a request id.
-	RequestIDHandler func(c echo.Context, requestID string)
+	RequestIDHandler func(c *echo.Context, requestID string)
 
-	// TargetHeader defines what header to look for to populate the id
+	// TargetHeader defines what header to look for to populate the id.
+	// Optional. Default value is `X-Request-Id`
 	TargetHeader string
 }
 
-// RequestID returns a X-Request-ID middleware.
+// RequestID returns a middleware that reads RequestIDConfig.TargetHeader (`X-Request-ID`) header value or when
+// the header value is empty, generates that value and sets request ID to response
+// as RequestIDConfig.TargetHeader (`X-Request-Id`) value.
 func RequestID() echo.MiddlewareFunc {
 	return RequestIDWithConfig(RequestIDConfig{})
 }
 
-// RequestIDWithConfig returns a X-Request-ID middleware with config or panics on invalid configuration.
+// RequestIDWithConfig returns a middleware with given valid config or panics on invalid configuration.
+// The middleware reads RequestIDConfig.TargetHeader (`X-Request-ID`) header value or when the header value is empty,
+// generates that value and sets request ID to response as RequestIDConfig.TargetHeader (`X-Request-Id`) value.
 func RequestIDWithConfig(config RequestIDConfig) echo.MiddlewareFunc {
 	return toMiddlewareOrPanic(config)
 }
@@ -43,7 +51,7 @@ func (config RequestIDConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if config.Skipper(c) {
 				return next(c)
 			}
