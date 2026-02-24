@@ -1,0 +1,47 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "commands.go",
+        "exec.go",
+        "focus.go",
+        "inputreader_other.go",
+        "inputreader_windows.go",
+        "key.go",
+        "key_other.go",
+        "key_sequences.go",
+        "key_windows.go",
+        "logging.go",
+        "mouse.go",
+        "nil_renderer.go",
+        "options.go",
+        "renderer.go",
+        "screen.go",
+        "signals_unix.go",
+        "signals_windows.go",
+        "standard_renderer.go",
+        "tea.go",
+        "tea_init.go",
+        "tty.go",
+        "tty_unix.go",
+        "tty_windows.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/charmbracelet/bubbletea",
+    importpath = "github.com/charmbracelet/bubbletea",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/charmbracelet/lipgloss:go_default_library",
+        "//vendor/github.com/charmbracelet/x/ansi:go_default_library",
+        "//vendor/github.com/charmbracelet/x/term:go_default_library",
+        "//vendor/github.com/muesli/ansi/compressor:go_default_library",
+        "//vendor/github.com/muesli/cancelreader:go_default_library",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//vendor/github.com/erikgeiser/coninput:go_default_library",
+            "//vendor/github.com/mattn/go-localereader:go_default_library",
+            "//vendor/golang.org/x/sys/windows:go_default_library",
+        ],
+        "//conditions:default": [],
+    }),
+)
