@@ -95,7 +95,7 @@ load("@rules_oci//oci:pull.bzl", "oci_pull")
 
 oci_pull(
     name = "distroless_static",
-    digest = "sha256:cd64bec9cec257044ce3a8dd3620cf83b387920100332f2b041f19c4d2febf93",
+    digest = "sha256:d90359c7a3ad67b3c11ca44fd5f3f5208cbef546f2e692b0dc3410a869de46bf",
     image = "gcr.io/distroless/static",
     platforms = [
         "linux/amd64",
