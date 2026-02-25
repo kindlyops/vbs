@@ -13,7 +13,7 @@ require (
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
-	github.com/charmbracelet/bubbles v0.16.1
+	github.com/charmbracelet/bubbles/v2 v2.0.0
 	github.com/charmbracelet/bubbletea v0.24.2
 	github.com/charmbracelet/lipgloss v0.13.1
 	github.com/labstack/echo/v5 v5.0.0-20220201181537-ed2888cfa198
