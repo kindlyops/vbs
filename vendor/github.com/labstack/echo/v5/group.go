@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package echo
 
 import (
@@ -9,10 +12,9 @@ import (
 // routes that share a common middleware or functionality that should be separate
 // from the parent echo instance while still inheriting from it.
 type Group struct {
-	host       string
+	echo       *Echo
 	prefix     string
 	middleware []MiddlewareFunc
-	echo       *Echo
 }
 
 // Use implements `Echo#Use()` for sub-routes within the Group.
@@ -67,26 +69,8 @@ func (g *Group) TRACE(path string, h HandlerFunc, m ...MiddlewareFunc) RouteInfo
 }
 
 // Any implements `Echo#Any()` for sub-routes within the Group. Panics on error.
-func (g *Group) Any(path string, handler HandlerFunc, middleware ...MiddlewareFunc) Routes {
-	errs := make([]error, 0)
-	ris := make(Routes, 0)
-	for _, m := range methods {
-		ri, err := g.AddRoute(Route{
-			Method:      m,
-			Path:        path,
-			Handler:     handler,
-			Middlewares: middleware,
-		})
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		ris = append(ris, ri)
-	}
-	if len(errs) > 0 {
-		panic(errs) // this is how `v4` handles errors. `v5` has methods to have panic-free usage
-	}
-	return ris
+func (g *Group) Any(path string, handler HandlerFunc, middleware ...MiddlewareFunc) RouteInfo {
+	return g.Add(RouteAny, path, handler, middleware...)
 }
 
 // Match implements `Echo#Match()` for sub-routes within the Group. Panics on error.
@@ -121,14 +105,13 @@ func (g *Group) Group(prefix string, middleware ...MiddlewareFunc) (sg *Group) {
 	m = append(m, g.middleware...)
 	m = append(m, middleware...)
 	sg = g.echo.Group(g.prefix+prefix, m...)
-	sg.host = g.host
 	return
 }
 
 // Static implements `Echo#Static()` for sub-routes within the Group.
-func (g *Group) Static(pathPrefix, fsRoot string) RouteInfo {
+func (g *Group) Static(pathPrefix, fsRoot string, middleware ...MiddlewareFunc) RouteInfo {
 	subFs := MustSubFS(g.echo.Filesystem, fsRoot)
-	return g.StaticFS(pathPrefix, subFs)
+	return g.StaticFS(pathPrefix, subFs, middleware...)
 }
 
 // StaticFS implements `Echo#StaticFS()` for sub-routes within the Group.
@@ -136,11 +119,12 @@ func (g *Group) Static(pathPrefix, fsRoot string) RouteInfo {
 // When dealing with `embed.FS` use `fs := echo.MustSubFS(fs, "rootDirectory") to create sub fs which uses necessary
 // prefix for directory path. This is necessary as `//go:embed assets/images` embeds files with paths
 // including `assets/images` as their prefix.
-func (g *Group) StaticFS(pathPrefix string, filesystem fs.FS) RouteInfo {
+func (g *Group) StaticFS(pathPrefix string, filesystem fs.FS, middleware ...MiddlewareFunc) RouteInfo {
 	return g.Add(
 		http.MethodGet,
 		pathPrefix+"*",
 		StaticDirectoryHandler(filesystem, false),
+		middleware...,
 	)
 }
 
@@ -151,10 +135,17 @@ func (g *Group) FileFS(path, file string, filesystem fs.FS, m ...MiddlewareFunc)
 
 // File implements `Echo#File()` for sub-routes within the Group. Panics on error.
 func (g *Group) File(path, file string, middleware ...MiddlewareFunc) RouteInfo {
-	handler := func(c Context) error {
+	handler := func(c *Context) error {
 		return c.File(file)
 	}
 	return g.Add(http.MethodGet, path, handler, middleware...)
+}
+
+// RouteNotFound implements `Echo#RouteNotFound()` for sub-routes within the Group.
+//
+// Example: `g.RouteNotFound("/*", func(c *echo.Context) error { return c.NoContent(http.StatusNotFound) })`
+func (g *Group) RouteNotFound(path string, h HandlerFunc, m ...MiddlewareFunc) RouteInfo {
+	return g.Add(RouteNotFound, path, h, m...)
 }
 
 // Add implements `Echo#Add()` for sub-routes within the Group. Panics on error.
@@ -172,10 +163,10 @@ func (g *Group) Add(method, path string, handler HandlerFunc, middleware ...Midd
 }
 
 // AddRoute registers a new Routable with Router
-func (g *Group) AddRoute(route Routable) (RouteInfo, error) {
+func (g *Group) AddRoute(route Route) (RouteInfo, error) {
 	// Combine middleware into a new slice to avoid accidentally passing the same slice for
 	// multiple routes, which would lead to later add() calls overwriting the
 	// middleware from earlier calls.
-	groupRoute := route.ForGroup(g.prefix, append([]MiddlewareFunc{}, g.middleware...))
-	return g.echo.add(g.host, groupRoute)
+	groupRoute := route.WithPrefix(g.prefix, append([]MiddlewareFunc{}, g.middleware...))
+	return g.echo.add(groupRoute)
 }
