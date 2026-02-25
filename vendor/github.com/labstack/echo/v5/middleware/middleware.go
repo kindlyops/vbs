@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package middleware
 
 import (
@@ -10,10 +13,10 @@ import (
 )
 
 // Skipper defines a function to skip middleware. Returning true skips processing the middleware.
-type Skipper func(c echo.Context) bool
+type Skipper func(c *echo.Context) bool
 
 // BeforeFunc defines a function which is executed just before the middleware.
-type BeforeFunc func(c echo.Context)
+type BeforeFunc func(c *echo.Context)
 
 func captureTokens(pattern *regexp.Regexp, input string) *strings.Replacer {
 	groups := pattern.FindAllStringSubmatch(input, -1)
@@ -35,9 +38,9 @@ func rewriteRulesRegex(rewrite map[string]string) map[*regexp.Regexp]string {
 	rulesRegex := map[*regexp.Regexp]string{}
 	for k, v := range rewrite {
 		k = regexp.QuoteMeta(k)
-		k = strings.Replace(k, `\*`, "(.*?)", -1)
+		k = strings.ReplaceAll(k, `\*`, "(.*?)")
 		if strings.HasPrefix(k, `\^`) {
-			k = strings.Replace(k, `\^`, "^", -1)
+			k = strings.ReplaceAll(k, `\^`, "^")
 		}
 		k = k + "$"
 		rulesRegex[regexp.MustCompile(k)] = v
@@ -81,7 +84,7 @@ func rewriteURL(rewriteRegex map[*regexp.Regexp]string, req *http.Request) error
 }
 
 // DefaultSkipper returns false which processes the middleware.
-func DefaultSkipper(echo.Context) bool {
+func DefaultSkipper(c *echo.Context) bool {
 	return false
 }
 
