@@ -1,13 +1,10 @@
 package fexpr
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
-	"io"
-	"regexp"
-	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // eof represents a marker rune for the end of the reader.
@@ -58,30 +55,42 @@ const (
 	TokenJoin       TokenType = "join"
 	TokenSign       TokenType = "sign"
 	TokenIdentifier TokenType = "identifier" // variable, column name, placeholder, etc.
+	TokenFunction   TokenType = "function"   // function
 	TokenNumber     TokenType = "number"
 	TokenText       TokenType = "text"  // ' or " quoted string
 	TokenGroup      TokenType = "group" // groupped/nested tokens
+	TokenComment    TokenType = "comment"
 )
 
 // Token represents a single scanned literal (one or more combined runes).
 type Token struct {
+	Meta    interface{}
 	Type    TokenType
 	Literal string
 }
 
-// Scanner represents a filter and lexical scanner.
-type Scanner struct {
-	r *bufio.Reader
+// NewScanner creates and returns a new scanner instance loaded with the specified data.
+func NewScanner(data []byte) *Scanner {
+	return &Scanner{
+		data:         data,
+		maxFuncDepth: 3,
+	}
 }
 
-// NewScanner creates and returns a new scanner instance with the specified io.Reader.
-func NewScanner(r io.Reader) *Scanner {
-	return &Scanner{bufio.NewReader(r)}
+// Scanner represents a filter and lexical scanner.
+type Scanner struct {
+	data         []byte
+	pos          int
+	maxFuncDepth int
 }
 
 // Scan reads and returns the next available token value from the scanner's buffer.
 func (s *Scanner) Scan() (Token, error) {
 	ch := s.read()
+
+	if ch == eof {
+		return Token{Type: TokenEOF, Literal: ""}, nil
+	}
 
 	if isWhitespaceRune(ch) {
 		s.unread()
@@ -95,7 +104,7 @@ func (s *Scanner) Scan() (Token, error) {
 
 	if isIdentifierStartRune(ch) {
 		s.unread()
-		return s.scanIdentifier()
+		return s.scanIdentifier(s.maxFuncDepth)
 	}
 
 	if isNumberStartRune(ch) {
@@ -105,7 +114,7 @@ func (s *Scanner) Scan() (Token, error) {
 
 	if isTextStartRune(ch) {
 		s.unread()
-		return s.scanText()
+		return s.scanText(false)
 	}
 
 	if isSignStartRune(ch) {
@@ -118,8 +127,9 @@ func (s *Scanner) Scan() (Token, error) {
 		return s.scanJoin()
 	}
 
-	if ch == eof {
-		return Token{Type: TokenEOF, Literal: ""}, nil
+	if isCommentStartRune(ch) {
+		s.unread()
+		return s.scanComment()
 	}
 
 	return Token{Type: TokenUnexpected, Literal: string(ch)}, fmt.Errorf("unexpected character %q", ch)
@@ -150,44 +160,12 @@ func (s *Scanner) scanWhitespace() (Token, error) {
 	return Token{Type: TokenWS, Literal: buf.String()}, nil
 }
 
-// scanIdentifier consumes all contiguous ident runes.
-func (s *Scanner) scanIdentifier() (Token, error) {
-	var buf bytes.Buffer
-
-	// Read every subsequent identifier rune into the buffer.
-	// Non-ident runes and EOF will cause the loop to exit.
-	for {
-		ch := s.read()
-
-		if ch == eof {
-			break
-		}
-
-		if !isIdentifierStartRune(ch) && !isDigitRune(ch) && ch != '.' && ch != ':' {
-			s.unread()
-			break
-		}
-
-		// write the ident rune
-		buf.WriteRune(ch)
-	}
-
-	literal := buf.String()
-
-	var err error
-	if !isIdentifier(literal) {
-		err = fmt.Errorf("Invalid identifier %q", literal)
-	}
-
-	return Token{Type: TokenIdentifier, Literal: literal}, err
-}
-
-// scanNumber consumes all contiguous digit runes.
+// scanNumber consumes all contiguous digit runes
+// (complex numbers and scientific notations are not supported).
 func (s *Scanner) scanNumber() (Token, error) {
 	var buf bytes.Buffer
 
-	// read the number first rune to skip the sign (if exist)
-	buf.WriteRune(s.read())
+	var hadDot bool
 
 	// Read every subsequent digit rune into the buffer.
 	// Non-digit runes and EOF will cause the loop to exit.
@@ -198,27 +176,38 @@ func (s *Scanner) scanNumber() (Token, error) {
 			break
 		}
 
-		if !isDigitRune(ch) && ch != '.' {
+		// not a digit rune
+		if !isDigitRune(ch) &&
+			// minus sign but not at the beginning
+			(ch != '-' || buf.Len() != 0) &&
+			// dot but there was already another dot
+			(ch != '.' || hadDot) {
 			s.unread()
 			break
 		}
 
-		// write the digit rune
+		// write the rune
 		buf.WriteRune(ch)
+
+		if ch == '.' {
+			hadDot = true
+		}
 	}
 
+	total := buf.Len()
 	literal := buf.String()
 
 	var err error
-	if !isNumber(literal) {
+	// only "-" or starts with "." or ends with "."
+	if (total == 1 && literal[0] == '-') || literal[0] == '.' || literal[total-1] == '.' {
 		err = fmt.Errorf("invalid number %q", literal)
 	}
 
-	return Token{Type: TokenNumber, Literal: literal}, err
+	return Token{Type: TokenNumber, Literal: buf.String()}, err
 }
 
 // scanText consumes all contiguous quoted text runes.
-func (s *Scanner) scanText() (Token, error) {
+func (s *Scanner) scanText(preserveQuotes bool) (Token, error) {
 	var buf bytes.Buffer
 
 	// read the first rune to determine the quotes type
@@ -253,15 +242,89 @@ func (s *Scanner) scanText() (Token, error) {
 	var err error
 	if !hasMatchingQuotes {
 		err = fmt.Errorf("invalid quoted text %q", literal)
-	} else {
+	} else if !preserveQuotes {
 		// unquote
 		literal = literal[1 : len(literal)-1]
 		// remove escaped quotes prefix (aka. \)
 		firstChStr := string(firstCh)
-		literal = strings.Replace(literal, `\`+firstChStr, firstChStr, -1)
+		literal = strings.ReplaceAll(literal, `\`+firstChStr, firstChStr)
 	}
 
 	return Token{Type: TokenText, Literal: literal}, err
+}
+
+// scanComment consumes all contiguous single line comment runes until
+// a new character (\n) or EOF is reached.
+func (s *Scanner) scanComment() (Token, error) {
+	var buf bytes.Buffer
+
+	// Read the first 2 characters without writting them to the buffer.
+	if !isCommentStartRune(s.read()) || !isCommentStartRune(s.read()) {
+		return Token{Type: TokenComment}, ErrInvalidComment
+	}
+
+	// Read every subsequent comment text rune into the buffer.
+	// \n and EOF will cause the loop to exit.
+	for i := 0; ; i++ {
+		ch := s.read()
+
+		if ch == eof || ch == '\n' {
+			break
+		}
+
+		buf.WriteRune(ch)
+	}
+
+	return Token{Type: TokenComment, Literal: strings.TrimSpace(buf.String())}, nil
+}
+
+// scanIdentifier consumes all contiguous ident runes.
+func (s *Scanner) scanIdentifier(funcDepth int) (Token, error) {
+	var buf bytes.Buffer
+
+	// read the first rune in case it is a special start identifier character
+	buf.WriteRune(s.read())
+
+	// Read every subsequent identifier rune into the buffer.
+	// Non-ident runes and EOF will cause the loop to exit.
+	for {
+		ch := s.read()
+
+		if ch == eof {
+			break
+		}
+
+		// func
+		if ch == '(' {
+			funcName := buf.String()
+			if funcDepth <= 0 {
+				return Token{Type: TokenFunction, Literal: funcName}, fmt.Errorf("max nested function arguments reached (max: %d)", s.maxFuncDepth)
+			}
+			if !isValidIdentifier(funcName) {
+				return Token{Type: TokenFunction, Literal: funcName}, fmt.Errorf("invalid function name %q", funcName)
+			}
+			s.unread()
+			return s.scanFunctionArgs(funcName, funcDepth)
+		}
+
+		// not an identifier character
+		if !isLetterRune(ch) && !isDigitRune(ch) && !isIdentifierCombineRune(ch) && ch != '_' {
+			s.unread()
+			break
+		}
+
+		// write the identifier rune
+		buf.WriteRune(ch)
+	}
+
+	literal := buf.String()
+
+	var err error
+	if !isValidIdentifier(literal) {
+		err = fmt.Errorf("invalid identifier %q", literal)
+	}
+
+	return Token{Type: TokenIdentifier, Literal: literal}, err
 }
 
 // scanSign consumes all contiguous sign operator runes.
@@ -351,15 +414,14 @@ func (s *Scanner) scanGroup() (Token, error) {
 			buf.WriteRune(ch)
 		} else if isTextStartRune(ch) {
 			s.unread()
-			t, err := s.scanText()
+			t, err := s.scanText(true) // with quotes to preserve the exact text start/end runes
 			if err != nil {
 				// write the errored literal as it is
 				buf.WriteString(t.Literal)
 				return Token{Type: TokenGroup, Literal: buf.String()}, err
 			}
 
-			// quote the literal to preserve the text start/end runes
-			buf.WriteString("\"" + t.Literal + "\"")
+			buf.WriteString(t.Literal)
 		} else if ch == ')' {
 			openGroups--
 
@@ -384,19 +446,120 @@ func (s *Scanner) scanGroup() (Token, error) {
 	return Token{Type: TokenGroup, Literal: literal}, err
 }
 
-// read reads the next rune from the buffered reader.
-// Returns the `rune(0)` if an error or `io.EOF` occurs.
-func (s *Scanner) read() rune {
-	ch, _, err := s.r.ReadRune()
-	if err != nil {
-		return eof
+// scanFunctionArgs consumes all contiguous function call runes to
+// extract its arguments and returns a function token with the found
+// Token arguments loaded in Token.Meta.
+func (s *Scanner) scanFunctionArgs(funcName string, funcDepth int) (Token, error) {
+	var args []Token
+
+	var expectComma, isComma, isClosed bool
+
+	ch := s.read()
+	if ch != '(' {
+		return Token{Type: TokenFunction, Literal: funcName}, fmt.Errorf("invalid or incomplete function call %q", funcName)
 	}
-	return ch
+
+	// Read every subsequent rune until ')' or EOF has been reached.
+	for {
+		ch := s.read()
+
+		if ch == eof {
+			break
+		}
+
+		if ch == ')' {
+			isClosed = true
+			break
+		}
+
+		// skip whitespaces
+		if isWhitespaceRune(ch) {
+			_, err := s.scanWhitespace()
+			if err != nil {
+				return Token{Type: TokenFunction, Literal: funcName, Meta: args}, fmt.Errorf("failed to scan whitespaces in function %q: %w", funcName, err)
+			}
+			continue
+		}
+
+		// skip comments
+		if isCommentStartRune(ch) {
+			s.unread()
+			_, err := s.scanComment()
+			if err != nil {
+				return Token{Type: TokenFunction, Literal: funcName, Meta: args}, fmt.Errorf("failed to scan comment in function %q: %w", funcName, err)
+			}
+			continue
+		}
+
+		isComma = ch == ','
+
+		if expectComma && !isComma {
+			return Token{Type: TokenFunction, Literal: funcName, Meta: args}, fmt.Errorf("expected comma after the last argument in function %q", funcName)
+		}
+
+		if !expectComma && isComma {
+			return Token{Type: TokenFunction, Literal: funcName, Meta: args}, fmt.Errorf("unexpected comma in function %q", funcName)
+		}
+
+		expectComma = false // reset
+
+		if isComma {
+			continue
+		}
+
+		if isIdentifierStartRune(ch) {
+			s.unread()
+			t, err := s.scanIdentifier(funcDepth - 1)
+			if err != nil {
+				return Token{Type: TokenFunction, Literal: funcName, Meta: args}, fmt.Errorf("invalid identifier argument %q in function %q: %w", t.Literal, funcName, err)
+			}
+			args = append(args, t)
+			expectComma = true
+		} else if isNumberStartRune(ch) {
+			s.unread()
+			t, err := s.scanNumber()
+			if err != nil {
+				return Token{Type: TokenFunction, Literal: funcName, Meta: args}, fmt.Errorf("invalid number argument %q in function %q: %w", t.Literal, funcName, err)
+			}
+			args = append(args, t)
+			expectComma = true
+		} else if isTextStartRune(ch) {
+			s.unread()
+			t, err := s.scanText(false)
+			if err != nil {
+				return Token{Type: TokenFunction, Literal: funcName, Meta: args}, fmt.Errorf("invalid text argument %q in function %q: %w", t.Literal, funcName, err)
+			}
+			args = append(args, t)
+			expectComma = true
+		} else {
+			return Token{Type: TokenFunction, Literal: funcName, Meta: args}, fmt.Errorf("unsupported argument character %q in function %q", ch, funcName)
+		}
+	}
+
+	if !isClosed {
+		return Token{Type: TokenFunction, Literal: funcName, Meta: args}, fmt.Errorf("invalid or incomplete function %q (expected ')')", funcName)
+	}
+
+	return Token{Type: TokenFunction, Literal: funcName, Meta: args}, nil
 }
 
-// unread places the previously read rune back on the reader.
-func (s *Scanner) unread() error {
-	return s.r.UnreadRune()
+// unread unreads the last character and revert the position 1 step back.
+func (s *Scanner) unread() {
+	if s.pos > 0 {
+		s.pos = s.pos - 1
+	}
+}
+
+// read reads the next rune and moves the position forward.
+func (s *Scanner) read() rune {
+	if s.pos >= len(s.data) {
+		return eof
+	}
+
+	ch, n := utf8.DecodeRune(s.data[s.pos:])
+	s.pos += n
+
+	return ch
 }
 
 // Lexical helpers:
@@ -413,11 +576,6 @@ func isLetterRune(ch rune) bool {
 // isDigitRune checks if a rune is a digit.
 func isDigitRune(ch rune) bool {
 	return (ch >= '0' && ch <= '9')
-}
-
-// isIdentifierStartRune checks if a rune is valid identifier's first character.
-func isIdentifierStartRune(ch rune) bool {
-	return isLetterRune(ch) || ch == '_' || ch == '@' || ch == '#'
 }
 
 // isTextStartRune checks if a rune is a valid quoted text first character
@@ -451,6 +609,26 @@ func isGroupStartRune(ch rune) bool {
 	return ch == '('
 }
 
+// isCommentStartRune checks if a rune is a valid comment start character.
+func isCommentStartRune(ch rune) bool {
+	return ch == '/'
+}
+
+// isIdentifierStartRune checks if a rune is valid identifier's first character.
+func isIdentifierStartRune(ch rune) bool {
+	return isLetterRune(ch) || isIdentifierSpecialStartRune(ch)
+}
+
+// isIdentifierSpecialStartRune checks if a rune is valid identifier's first special character.
+func isIdentifierSpecialStartRune(ch rune) bool {
+	return ch == '@' || ch == '_' || ch == '#'
+}
+
+// isIdentifierCombineRune checks if a rune is valid identifier's combine character.
+func isIdentifierCombineRune(ch rune) bool {
+	return ch == '.' || ch == ':'
+}
+
 // isSignOperator checks if a literal is a valid sign operator.
 func isSignOperator(literal string) bool {
 	switch SignOp(literal) {
@@ -479,27 +657,23 @@ func isSignOperator(literal string) bool {
 
 // isJoinOperator checks if a literal is a valid join type operator.
 func isJoinOperator(literal string) bool {
-	op := JoinOp(literal)
-
-	return op == JoinAnd || op == JoinOr
-}
-
-// isNumber checks if a literal is numeric.
-func isNumber(literal string) bool {
-	// strconv.ParseFloat() considers numerics with dot suffix
-	// a valid floating point number (eg. "123."), but we don't want this
-	if literal == "" || literal[len(literal)-1] == '.' {
-		return false
+	switch JoinOp(literal) {
+	case
+		JoinAnd,
+		JoinOr:
+		return true
 	}
 
-	_, err := strconv.ParseFloat(literal, 64)
-
-	return err == nil
+	return false
 }
 
-var identifierRegex = regexp.MustCompile(`^[\@\#\_]?[\w\.\:]*\w+$`)
+// isValidIdentifier validates the literal against common identifier requirements.
+func isValidIdentifier(literal string) bool {
+	length := len(literal)
 
-// isIdentifier checks if a literal is properly formatted identifier.
-func isIdentifier(literal string) bool {
-	return identifierRegex.MatchString(literal)
+	return (
+	// doesn't end with combine rune
+	!isIdentifierCombineRune(rune(literal[length-1])) &&
+		// is not just a special start rune
+		(length != 1 || !isIdentifierSpecialStartRune(rune(literal[0]))))
 }

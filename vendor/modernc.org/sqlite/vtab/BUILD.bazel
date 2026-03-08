@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "doc.go",
+        "vtab.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/modernc.org/sqlite/vtab",
+    importpath = "modernc.org/sqlite/vtab",
+    visibility = ["//visibility:public"],
+)

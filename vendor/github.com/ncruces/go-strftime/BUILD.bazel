@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "parser.go",
+        "pkg.go",
+        "specifiers.go",
+        "strftime.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/ncruces/go-strftime",
+    importpath = "github.com/ncruces/go-strftime",
+    visibility = ["//visibility:public"],
+)

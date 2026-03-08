@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["bytes.go"],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/gabriel-vasile/mimetype/internal/scan",
+    importpath = "github.com/gabriel-vasile/mimetype/internal/scan",
+    visibility = ["//vendor/github.com/gabriel-vasile/mimetype:__subpackages__"],
+)

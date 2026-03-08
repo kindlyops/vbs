@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "attrs.go",
+        "fileblob.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/filesystem/internal/fileblob",
+    importpath = "github.com/pocketbase/pocketbase/tools/filesystem/internal/fileblob",
+    visibility = ["//vendor/github.com/pocketbase/pocketbase/tools/filesystem:__subpackages__"],
+    deps = ["//vendor/github.com/pocketbase/pocketbase/tools/filesystem/blob:go_default_library"],
+)

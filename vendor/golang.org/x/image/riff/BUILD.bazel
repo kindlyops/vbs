@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["riff.go"],
+    importmap = "github.com/kindlyops/vbs/vendor/golang.org/x/image/riff",
+    importpath = "golang.org/x/image/riff",
+    visibility = ["//visibility:public"],
+)

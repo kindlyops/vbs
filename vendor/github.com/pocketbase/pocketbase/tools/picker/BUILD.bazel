@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "excerpt_modifier.go",
+        "modifiers.go",
+        "pick.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/picker",
+    importpath = "github.com/pocketbase/pocketbase/tools/picker",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/pocketbase/pocketbase/tools/list:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/search:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/tokenizer:go_default_library",
+        "//vendor/github.com/spf13/cast:go_default_library",
+        "//vendor/golang.org/x/net/html:go_default_library",
+    ],
+)

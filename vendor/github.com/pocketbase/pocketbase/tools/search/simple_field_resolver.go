@@ -2,10 +2,20 @@ package search
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/tools/inflector"
 	"github.com/pocketbase/pocketbase/tools/list"
+)
+
+type NullFallbackPreference int
+
+const (
+	NullFallbackAuto     NullFallbackPreference = 0
+	NullFallbackDisabled NullFallbackPreference = 1
+	NullFallbackEnforced NullFallbackPreference = 2
 )
 
 // ResolverResult defines a single FieldResolver.Resolve() successfully parsed result.
@@ -14,13 +24,20 @@ type ResolverResult struct {
 	// in the final db expression as left or right operand.
 	Identifier string
 
+	// NullFallback specify the preference for how NULL or empty values
+	// should be resolved (default to "auto").
+	//
+	// Set to NullFallbackDisabled to prevent any COALESCE or NULL fallbacks.
+	// Set to NullFallbackEnforced to prefer COALESCE or NULL fallbacks when needed.
+	NullFallback NullFallbackPreference
+
 	// Params is a map with db placeholder->value pairs that will be added
 	// to the query when building both resolved operands/sides in a single expression.
 	Params dbx.Params
 
 	// MultiMatchSubQuery is an optional sub query expression that will be added
 	// in addition to the combined ResolverResult expression during build.
-	MultiMatchSubQuery dbx.Expression
+	MultiMatchSubQuery *MultiMatchSubquery
 
 	// AfterBuild is an optional function that will be called after building
 	// and combining the result of both resolved operands/sides in a single expression.
@@ -70,10 +87,38 @@ func (r *SimpleFieldResolver) UpdateQuery(query *dbx.SelectQuery) error {
 // Returns error if `field` is not in `r.allowedFields`.
 func (r *SimpleFieldResolver) Resolve(field string) (*ResolverResult, error) {
 	if !list.ExistInSliceWithRegex(field, r.allowedFields) {
-		return nil, fmt.Errorf("Failed to resolve field %q.", field)
+		return nil, fmt.Errorf("failed to resolve field %q", field)
+	}
+
+	parts := strings.Split(field, ".")
+
+	// single regular field
+	if len(parts) == 1 {
+		return &ResolverResult{
+			Identifier: "[[" + inflector.Columnify(parts[0]) + "]]",
+		}, nil
+	}
+
+	// treat as json path
+	var jsonPath strings.Builder
+	jsonPath.WriteString("$")
+	for _, part := range parts[1:] {
+		if _, err := strconv.Atoi(part); err == nil {
+			jsonPath.WriteString("[")
+			jsonPath.WriteString(inflector.Columnify(part))
+			jsonPath.WriteString("]")
+		} else {
+			jsonPath.WriteString(".")
+			jsonPath.WriteString(inflector.Columnify(part))
+		}
 	}
 
 	return &ResolverResult{
-		Identifier: "[[" + inflector.Columnify(field) + "]]",
+		NullFallback: NullFallbackDisabled,
+		Identifier: fmt.Sprintf(
+			"JSON_EXTRACT([[%s]], '%s')",
+			inflector.Columnify(parts[0]),
+			jsonPath.String(),
+		),
 	}, nil
 }
