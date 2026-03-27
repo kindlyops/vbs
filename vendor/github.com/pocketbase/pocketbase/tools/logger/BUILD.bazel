@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "batch_handler.go",
+        "log.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/logger",
+    importpath = "github.com/pocketbase/pocketbase/tools/logger",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/go-ozzo/ozzo-validation/v4:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/types:go_default_library",
+    ],
+)

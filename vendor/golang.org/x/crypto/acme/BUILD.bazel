@@ -8,7 +8,6 @@ go_library(
         "jws.go",
         "rfc8555.go",
         "types.go",
-        "version_go112.go",
     ],
     importmap = "github.com/kindlyops/vbs/vendor/golang.org/x/crypto/acme",
     importpath = "golang.org/x/crypto/acme",

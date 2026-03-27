@@ -2,9 +2,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "go_default_library",
-    srcs = ["dir.go"],
+    srcs = [
+        "cmd.go",
+        "dir.go",
+        "run.go",
+    ],
     importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/osutils",
     importpath = "github.com/pocketbase/pocketbase/tools/osutils",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/pocketbase/pocketbase/tools/list:go_default_library"],
+    deps = [
+        "//vendor/github.com/go-ozzo/ozzo-validation/v4/is:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/list:go_default_library",
+    ],
 )

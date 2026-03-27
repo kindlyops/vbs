@@ -2,7 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "go_default_library",
-    srcs = ["json.go"],
+    srcs = ["parser.go"],
     importmap = "github.com/kindlyops/vbs/vendor/github.com/gabriel-vasile/mimetype/internal/json",
     importpath = "github.com/gabriel-vasile/mimetype/internal/json",
     visibility = ["//vendor/github.com/gabriel-vasile/mimetype:__subpackages__"],

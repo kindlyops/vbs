@@ -4,9 +4,12 @@ go_library(
     name = "go_default_library",
     srcs = [
         "filter.go",
+        "identifier_macros.go",
+        "multi_match_subquery.go",
         "provider.go",
         "simple_field_resolver.go",
         "sort.go",
+        "token_functions.go",
     ],
     importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/search",
     importpath = "github.com/pocketbase/pocketbase/tools/search",
@@ -14,11 +17,13 @@ go_library(
     deps = [
         "//vendor/github.com/ganigeorgiev/fexpr:go_default_library",
         "//vendor/github.com/pocketbase/dbx:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/dbutils:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/inflector:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/list:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/security:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/store:go_default_library",
         "//vendor/github.com/pocketbase/pocketbase/tools/types:go_default_library",
         "//vendor/github.com/spf13/cast:go_default_library",
+        "//vendor/golang.org/x/sync/errgroup:go_default_library",
     ],
 )

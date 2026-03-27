@@ -76,7 +76,7 @@ package {{.Package}}
 
 import (
 	"embed"
-	"github.com/labstack/echo/v5"
+	"io/fs"
 )
 
 {{range .Embeds}}
@@ -86,7 +86,7 @@ import (
 var distDir embed.FS
 
 // DistDirFS contains the embedded dist directory files (without the "dist" prefix)
-var DistDirFS = echo.MustSubFS(distDir, "dist")
+var DistDirFS, _ = fs.Sub(distDir, "dist")
 
 func GetNextFS() embed.FS {
 	return distDir

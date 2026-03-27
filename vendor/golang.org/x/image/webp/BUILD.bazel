@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "decode.go",
+        "doc.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/golang.org/x/image/webp",
+    importpath = "golang.org/x/image/webp",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/golang.org/x/image/riff:go_default_library",
+        "//vendor/golang.org/x/image/vp8:go_default_library",
+        "//vendor/golang.org/x/image/vp8l:go_default_library",
+    ],
+)

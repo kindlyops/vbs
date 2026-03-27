@@ -4,8 +4,13 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/pocketbase/pocketbase/tools/types"
 	"golang.org/x/oauth2"
 )
+
+func init() {
+	Providers[NameGoogle] = wrapFactory(NewGoogleProvider)
+}
 
 var _ Provider = (*Google)(nil)
 
@@ -14,26 +19,28 @@ const NameGoogle string = "google"
 
 // Google allows authentication via Google OAuth2.
 type Google struct {
-	*baseProvider
+	BaseProvider
 }
 
 // NewGoogleProvider creates new Google provider instance with some defaults.
 func NewGoogleProvider() *Google {
-	return &Google{&baseProvider{
-		ctx: context.Background(),
+	return &Google{BaseProvider{
+		ctx:         context.Background(),
+		displayName: "Google",
+		pkce:        true,
 		scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.profile",
 			"https://www.googleapis.com/auth/userinfo.email",
 		},
-		authUrl:    "https://accounts.google.com/o/oauth2/auth",
-		tokenUrl:   "https://accounts.google.com/o/oauth2/token",
-		userApiUrl: "https://www.googleapis.com/oauth2/v1/userinfo",
+		authURL:     "https://accounts.google.com/o/oauth2/v2/auth",
+		tokenURL:    "https://oauth2.googleapis.com/token",
+		userInfoURL: "https://www.googleapis.com/oauth2/v3/userinfo",
 	}}
 }
 
 // FetchAuthUser returns an AuthUser instance based the Google's user api.
 func (p *Google) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
-	data, err := p.FetchRawUserData(token)
+	data, err := p.FetchRawUserInfo(token)
 	if err != nil {
 		return nil, err
 	}
@@ -44,11 +51,11 @@ func (p *Google) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
 	}
 
 	extracted := struct {
-		Id            string `json:"id"`
+		Id            string `json:"sub"`
 		Name          string `json:"name"`
-		Email         string `json:"email"`
 		Picture       string `json:"picture"`
-		VerifiedEmail bool   `json:"verified_email"`
+		Email         string `json:"email"`
+		EmailVerified bool   `json:"email_verified"`
 	}{}
 	if err := json.Unmarshal(data, &extracted); err != nil {
 		return nil, err
@@ -57,13 +64,15 @@ func (p *Google) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
 	user := &AuthUser{
 		Id:           extracted.Id,
 		Name:         extracted.Name,
-		AvatarUrl:    extracted.Picture,
+		AvatarURL:    extracted.Picture,
 		RawUser:      rawUser,
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
 	}
 
-	if extracted.VerifiedEmail {
+	user.Expiry, _ = types.ParseDateTime(token.Expiry)
+
+	if extracted.EmailVerified {
 		user.Email = extracted.Email
 	}
 

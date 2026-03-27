@@ -5,35 +5,32 @@
 //
 // Example usage:
 //
-//	migratecmd.MustRegister(app, app.RootCmd, &migratecmd.Options{
+//	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
 //		TemplateLang: migratecmd.TemplateLangJS, // default to migratecmd.TemplateLangGo
 //		Automigrate:  true,
-//		Dir:          "migrations_dir_path", // optional template migrations path; default to "pb_migrations" (for JS) and "migrations" (for Go)
+//		Dir:          "/custom/migrations/dir", // optional template migrations path; default to "pb_migrations" (for JS) and "migrations" (for Go)
 //	})
 //
 //	Note: To allow running JS migrations you'll need to enable first
-//	[jsvm.MustRegisterMigrations].
+//	[jsvm.MustRegister()].
 package migratecmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"time"
 
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/migrations"
-	"github.com/pocketbase/pocketbase/models"
 	"github.com/pocketbase/pocketbase/tools/inflector"
-	"github.com/pocketbase/pocketbase/tools/migrate"
+	"github.com/pocketbase/pocketbase/tools/osutils"
 	"github.com/spf13/cobra"
 )
 
-// Options defines optional struct to customize the default plugin behavior.
-type Options struct {
+// Config defines the config options of the migratecmd plugin.
+type Config struct {
 	// Dir specifies the directory with the user defined migrations.
 	//
 	// If not set it fallbacks to a relative "pb_data/../pb_migrations" (for js)
@@ -48,35 +45,31 @@ type Options struct {
 	TemplateLang string
 }
 
-type plugin struct {
-	app     core.App
-	options *Options
-}
-
-func MustRegister(app core.App, rootCmd *cobra.Command, options *Options) {
-	if err := Register(app, rootCmd, options); err != nil {
+// MustRegister registers the migratecmd plugin to the provided app instance
+// and panic if it fails.
+//
+// Example usage:
+//
+//	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{})
+func MustRegister(app core.App, rootCmd *cobra.Command, config Config) {
+	if err := Register(app, rootCmd, config); err != nil {
 		panic(err)
 	}
 }
 
-func Register(app core.App, rootCmd *cobra.Command, options *Options) error {
-	p := &plugin{app: app}
+// Register registers the migratecmd plugin to the provided app instance.
+func Register(app core.App, rootCmd *cobra.Command, config Config) error {
+	p := &plugin{app: app, config: config}
 
-	if options != nil {
-		p.options = options
-	} else {
-		p.options = &Options{}
+	if p.config.TemplateLang == "" {
+		p.config.TemplateLang = TemplateLangGo
 	}
 
-	if p.options.TemplateLang == "" {
-		p.options.TemplateLang = TemplateLangGo
-	}
-
-	if p.options.Dir == "" {
-		if p.options.TemplateLang == TemplateLangJS {
-			p.options.Dir = filepath.Join(p.app.DataDir(), "../pb_migrations")
+	if p.config.Dir == "" {
+		if p.config.TemplateLang == TemplateLangJS {
+			p.config.Dir = filepath.Join(p.app.DataDir(), "../pb_migrations")
 		} else {
-			p.options.Dir = filepath.Join(p.app.DataDir(), "../migrations")
+			p.config.Dir = filepath.Join(p.app.DataDir(), "../migrations")
 		}
 	}
 
@@ -86,47 +79,18 @@ func Register(app core.App, rootCmd *cobra.Command, options *Options) error {
 	}
 
 	// watch for collection changes
-	if p.options.Automigrate {
-		// refresh the cache right after app bootstap
-		p.app.OnAfterBootstrap().Add(func(e *core.BootstrapEvent) error {
-			p.refreshCachedCollections()
-			return nil
-		})
-
-		// refresh the cache to ensure that it constains the latest changes
-		// when migrations are applied on server start
-		p.app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
-			p.refreshCachedCollections()
-
-			cachedCollections, _ := p.getCachedCollections()
-			// create a full initial snapshot, if there are no custom
-			// migrations but there is already at least 1 collection created,
-			// to ensure that the automigrate will work with up-to-date collections data
-			if !p.hasCustomMigrations() && len(cachedCollections) > 1 {
-				snapshotFile, err := p.migrateCollectionsHandler(nil, false)
-				if err != nil {
-					return err
-				}
-
-				// insert the snapshot migration entry
-				_, insertErr := p.app.Dao().NonconcurrentDB().Insert(migrate.DefaultMigrationsTable, dbx.Params{
-					"file":    snapshotFile,
-					"applied": time.Now().Unix(),
-				}).Execute()
-				if insertErr != nil {
-					return insertErr
-				}
-			}
-
-			return nil
-		})
-
-		p.app.OnModelAfterCreate().Add(p.afterCollectionChange())
-		p.app.OnModelAfterUpdate().Add(p.afterCollectionChange())
-		p.app.OnModelAfterDelete().Add(p.afterCollectionChange())
+	if p.config.Automigrate {
+		p.app.OnCollectionCreateRequest().BindFunc(p.automigrateOnCollectionChange)
+		p.app.OnCollectionUpdateRequest().BindFunc(p.automigrateOnCollectionChange)
+		p.app.OnCollectionDeleteRequest().BindFunc(p.automigrateOnCollectionChange)
 	}
 
 	return nil
+}
+
+type plugin struct {
+	app    core.App
+	config Config
 }
 
 func (p *plugin) createCommand() *cobra.Command {
@@ -139,13 +103,11 @@ func (p *plugin) createCommand() *cobra.Command {
 `
 
 	command := &cobra.Command{
-		Use:       "migrate",
-		Short:     "Executes app DB migration scripts",
-		Long:      cmdDesc,
-		ValidArgs: []string{"up", "down", "create", "collections"},
-		// prevents printing the error log twice
-		SilenceErrors: true,
-		SilenceUsage:  true,
+		Use:          "migrate",
+		Short:        "Executes app DB migration scripts",
+		Long:         cmdDesc,
+		ValidArgs:    []string{"up", "down", "create", "collections"},
+		SilenceUsage: true,
 		RunE: func(command *cobra.Command, args []string) error {
 			cmd := ""
 			if len(args) > 0 {
@@ -162,10 +124,12 @@ func (p *plugin) createCommand() *cobra.Command {
 					return err
 				}
 			default:
-				runner, err := migrate.NewRunner(p.app.DB(), migrations.AppMigrations)
-				if err != nil {
-					return err
-				}
+				// note: system migrations are always applied as part of the bootstrap process
+				var list = core.MigrationsList{}
+				list.Copy(core.SystemMigrations)
+				list.Copy(core.AppMigrations)
+
+				runner := core.NewMigrationsRunner(p.app, list)
 
 				if err := runner.Run(args...); err != nil {
 					return err
@@ -181,22 +145,18 @@ func (p *plugin) createCommand() *cobra.Command {
 
 func (p *plugin) migrateCreateHandler(template string, args []string, interactive bool) (string, error) {
 	if len(args) < 1 {
-		return "", fmt.Errorf("Missing migration file name")
+		return "", errors.New("missing migration file name")
 	}
 
 	name := args[0]
-	dir := p.options.Dir
+	dir := p.config.Dir
 
-	filename := fmt.Sprintf("%d_%s.%s", time.Now().Unix(), inflector.Snakecase(name), p.options.TemplateLang)
+	filename := fmt.Sprintf("%d_%s.%s", time.Now().Unix(), inflector.Snakecase(name), p.config.TemplateLang)
 
 	resultFilePath := path.Join(dir, filename)
 
 	if interactive {
-		confirm := false
-		prompt := &survey.Confirm{
-			Message: fmt.Sprintf("Do you really want to create migration %q?", resultFilePath),
-		}
-		survey.AskOne(prompt, &confirm)
+		confirm := osutils.YesNoPrompt(fmt.Sprintf("Do you really want to create migration %q?", resultFilePath), false)
 		if !confirm {
 			fmt.Println("The command has been cancelled")
 			return "", nil
@@ -206,13 +166,13 @@ func (p *plugin) migrateCreateHandler(template string, args []string, interactiv
 	// get default create template
 	if template == "" {
 		var templateErr error
-		if p.options.TemplateLang == TemplateLangJS {
+		if p.config.TemplateLang == TemplateLangJS {
 			template, templateErr = p.jsBlankTemplate()
 		} else {
 			template, templateErr = p.goBlankTemplate()
 		}
 		if templateErr != nil {
-			return "", fmt.Errorf("Failed to resolve create template: %v\n", templateErr)
+			return "", fmt.Errorf("failed to resolve create template: %v", templateErr)
 		}
 	}
 
@@ -223,7 +183,7 @@ func (p *plugin) migrateCreateHandler(template string, args []string, interactiv
 
 	// save the migration file
 	if err := os.WriteFile(resultFilePath, []byte(template), 0644); err != nil {
-		return "", fmt.Errorf("Failed to save migration file %q: %v\n", resultFilePath, err)
+		return "", fmt.Errorf("failed to save migration file %q: %v", resultFilePath, err)
 	}
 
 	if interactive {
@@ -237,20 +197,20 @@ func (p *plugin) migrateCollectionsHandler(args []string, interactive bool) (str
 	createArgs := []string{"collections_snapshot"}
 	createArgs = append(createArgs, args...)
 
-	collections := []*models.Collection{}
-	if err := p.app.Dao().CollectionQuery().OrderBy("created ASC").All(&collections); err != nil {
-		return "", fmt.Errorf("Failed to fetch migrations list: %v", err)
+	collections := []*core.Collection{}
+	if err := p.app.CollectionQuery().OrderBy("created ASC").All(&collections); err != nil {
+		return "", fmt.Errorf("failed to fetch migrations list: %v", err)
 	}
 
 	var template string
 	var templateErr error
-	if p.options.TemplateLang == TemplateLangJS {
+	if p.config.TemplateLang == TemplateLangJS {
 		template, templateErr = p.jsSnapshotTemplate(collections)
 	} else {
 		template, templateErr = p.goSnapshotTemplate(collections)
 	}
 	if templateErr != nil {
-		return "", fmt.Errorf("Failed to resolve template: %v", templateErr)
+		return "", fmt.Errorf("failed to resolve template: %v", templateErr)
 	}
 
 	return p.migrateCreateHandler(template, createArgs, interactive)

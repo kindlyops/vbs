@@ -1,9 +1,9 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@bazel_gazelle//:def.bzl", "gazelle")
-load("//:version.bzl", "VERSION")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_tarball")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("//:version.bzl", "VERSION")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -89,17 +89,17 @@ pkg_tar(
 oci_image(
     name = "vbs_image",
     base = "@distroless_static",
-    tars = [":vbs_tar"],
-    entrypoint = ["/usr/bin/vbs-linux"],
     cmd = [
         "serve",
         "--http=0.0.0.0:8080",
     ],
+    entrypoint = ["/usr/bin/vbs-linux"],
     exposed_ports = ["8080"],
     labels = {
         "org.opencontainers.image.source": "https://github.com/kindlyops/vbs",
         "org.opencontainers.image.description": "Tools for video broadcast production",
     },
+    tars = [":vbs_tar"],
 )
 
 # Generate tag file with IMAGE_TAG variable
@@ -115,8 +115,8 @@ genrule(
 oci_push(
     name = "push_image",
     image = ":vbs_image",
-    repository = "ghcr.io/kindlyops/vbs",
     remote_tags = ":image_tags",
+    repository = "ghcr.io/kindlyops/vbs",
     tags = ["manual"],
 )
 
