@@ -1,13 +1,21 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package middleware
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
-	"github.com/labstack/echo/v5"
 	"net/http"
+
+	"github.com/labstack/echo/v5"
 )
 
 // KeyAuthConfig defines the config for KeyAuth middleware.
+//
+// SECURITY: The Validator function is responsible for securely comparing API keys.
+// See KeyAuthValidator documentation for guidance on preventing timing attacks.
 type KeyAuthConfig struct {
 	// Skipper defines a function to skip middleware.
 	Skipper Skipper
@@ -27,6 +35,11 @@ type KeyAuthConfig struct {
 	// Multiple sources example:
 	// - "header:Authorization,header:X-Api-Key"
 	KeyLookup string
+
+	// AllowedCheckLimit set how many KeyLookup values are allowed to be checked. This is
+	// useful environments like corporate test environments with application proxies restricting
+	// access to environment with their own auth scheme.
+	AllowedCheckLimit uint
 
 	// Validator is a function to validate key.
 	// Required.
@@ -50,10 +63,44 @@ type KeyAuthConfig struct {
 }
 
 // KeyAuthValidator defines a function to validate KeyAuth credentials.
-type KeyAuthValidator func(c echo.Context, key string) (bool, error)
+//
+// SECURITY WARNING: To prevent timing attacks that could allow attackers to enumerate
+// valid API keys, validator implementations MUST use constant-time comparison.
+// Use crypto/subtle.ConstantTimeCompare instead of standard string equality (==)
+// or switch statements.
+//
+// Example of SECURE implementation:
+//
+//	import "crypto/subtle"
+//
+//	validator := func(c *echo.Context, key string, source ExtractorSource) (bool, error) {
+//	    // Fetch valid keys from database/config
+//	    validKeys := []string{"key1", "key2", "key3"}
+//
+//	    for _, validKey := range validKeys {
+//	        // Use constant-time comparison to prevent timing attacks
+//	        if subtle.ConstantTimeCompare([]byte(key), []byte(validKey)) == 1 {
+//	            return true, nil
+//	        }
+//	    }
+//	    return false, nil
+//	}
+//
+// Example of INSECURE implementation (DO NOT USE):
+//
+//	// VULNERABLE TO TIMING ATTACKS - DO NOT USE
+//	validator := func(c *echo.Context, key string, source ExtractorSource) (bool, error) {
+//	    switch key {  // Timing leak!
+//	    case "valid-key":
+//	        return true, nil
+//	    default:
+//	        return false, nil
+//	    }
+//	}
+type KeyAuthValidator func(c *echo.Context, key string, source ExtractorSource) (bool, error)
 
 // KeyAuthErrorHandler defines a function which is executed for an invalid key.
-type KeyAuthErrorHandler func(c echo.Context, err error) error
+type KeyAuthErrorHandler func(c *echo.Context, err error) error
 
 // ErrKeyMissing denotes an error raised when key value could not be extracted from request
 var ErrKeyMissing = echo.NewHTTPError(http.StatusUnauthorized, "missing key")
@@ -99,16 +146,18 @@ func (config KeyAuthConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 		return nil, errors.New("echo key-auth middleware requires a validator function")
 	}
 
-	extractors, err := createExtractors(config.KeyLookup)
-	if err != nil {
-		return nil, fmt.Errorf("echo key-auth middleware could not create key extractor: %w", err)
+	limit := cmp.Or(config.AllowedCheckLimit, 1)
+
+	extractors, cErr := createExtractors(config.KeyLookup, limit)
+	if cErr != nil {
+		return nil, fmt.Errorf("echo key-auth middleware could not create key extractor: %w", cErr)
 	}
 	if len(extractors) == 0 {
 		return nil, errors.New("echo key-auth middleware could not create extractors from KeyLookup string")
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if config.Skipper(c) {
 				return next(c)
 			}
@@ -116,13 +165,13 @@ func (config KeyAuthConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 			var lastExtractorErr error
 			var lastValidatorErr error
 			for _, extractor := range extractors {
-				keys, extrErr := extractor(c)
+				keys, source, extrErr := extractor(c)
 				if extrErr != nil {
 					lastExtractorErr = extrErr
 					continue
 				}
 				for _, key := range keys {
-					valid, err := config.Validator(c, key)
+					valid, err := config.Validator(c, key, source)
 					if err != nil {
 						lastValidatorErr = err
 						continue
@@ -148,9 +197,9 @@ func (config KeyAuthConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 				return tmpErr
 			}
 			if lastValidatorErr == nil {
-				return ErrKeyMissing.WithInternal(err)
+				return ErrKeyMissing.Wrap(err)
 			}
-			return echo.ErrUnauthorized.WithInternal(err)
+			return echo.ErrUnauthorized.Wrap(err)
 		}
 	}, nil
 }

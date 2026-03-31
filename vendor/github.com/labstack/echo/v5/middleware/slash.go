@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package middleware
 
 import (
@@ -27,7 +30,7 @@ func AddTrailingSlash() echo.MiddlewareFunc {
 	return AddTrailingSlashWithConfig(AddTrailingSlashConfig{})
 }
 
-// AddTrailingSlashWithConfig returns a AddTrailingSlash middleware with config or panics on invalid configuration.
+// AddTrailingSlashWithConfig returns an AddTrailingSlash middleware with config or panics on invalid configuration.
 func AddTrailingSlashWithConfig(config AddTrailingSlashConfig) echo.MiddlewareFunc {
 	return toMiddlewareOrPanic(config)
 }
@@ -43,7 +46,7 @@ func (config AddTrailingSlashConfig) ToMiddleware() (echo.MiddlewareFunc, error)
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if config.Skipper(c) {
 				return next(c)
 			}
@@ -107,7 +110,7 @@ func (config RemoveTrailingSlashConfig) ToMiddleware() (echo.MiddlewareFunc, err
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if config.Skipper(c) {
 				return next(c)
 			}

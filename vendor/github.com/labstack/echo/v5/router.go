@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package echo
 
 import (
@@ -8,68 +11,37 @@ import (
 )
 
 // Router is interface for routing request contexts to registered routes.
+//
+// Contract between Echo/Context instance and the router:
+//   - all routes must be added through methods on echo.Echo instance.
+//     Reason: Echo instance uses RouteInfo.Params() length to allocate slice for paths parameters (see `Echo.contextPathParamAllocSize`).
+//   - Router must populate Context during Router.Route call with:
+//   - Context.InitializeRoute (IMPORTANT! to reduce allocations use same slice that c.PathValues() returns)
+//   - Optionally can set additional information to Context with Context.Set
 type Router interface {
-	// Add registers Routable with the Router and returns registered RouteInfo
-	Add(routable Routable) (RouteInfo, error)
-	// Remove removes route from the Router
+	// Add registers Routable with the Router and returns registered RouteInfo.
+	//
+	// Router may change Route.Path value in returned RouteInfo.Path.
+	// Router generates RouteInfo.Parameters values from Route.Path.
+	// Router generates RouteInfo.Name value if it is not provided.
+	Add(routable Route) (RouteInfo, error)
+
+	// Remove removes route from the Router.
+	//
+	// Router may choose not to implement this method.
 	Remove(method string, path string) error
+
 	// Routes returns information about all registered routes
 	Routes() Routes
 
 	// Route searches Router for matching route and applies it to the given context. In case when no matching method
 	// was not found (405) or no matching route exists for path (404), router will return its implementation of 405/404
 	// handler function.
-	// When implementing custom Router make sure to populate Context during Router.Route call with:
-	// * RoutableContext.SetPath
-	// * RoutableContext.SetRawPathParams (IMPORTANT! with same slice pointer that c.RawPathParams() returns)
-	// * RoutableContext.SetRouteInfo
-	// And optionally can set additional information to Context with RoutableContext.Set
-	Route(c RoutableContext) HandlerFunc
-}
-
-// RoutableContext is additional interface that structures implementing Context must implement. Methods inside this
-// interface are meant for request routing purposes and should not be used in middlewares.
-type RoutableContext interface {
-	// Request returns `*http.Request`.
-	Request() *http.Request
-
-	// RawPathParams returns raw path pathParams value. Allocation of PathParams is handled by Context.
-	RawPathParams() *PathParams
-
-	// SetRawPathParams replaces any existing param values with new values for this context lifetime (request).
-	// Do not set any other value than what you got from RawPathParams as allocation of PathParams is handled by Context.
-	SetRawPathParams(params *PathParams)
-
-	// SetPath sets the registered path for the handler.
-	SetPath(p string)
-
-	// SetRouteInfo sets the route info of this request to the context.
-	SetRouteInfo(ri RouteInfo)
-
-	// Set saves data in the context. Allows router to store arbitrary (that only router has access to) data in context
-	// for later use in middlewares/handler.
-	Set(key string, val interface{})
-}
-
-// Routable is interface for registering Route with Router. During route registration process the Router will
-// convert Routable to RouteInfo with ToRouteInfo method. By creating custom implementation of Routable additional
-// information about registered route can be stored in Routes (i.e. privileges used with route etc.)
-type Routable interface {
-	// ToRouteInfo converts Routable to RouteInfo
 	//
-	// This method is meant to be used by Router after it parses url for path parameters, to store information about
-	// route just added.
-	ToRouteInfo(params []string) RouteInfo
-	// ToRoute converts Routable to Route which Router uses to register the method handler for path.
-	//
-	// This method is meant to be used by Router to get fields (including handler and middleware functions) needed to
-	// add Route to Router.
-	ToRoute() Route
-	// ForGroup recreates routable with added group prefix and group middlewares it is grouped to.
-	//
-	// Is necessary for Echo.Group to be able to add/register Routable with Router and having group prefix and group
-	// middlewares included in actually registered Route.
-	ForGroup(pathPrefix string, middlewares []MiddlewareFunc) Routable
+	// Router must populate Context during Router.Route call with:
+	// - Context.InitializeRoute() (IMPORTANT! to reduce allocations use same slice that c.PathValues() returns)
+	// - optionally can set additional information to Context with Context.Set()
+	Route(c *Context) HandlerFunc
 }
 
 const (
@@ -82,40 +54,17 @@ const (
 // Routes is collection of RouteInfo instances with various helper methods.
 type Routes []RouteInfo
 
-// RouteInfo describes registered route base fields.
-// Method+Path pair uniquely identifies the Route. Name can have duplicates.
-type RouteInfo interface {
-	Method() string
-	Path() string
-	Name() string
-
-	Params() []string
-	Reverse(params ...interface{}) string
-
-	// NOTE: handler and middlewares are not exposed because handler could be already wrapping middlewares and therefore
-	// it is not always 100% known if handler function already wraps middlewares or not. In Echo handler could be one
-	// function or several functions wrapping each other.
-}
-
-// PathParams is collections of PathParam instances with various helper methods
-type PathParams []PathParam
-
-// PathParam is tuple pf path parameter name and its value in request path
-type PathParam struct {
-	Name  string
-	Value string
-}
-
 // DefaultRouter is the registry of all registered routes for an `Echo` instance for
 // request matching and URL path parameter parsing.
 // Note: DefaultRouter is not coroutine-safe. Do not Add/Remove routes after HTTP server has been started with Echo.
 type DefaultRouter struct {
-	tree   *node
-	routes Routes
-
+	tree                    *node
 	notFoundHandler         HandlerFunc
 	methodNotAllowedHandler HandlerFunc
 	optionsMethodHandler    HandlerFunc
+	routes                  Routes
+	// maxPathParamsLength tracks highest count of PathValues for all routes.
+	maxPathParamsLength int
 
 	allowOverwritingRoute    bool
 	unescapePathParamValues  bool
@@ -124,23 +73,12 @@ type DefaultRouter struct {
 
 // RouterConfig is configuration options for (default) router
 type RouterConfig struct {
-	// AllowOverwritingRoute instructs Router NOT to return error when new route is registered with the same method+path
-	// and replaces matching route with the new one.
-	AllowOverwritingRoute bool
-	// UnescapePathParamValues instructs Router to unescape path parameter value when request if matched to the routes
-	UnescapePathParamValues bool
-	// UseEscapedPathForMatching instructs Router to use escaped request URL path (req.URL.Path) for matching the request.
+	NotFoundHandler           HandlerFunc
+	MethodNotAllowedHandler   HandlerFunc
+	OptionsMethodHandler      HandlerFunc
+	AllowOverwritingRoute     bool
+	UnescapePathParamValues   bool
 	UseEscapedPathForMatching bool
-
-	// NotFoundHandler sets handler for case when router did not match any routes to the request path. HTTP error 404 (not found)
-	NotFoundHandler HandlerFunc
-	// MethodNotAllowedHandler sets handler for case when router did match router with path but not with current request
-	// method. HTTP error 405 (method not allowed)
-	MethodNotAllowedHandler HandlerFunc
-	// OptionsMethodHandler sets handler for OPTIONS method. This has lower priority than handler set by `e.OPTIONS(path, ...)`
-	// When `CORS` middleware is used this handler will not be called as `CORS` will terminate in case of OPTIONS method
-	// middleware chain and actual handler will not be called.
-	OptionsMethodHandler HandlerFunc
 }
 
 // NewRouter returns a new Router instance.
@@ -176,20 +114,18 @@ func NewRouter(config RouterConfig) *DefaultRouter {
 type children []*node
 
 type node struct {
-	kind           kind
-	label          byte
-	prefix         string
 	parent         *node
-	staticChildren children
-	originalPath   string
 	methods        *routeMethods
 	paramChild     *node
 	anyChild       *node
+	prefix         string
+	originalPath   string
+	staticChildren children
 	paramsCount    int
-	// isLeaf indicates that node does not have child routes
-	isLeaf bool
-	// isHandler indicates that node has at least one handler registered to it
-	isHandler bool
+	kind           kind
+	label          byte
+	isLeaf         bool
+	isHandler      bool
 }
 
 type kind uint8
@@ -204,24 +140,31 @@ const (
 )
 
 type routeMethod struct {
-	*routeInfo
+	*RouteInfo
 	handler      HandlerFunc
 	orgRouteInfo RouteInfo
 }
 
 type routeMethods struct {
-	connect     *routeMethod
-	delete      *routeMethod
-	get         *routeMethod
-	head        *routeMethod
-	options     *routeMethod
-	patch       *routeMethod
-	post        *routeMethod
-	propfind    *routeMethod
-	put         *routeMethod
-	trace       *routeMethod
-	report      *routeMethod
-	anyOther    map[string]*routeMethod
+	connect  *routeMethod
+	delete   *routeMethod
+	get      *routeMethod
+	head     *routeMethod
+	options  *routeMethod
+	patch    *routeMethod
+	post     *routeMethod
+	propfind *routeMethod
+	put      *routeMethod
+	trace    *routeMethod
+	report   *routeMethod
+	any      *routeMethod
+	anyOther map[string]*routeMethod
+
+	// notFoundHandler is handler registered with RouteNotFound method and is executed for 404 cases
+	notFoundHandler *routeMethod
+
+	// allowHeader contains comma-separated list of Methods registered to this node path.
+	// it is optimization for http.StatusMethodNotAllowed (405) handling.
 	allowHeader string
 }
 
@@ -249,6 +192,11 @@ func (m *routeMethods) set(method string, r *routeMethod) {
 		m.trace = r
 	case REPORT:
 		m.report = r
+	case RouteAny:
+		m.any = r
+	case RouteNotFound:
+		m.notFoundHandler = r
+		return // RouteNotFound/404 is not considered as a handler so no further logic needs to be executed
 	default:
 		if m.anyOther == nil {
 			m.anyOther = make(map[string]*routeMethod)
@@ -262,78 +210,88 @@ func (m *routeMethods) set(method string, r *routeMethod) {
 	m.updateAllowHeader()
 }
 
-func (m *routeMethods) find(method string) *routeMethod {
+func (m *routeMethods) find(method string, fallbackToAny bool) *routeMethod {
+	var r *routeMethod
 	switch method {
 	case http.MethodConnect:
-		return m.connect
+		r = m.connect
 	case http.MethodDelete:
-		return m.delete
+		r = m.delete
 	case http.MethodGet:
-		return m.get
+		r = m.get
 	case http.MethodHead:
-		return m.head
+		r = m.head
 	case http.MethodOptions:
-		return m.options
+		r = m.options
 	case http.MethodPatch:
-		return m.patch
+		r = m.patch
 	case http.MethodPost:
-		return m.post
+		r = m.post
 	case PROPFIND:
-		return m.propfind
+		r = m.propfind
 	case http.MethodPut:
-		return m.put
+		r = m.put
 	case http.MethodTrace:
-		return m.trace
+		r = m.trace
 	case REPORT:
-		return m.report
+		r = m.report
+	case RouteAny:
+		r = m.any
+	case RouteNotFound:
+		r = m.notFoundHandler
 	default:
-		return m.anyOther[method]
+		r = m.anyOther[method]
 	}
+	if r != nil || !fallbackToAny {
+		return r
+	}
+	return m.any
 }
 
 func (m *routeMethods) updateAllowHeader() {
 	buf := new(bytes.Buffer)
 	buf.WriteString(http.MethodOptions)
+	hasAnyMethod := m.any != nil
 
-	if m.connect != nil {
+	if hasAnyMethod || m.connect != nil {
 		buf.WriteString(", ")
 		buf.WriteString(http.MethodConnect)
 	}
-	if m.delete != nil {
+	if hasAnyMethod || m.delete != nil {
 		buf.WriteString(", ")
 		buf.WriteString(http.MethodDelete)
 	}
-	if m.get != nil {
+	if hasAnyMethod || m.get != nil {
 		buf.WriteString(", ")
 		buf.WriteString(http.MethodGet)
 	}
-	if m.head != nil {
+	if hasAnyMethod || m.head != nil {
 		buf.WriteString(", ")
 		buf.WriteString(http.MethodHead)
 	}
-	if m.patch != nil {
+	if hasAnyMethod || m.patch != nil {
 		buf.WriteString(", ")
 		buf.WriteString(http.MethodPatch)
 	}
-	if m.post != nil {
+	if hasAnyMethod || m.post != nil {
 		buf.WriteString(", ")
 		buf.WriteString(http.MethodPost)
 	}
-	if m.propfind != nil {
+	if hasAnyMethod || m.propfind != nil {
 		buf.WriteString(", PROPFIND")
 	}
-	if m.put != nil {
+	if hasAnyMethod || m.put != nil {
 		buf.WriteString(", ")
 		buf.WriteString(http.MethodPut)
 	}
-	if m.trace != nil {
+	if hasAnyMethod || m.trace != nil {
 		buf.WriteString(", ")
 		buf.WriteString(http.MethodTrace)
 	}
-	if m.report != nil {
+	if hasAnyMethod || m.report != nil {
 		buf.WriteString(", REPORT")
 	}
-	for method := range m.anyOther {
+	for method := range m.anyOther { // for simplicity, we use map and therefore order is not deterministic here
 		buf.WriteString(", ")
 		buf.WriteString(method)
 	}
@@ -352,7 +310,9 @@ func (m *routeMethods) isHandler() bool {
 		m.propfind != nil ||
 		m.trace != nil ||
 		m.report != nil ||
+		m.any != nil ||
 		len(m.anyOther) != 0
+	// RouteNotFound/404 is not considered as a handler
 }
 
 // Routes returns all registered routes
@@ -414,14 +374,14 @@ func (r *DefaultRouter) Remove(method string, path string) error {
 		return errors.New("could not find route to remove by given path")
 	}
 
-	if mh := nodeToRemove.methods.find(method); mh == nil {
+	if mh := nodeToRemove.methods.find(method, false); mh == nil {
 		return errors.New("could not find route to remove by given path and method")
 	}
 	nodeToRemove.setHandler(method, nil)
 
 	var rIndex int
 	for i, rr := range r.routes {
-		if rr.Method() == method && rr.Path() == path {
+		if rr.Method == method && rr.Path == path {
 			rIndex = i
 			break
 		}
@@ -466,9 +426,9 @@ func (r *DefaultRouter) Remove(method string, path string) error {
 // AddRouteError is error returned by Router.Add containing information what actual route adding failed. Useful for
 // mass adding (i.e. Any() routes)
 type AddRouteError struct {
+	Err    error
 	Method string
 	Path   string
-	Err    error
 }
 
 func (e *AddRouteError) Error() string { return e.Method + " " + e.Path + ": " + e.Err.Error() }
@@ -484,28 +444,22 @@ func newAddRouteError(route Route, err error) *AddRouteError {
 }
 
 // Add registers a new route for method and path with matching handler.
-func (r *DefaultRouter) Add(routable Routable) (RouteInfo, error) {
-	route := routable.ToRoute()
+func (r *DefaultRouter) Add(route Route) (RouteInfo, error) {
 	if route.Handler == nil {
-		return nil, newAddRouteError(route, errors.New("adding route without handler function"))
+		return RouteInfo{}, newAddRouteError(route, errors.New("adding route without handler function"))
 	}
 	method := route.Method
-	path := route.Path
+	path := normalizePathSlash(route.Path)
+
 	h := applyMiddleware(route.Handler, route.Middlewares...)
 	if !r.allowOverwritingRoute {
 		for _, rr := range r.routes {
-			if route.Method == rr.Method() && route.Path == rr.Path() {
-				return nil, newAddRouteError(route, errors.New("adding duplicate route (same method+path) is not allowed"))
+			if route.Method == rr.Method && route.Path == rr.Path {
+				return RouteInfo{}, newAddRouteError(route, errors.New("adding duplicate route (same method+path) is not allowed"))
 			}
 		}
 	}
 
-	if path == "" {
-		path = "/"
-	}
-	if path[0] != '/' {
-		path = "/" + path
-	}
 	paramNames := make([]string, 0)
 	originalPath := path
 	wasAdded := false
@@ -520,7 +474,7 @@ func (r *DefaultRouter) Add(routable Routable) (RouteInfo, error) {
 			}
 			j := i + 1
 
-			r.insert(staticKind, path[:i], method, routeMethod{routeInfo: &routeInfo{method: method}})
+			r.insert(staticKind, path[:i], method, routeMethod{RouteInfo: &RouteInfo{Method: method}})
 			for ; i < lcpIndex && path[i] != '/'; i++ {
 			}
 
@@ -530,9 +484,9 @@ func (r *DefaultRouter) Add(routable Routable) (RouteInfo, error) {
 
 			if i == lcpIndex {
 				// path node is last fragment of route path. ie. `/users/:id`
-				ri = routable.ToRouteInfo(paramNames)
+				ri = route.ToRouteInfo(paramNames)
 				rm := routeMethod{
-					routeInfo:    &routeInfo{method: method, path: originalPath, params: paramNames, name: route.Name},
+					RouteInfo:    &RouteInfo{Method: method, Path: originalPath, Parameters: paramNames, Name: route.Name},
 					handler:      h,
 					orgRouteInfo: ri,
 				}
@@ -540,14 +494,14 @@ func (r *DefaultRouter) Add(routable Routable) (RouteInfo, error) {
 				wasAdded = true
 				break
 			} else {
-				r.insert(paramKind, path[:i], method, routeMethod{routeInfo: &routeInfo{method: method}})
+				r.insert(paramKind, path[:i], method, routeMethod{RouteInfo: &RouteInfo{Method: method}})
 			}
 		} else if path[i] == anyLabel {
-			r.insert(staticKind, path[:i], method, routeMethod{routeInfo: &routeInfo{method: method}})
+			r.insert(staticKind, path[:i], method, routeMethod{RouteInfo: &RouteInfo{Method: method}})
 			paramNames = append(paramNames, "*")
-			ri = routable.ToRouteInfo(paramNames)
+			ri = route.ToRouteInfo(paramNames)
 			rm := routeMethod{
-				routeInfo:    &routeInfo{method: method, path: originalPath, params: paramNames, name: route.Name},
+				RouteInfo:    &RouteInfo{Method: method, Path: originalPath, Parameters: paramNames, Name: route.Name},
 				handler:      h,
 				orgRouteInfo: ri,
 			}
@@ -558,9 +512,9 @@ func (r *DefaultRouter) Add(routable Routable) (RouteInfo, error) {
 	}
 
 	if !wasAdded {
-		ri = routable.ToRouteInfo(paramNames)
+		ri = route.ToRouteInfo(paramNames)
 		rm := routeMethod{
-			routeInfo:    &routeInfo{method: method, path: originalPath, params: paramNames, name: route.Name},
+			RouteInfo:    &RouteInfo{Method: method, Path: originalPath, Parameters: paramNames, Name: route.Name},
 			handler:      h,
 			orgRouteInfo: ri,
 		}
@@ -572,9 +526,18 @@ func (r *DefaultRouter) Add(routable Routable) (RouteInfo, error) {
 	return ri, nil
 }
 
+func normalizePathSlash(path string) string {
+	if path == "" {
+		path = "/"
+	} else if path[0] != '/' {
+		path = "/" + path
+	}
+	return path
+}
+
 func (r *DefaultRouter) storeRouteInfo(ri RouteInfo) {
 	for i, rr := range r.routes {
-		if ri.Method() == rr.Method() && ri.Path() == rr.Path() {
+		if ri.Method == rr.Method && ri.Path == rr.Path {
 			r.routes[i] = ri
 			return
 		}
@@ -583,6 +546,9 @@ func (r *DefaultRouter) storeRouteInfo(ri RouteInfo) {
 }
 
 func (r *DefaultRouter) insert(t kind, path string, method string, ri routeMethod) {
+	if len(ri.Parameters) > r.maxPathParamsLength {
+		r.maxPathParamsLength = len(ri.Parameters)
+	}
 	currentNode := r.tree // Current node as root
 	search := path
 
@@ -592,11 +558,11 @@ func (r *DefaultRouter) insert(t kind, path string, method string, ri routeMetho
 		lcpLen := 0
 
 		// LCP - Longest Common Prefix (https://en.wikipedia.org/wiki/LCP_array)
-		max := prefixLen
-		if searchLen < max {
-			max = searchLen
+		maxL := prefixLen
+		if searchLen < maxL {
+			maxL = searchLen
 		}
-		for ; lcpLen < max && search[lcpLen] == currentNode.prefix[lcpLen]; lcpLen++ {
+		for ; lcpLen < maxL && search[lcpLen] == currentNode.prefix[lcpLen]; lcpLen++ {
 		}
 
 		if lcpLen == 0 {
@@ -606,12 +572,17 @@ func (r *DefaultRouter) insert(t kind, path string, method string, ri routeMetho
 			if ri.handler != nil {
 				currentNode.kind = t
 				currentNode.setHandler(method, &ri)
-				currentNode.paramsCount = len(ri.params)
-				currentNode.originalPath = ri.path
+				currentNode.paramsCount = len(ri.Parameters)
+				currentNode.originalPath = ri.Path
 			}
 			currentNode.isLeaf = currentNode.staticChildren == nil && currentNode.paramChild == nil && currentNode.anyChild == nil
 		} else if lcpLen < prefixLen {
-			// Split node
+			// Split node into two before we insert new node.
+			// This happens when we are inserting path that is submatch of any existing inserted paths.
+			// For example, we have node `/test` and now are about to insert `/te/*`. In that case
+			// 1. overlapping part is `/te` that is used as parent node
+			// 2. `st` is part from existing node that is not matching - it gets its own node (child to `/te`)
+			// 3. `/*` is the new part we are about to insert (child to `/te`)
 			n := newNode(
 				currentNode.kind,
 				currentNode.prefix[lcpLen:],
@@ -655,15 +626,15 @@ func (r *DefaultRouter) insert(t kind, path string, method string, ri routeMetho
 				currentNode.kind = t
 				if ri.handler != nil {
 					currentNode.setHandler(method, &ri)
-					currentNode.paramsCount = len(ri.params)
-					currentNode.originalPath = ri.path
+					currentNode.paramsCount = len(ri.Parameters)
+					currentNode.originalPath = ri.Path
 				}
 			} else {
 				// Create child node
-				n = newNode(t, search[lcpLen:], currentNode, nil, new(routeMethods), 0, ri.path, nil, nil)
+				n = newNode(t, search[lcpLen:], currentNode, nil, new(routeMethods), 0, ri.Path, nil, nil)
 				if ri.handler != nil {
 					n.setHandler(method, &ri)
-					n.paramsCount = len(ri.params)
+					n.paramsCount = len(ri.Parameters)
 				}
 				// Only Static children could reach here
 				currentNode.addStaticChild(n)
@@ -678,10 +649,10 @@ func (r *DefaultRouter) insert(t kind, path string, method string, ri routeMetho
 				continue
 			}
 			// Create child node
-			n := newNode(t, search, currentNode, nil, new(routeMethods), 0, ri.path, nil, nil)
+			n := newNode(t, search, currentNode, nil, new(routeMethods), 0, ri.Path, nil, nil)
 			if ri.handler != nil {
 				n.setHandler(method, &ri)
-				n.paramsCount = len(ri.params)
+				n.paramsCount = len(ri.Parameters)
 			}
 			switch t {
 			case staticKind:
@@ -696,15 +667,25 @@ func (r *DefaultRouter) insert(t kind, path string, method string, ri routeMetho
 			// Node already exists
 			if ri.handler != nil {
 				currentNode.setHandler(method, &ri)
-				currentNode.paramsCount = len(ri.params)
-				currentNode.originalPath = ri.path
+				currentNode.paramsCount = len(ri.Parameters)
+				currentNode.originalPath = ri.Path
 			}
 		}
 		return
 	}
 }
 
-func newNode(t kind, pre string, p *node, sc children, mh *routeMethods, paramsCount int, ppath string, paramChildren, anyChildren *node) *node {
+func newNode(
+	t kind,
+	pre string,
+	p *node,
+	sc children,
+	mh *routeMethods,
+	paramsCount int,
+	ppath string,
+	paramChildren,
+	anyChildren *node,
+) *node {
 	return &node{
 		kind:           t,
 		label:          pre[0],
@@ -735,10 +716,8 @@ func (n *node) findStaticChild(l byte) *node {
 }
 
 func (n *node) findChildWithLabel(l byte) *node {
-	for _, c := range n.staticChildren {
-		if c.label == l {
-			return c
-		}
+	if c := n.findStaticChild(l); c != nil {
+		return c
 	}
 	if l == paramLabel {
 		return n.paramChild
@@ -751,38 +730,34 @@ func (n *node) findChildWithLabel(l byte) *node {
 
 func (n *node) setHandler(method string, r *routeMethod) {
 	n.methods.set(method, r)
-	if r != nil && r.handler != nil {
-		n.isHandler = true
-	} else {
-		n.isHandler = n.methods.isHandler()
-	}
+	n.isHandler = n.methods.isHandler()
 }
 
 // Note: notFoundRouteInfo exists to avoid allocations when setting 404 RouteInfo to Context
-var notFoundRouteInfo = &routeInfo{
-	method: "",
-	path:   "",
-	params: nil,
-	name:   NotFoundRouteName,
+var notFoundRouteInfo = &RouteInfo{
+	Method:     "",
+	Path:       "",
+	Parameters: nil,
+	Name:       NotFoundRouteName,
 }
 
 // Note: methodNotAllowedRouteInfo exists to avoid allocations when setting 405 RouteInfo to Context
-var methodNotAllowedRouteInfo = &routeInfo{
-	method: "",
-	path:   "",
-	params: nil,
-	name:   MethodNotAllowedRouteName,
+var methodNotAllowedRouteInfo = &RouteInfo{
+	Method:     "",
+	Path:       "",
+	Parameters: nil,
+	Name:       MethodNotAllowedRouteName,
 }
 
 // notFoundHandler is handler for 404 cases
 // Handle returned ErrNotFound errors in Echo.HTTPErrorHandler
-var notFoundHandler = func(c Context) error {
+var notFoundHandler = func(c *Context) error {
 	return ErrNotFound
 }
 
 // methodNotAllowedHandler is handler for case when route for path+method match was not found (http code 405)
 // Handle returned ErrMethodNotAllowed errors in Echo.HTTPErrorHandler
-var methodNotAllowedHandler = func(c Context) error {
+var methodNotAllowedHandler = func(c *Context) error {
 	// See RFC 7231 section 7.4.1: An origin server MUST generate an Allow field in a 405 (Method Not Allowed)
 	// response and MAY do so in any other response. For disabled resources an empty Allow header may be returned
 	routerAllowMethods, ok := c.Get(ContextKeyHeaderAllow).(string)
@@ -795,7 +770,7 @@ var methodNotAllowedHandler = func(c Context) error {
 // optionsMethodHandler is default handler for OPTIONS method.
 // Use `middleware.CORS` if you need support for preflighted requests in CORS
 // See https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/OPTIONS
-var optionsMethodHandler = func(c Context) error {
+var optionsMethodHandler = func(c *Context) error {
 	// See RFC 7231 section 7.4.1: An origin server MUST generate an Allow field in a 405 (Method Not Allowed)
 	// response and MAY do so in any other response. For disabled resources an empty Allow header may be returned
 	routerAllowMethods, ok := c.Get(ContextKeyHeaderAllow).(string)
@@ -813,9 +788,13 @@ var optionsMethodHandler = func(c Context) error {
 // - Get context from `Echo#AcquireContext()`
 // - Reset it `Context#Reset()`
 // - Return it `Echo#ReleaseContext()`.
-func (r *DefaultRouter) Route(c RoutableContext) HandlerFunc {
-	pathParams := c.RawPathParams()
-	*pathParams = (*pathParams)[0:cap(*pathParams)]
+func (r *DefaultRouter) Route(c *Context) HandlerFunc {
+	pathValues := c.PathValues()
+	if cap(pathValues) < r.maxPathParamsLength {
+		pathValues = make(PathValues, 0, r.maxPathParamsLength)
+	} else {
+		pathValues = pathValues[0:cap(pathValues)] // resize slice to maximum capacity so we can index set values
+	}
 
 	req := c.Request()
 	path := req.URL.Path
@@ -865,8 +844,8 @@ func (r *DefaultRouter) Route(c RoutableContext) HandlerFunc {
 			paramIndex--
 			// for param/any node.prefix value is always `:` so we can not deduce searchIndex from that and must use pValue
 			// for that index as it would also contain part of path we cut off before moving into node we are backtracking from
-			searchIndex -= len((*pathParams)[paramIndex].Value)
-			(*pathParams)[paramIndex].Value = ""
+			searchIndex -= len(pathValues[paramIndex].Value)
+			pathValues[paramIndex].Value = ""
 		}
 		search = path[searchIndex:]
 		return
@@ -888,11 +867,11 @@ func (r *DefaultRouter) Route(c RoutableContext) HandlerFunc {
 			prefixLen = len(currentNode.prefix)
 
 			// LCP - Longest Common Prefix (https://en.wikipedia.org/wiki/LCP_array)
-			max := prefixLen
-			if searchLen < max {
-				max = searchLen
+			lMax := prefixLen
+			if searchLen < lMax {
+				lMax = searchLen
 			}
-			for ; lcpLen < max && search[lcpLen] == currentNode.prefix[lcpLen]; lcpLen++ {
+			for ; lcpLen < lMax && search[lcpLen] == currentNode.prefix[lcpLen]; lcpLen++ {
 			}
 		}
 
@@ -900,7 +879,7 @@ func (r *DefaultRouter) Route(c RoutableContext) HandlerFunc {
 			// No matching prefix, let's backtrack to the first possible alternative node of the decision path
 			nk, ok := backtrackToNextNodeKind(staticKind)
 			if !ok {
-				break // No other possibilities on the decision path
+				break // No other possibilities on the decision path, handler will be whatever context is reset to.
 			} else if nk == paramKind {
 				goto Param
 				// NOTE: this case (backtracking from static node to previous any node) can not happen by current any matching logic. Any node is end of search currently
@@ -916,15 +895,21 @@ func (r *DefaultRouter) Route(c RoutableContext) HandlerFunc {
 		search = search[lcpLen:]
 		searchIndex = searchIndex + lcpLen
 
-		// Finish routing if no remaining search and we are on a node with handler and matching method type
-		if search == "" && currentNode.isHandler {
-			// check if current node has handler registered for http method we are looking for. we store currentNode as
-			// best matching in case we do no find no more routes matching this path+method
-			if previousBestMatchNode == nil {
-				previousBestMatchNode = currentNode
-			}
-			if rMethod := currentNode.methods.find(req.Method); rMethod != nil {
-				matchedRouteMethod = rMethod
+		// Finish routing if is no request path remaining to search
+		if search == "" {
+			// in case of node that is handler we have exact method type match or something for 405 to use
+			if currentNode.isHandler {
+				// check if current node has handler registered for http method we are looking for. we store currentNode as
+				// best matching in case we do no find no more routes matching this path+method
+				if previousBestMatchNode == nil {
+					previousBestMatchNode = currentNode
+				}
+				if h := currentNode.methods.find(req.Method, true); h != nil {
+					matchedRouteMethod = h
+					break
+				}
+			} else if currentNode.methods.notFoundHandler != nil {
+				matchedRouteMethod = currentNode.methods.notFoundHandler
 				break
 			}
 		}
@@ -944,14 +929,15 @@ func (r *DefaultRouter) Route(c RoutableContext) HandlerFunc {
 			i := 0
 			l := len(search)
 			if currentNode.isLeaf {
-				// when param node does not have any children then param node should act similarly to any node - consider all remaining search as match
+				// when param node does not have any children (path param is last piece of route path) then param node should
+				// act similarly to any node - consider all remaining search as match
 				i = l
 			} else {
 				for ; i < l && search[i] != '/'; i++ {
 				}
 			}
 
-			(*pathParams)[paramIndex].Value = search[:i]
+			pathValues[paramIndex].Value = search[:i]
 			paramIndex++
 			search = search[i:]
 			searchIndex = searchIndex + i
@@ -963,19 +949,22 @@ func (r *DefaultRouter) Route(c RoutableContext) HandlerFunc {
 		if child := currentNode.anyChild; child != nil {
 			// If any node is found, use remaining path for paramValues
 			currentNode = child
-			(*pathParams)[currentNode.paramsCount-1].Value = search
+			pathValues[currentNode.paramsCount-1].Value = search
 			// update indexes/search in case we need to backtrack when no handler match is found
 			paramIndex++
-			searchIndex += +len(search)
+			searchIndex += len(search)
 			search = ""
 
-			// check if current node has handler registered for http method we are looking for. we store currentNode as
-			// best matching in case we do no find no more routes matching this path+method
+			if rMethod := currentNode.methods.find(req.Method, true); rMethod != nil {
+				matchedRouteMethod = rMethod
+				break
+			}
+			// we store currentNode as best matching in case we do not find more routes matching this path+method. Needed for 405
 			if previousBestMatchNode == nil {
 				previousBestMatchNode = currentNode
 			}
-			if rMethod := currentNode.methods.find(req.Method); rMethod != nil {
-				matchedRouteMethod = rMethod
+			if currentNode.methods.notFoundHandler != nil {
+				matchedRouteMethod = currentNode.methods.notFoundHandler
 				break
 			}
 		}
@@ -995,21 +984,19 @@ func (r *DefaultRouter) Route(c RoutableContext) HandlerFunc {
 	}
 
 	if currentNode == nil && previousBestMatchNode == nil {
-		*pathParams = (*pathParams)[0:0]
+		pathValues = pathValues[0:0]
 
-		c.SetRawPathParams(pathParams)
-		c.SetPath("")
-		c.SetRouteInfo(notFoundRouteInfo)
+		c.InitializeRoute(notFoundRouteInfo, &pathValues)
 		return r.notFoundHandler // nothing matched at all with given path
 	}
 
 	var rHandler HandlerFunc
 	var rPath string
-	var rInfo RouteInfo
+	var rInfo *RouteInfo
 	if matchedRouteMethod != nil {
 		rHandler = matchedRouteMethod.handler
-		rPath = matchedRouteMethod.routeInfo.path
-		rInfo = matchedRouteMethod.routeInfo
+		rPath = matchedRouteMethod.RouteInfo.Path
+		rInfo = matchedRouteMethod.RouteInfo
 	} else {
 		// use previous match as basis. although we have no matching handler we have path match.
 		// so we can send http.StatusMethodNotAllowed (405) instead of http.StatusNotFound (404)
@@ -1017,7 +1004,13 @@ func (r *DefaultRouter) Route(c RoutableContext) HandlerFunc {
 
 		rPath = currentNode.originalPath
 		rInfo = notFoundRouteInfo
-		if currentNode.isHandler {
+		if currentNode.methods.notFoundHandler != nil {
+			matchedRouteMethod = currentNode.methods.notFoundHandler
+
+			rInfo = matchedRouteMethod.RouteInfo
+			rPath = matchedRouteMethod.Path
+			rHandler = matchedRouteMethod.handler
+		} else if currentNode.isHandler {
 			rInfo = methodNotAllowedRouteInfo
 
 			c.Set(ContextKeyHeaderAllow, currentNode.methods.allowHeader)
@@ -1027,32 +1020,51 @@ func (r *DefaultRouter) Route(c RoutableContext) HandlerFunc {
 			}
 		}
 	}
-	c.SetPath(rPath)
-	c.SetRouteInfo(rInfo)
 
-	*pathParams = (*pathParams)[0:currentNode.paramsCount]
+	pathValues = pathValues[0:currentNode.paramsCount]
 	if matchedRouteMethod != nil {
-		for i, name := range matchedRouteMethod.params {
-			(*pathParams)[i].Name = name
+		for i, name := range matchedRouteMethod.Parameters {
+			pathValues[i].Name = name
 		}
 	}
 
-	if r.unescapePathParamValues && currentNode.kind != staticKind {
+	if r.unescapePathParamValues {
 		// See issue #1531, #1258 - there are cases when path parameter need to be unescaped
-		for i, p := range *pathParams {
+		for i, p := range pathValues {
 			tmpVal, err := url.PathUnescape(p.Value)
 			if err == nil { // handle problems by ignoring them.
-				(*pathParams)[i].Value = tmpVal
+				pathValues[i].Value = tmpVal
 			}
 		}
 	}
-	c.SetRawPathParams(pathParams)
 
+	c.InitializeRoute(rInfo, &pathValues)
+	c.SetPath(rPath)          // after InitializeRoute so we would not accidentally change `notFoundRouteInfo` or `methodNotAllowedRouteInfo` Path
+	c.request.Pattern = rPath // help standard library based middlewares. This is a deliberate choice not to call `request.SetPathValue` for params.
 	return rHandler
 }
 
-// Get returns path parameter value for given name or default value.
-func (p PathParams) Get(name string, defaultValue string) string {
+// PathValues is collections of PathValue instances with various helper methods
+type PathValues []PathValue
+
+// PathValue is tuple pf path parameter name and its value in request path
+type PathValue struct {
+	Name  string
+	Value string
+}
+
+// Get returns path parameter value for given name or false.
+func (p PathValues) Get(name string) (string, bool) {
+	for _, param := range p {
+		if param.Name == name {
+			return param.Value, true
+		}
+	}
+	return "", false
+}
+
+// GetOr returns path parameter value for given name or default value if the name does not exist.
+func (p PathValues) GetOr(name string, defaultValue string) string {
 	for _, param := range p {
 		if param.Name == name {
 			return param.Value
