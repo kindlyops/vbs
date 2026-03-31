@@ -1,10 +1,13 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package middleware
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -12,6 +15,9 @@ import (
 )
 
 // BasicAuthConfig defines the config for BasicAuthWithConfig middleware.
+//
+// SECURITY: The Validator function is responsible for securely comparing credentials.
+// See BasicAuthValidator documentation for guidance on preventing timing attacks.
 type BasicAuthConfig struct {
 	// Skipper defines a function to skip middleware.
 	Skipper Skipper
@@ -24,10 +30,50 @@ type BasicAuthConfig struct {
 	// Realm is a string to define realm attribute of BasicAuthWithConfig.
 	// Default value "Restricted".
 	Realm string
+
+	// AllowedCheckLimit set how many headers are allowed to be checked. This is useful
+	// environments like corporate test environments with application proxies restricting
+	// access to environment with their own auth scheme.
+	// Defaults to 1.
+	AllowedCheckLimit uint
 }
 
 // BasicAuthValidator defines a function to validate BasicAuthWithConfig credentials.
-type BasicAuthValidator func(c echo.Context, user string, password string) (bool, error)
+//
+// SECURITY WARNING: To prevent timing attacks that could allow attackers to enumerate
+// valid usernames or passwords, validator implementations MUST use constant-time
+// comparison for credential checking. Use crypto/subtle.ConstantTimeCompare instead
+// of standard string equality (==) or switch statements.
+//
+// Example of SECURE implementation:
+//
+//	import "crypto/subtle"
+//
+//	validator := func(c *echo.Context, username, password string) (bool, error) {
+//	    // Fetch expected credentials from database/config
+//	    expectedUser := "admin"
+//	    expectedPass := "secretpassword"
+//
+//	    // Use constant-time comparison to prevent timing attacks
+//	    userMatch := subtle.ConstantTimeCompare([]byte(username), []byte(expectedUser)) == 1
+//	    passMatch := subtle.ConstantTimeCompare([]byte(password), []byte(expectedPass)) == 1
+//
+//	    if userMatch && passMatch {
+//	        return true, nil
+//	    }
+//	    return false, nil
+//	}
+//
+// Example of INSECURE implementation (DO NOT USE):
+//
+//	// VULNERABLE TO TIMING ATTACKS - DO NOT USE
+//	validator := func(c *echo.Context, username, password string) (bool, error) {
+//	    if username == "admin" && password == "secret" {  // Timing leak!
+//	        return true, nil
+//	    }
+//	    return false, nil
+//	}
+type BasicAuthValidator func(c *echo.Context, user string, password string) (bool, error)
 
 const (
 	basic        = "basic"
@@ -55,26 +101,36 @@ func (config BasicAuthConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 	if config.Skipper == nil {
 		config.Skipper = DefaultSkipper
 	}
-	if config.Realm == "" {
-		config.Realm = defaultRealm
+	realm := defaultRealm
+	if config.Realm != "" {
+		realm = config.Realm
 	}
+	realm = strconv.Quote(realm)
+	limit := cmp.Or(config.AllowedCheckLimit, 1)
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if config.Skipper(c) {
 				return next(c)
 			}
 
 			var lastError error
 			l := len(basic)
+			i := uint(0)
 			for _, auth := range c.Request().Header[echo.HeaderAuthorization] {
+				if i >= limit {
+					break
+				}
 				if !(len(auth) > l+1 && strings.EqualFold(auth[:l], basic)) {
 					continue
 				}
+				i++
 
+				// Invalid base64 shouldn't be treated as error
+				// instead should be treated as invalid client input
 				b, errDecode := base64.StdEncoding.DecodeString(auth[l+1:])
 				if errDecode != nil {
-					lastError = fmt.Errorf("invalid basic auth value: %w", errDecode)
+					lastError = echo.ErrBadRequest.Wrap(errDecode)
 					continue
 				}
 				idx := bytes.IndexByte(b, ':')
@@ -90,11 +146,6 @@ func (config BasicAuthConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 
 			if lastError != nil {
 				return lastError
-			}
-
-			realm := defaultRealm
-			if config.Realm != defaultRealm {
-				realm = strconv.Quote(config.Realm)
 			}
 
 			// Need to return `401` for browsers to pop-up login box.
