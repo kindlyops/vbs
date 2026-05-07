@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "localereader.go",
+        "localereader_unix.go",
+        "localereader_windows.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/mattn/go-localereader",
+    importpath = "github.com/mattn/go-localereader",
+    visibility = ["//visibility:public"],
+    deps = select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//vendor/golang.org/x/text/transform:go_default_library",
+        ],
+        "//conditions:default": [],
+    }),
+)

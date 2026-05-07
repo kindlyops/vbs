@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "multi_match_subquery.go",
+        "record_field_resolve_runner.go",
+        "record_field_resolver.go",
+        "resolvers.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/resolvers",
+    importpath = "github.com/pocketbase/pocketbase/resolvers",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/pocketbase/dbx:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/daos:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/models:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/models/schema:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/inflector:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/list:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/search:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/security:go_default_library",
+        "//vendor/github.com/spf13/cast:go_default_library",
+    ],
+)

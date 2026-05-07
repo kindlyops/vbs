@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["netdb.go"],
+    importmap = "github.com/kindlyops/vbs/vendor/modernc.org/libc/honnef.co/go/netdb",
+    importpath = "modernc.org/libc/honnef.co/go/netdb",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "automigrate.go",
+        "migratecmd.go",
+        "templates.go",
+    ],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/plugins/migratecmd",
+    importpath = "github.com/pocketbase/pocketbase/plugins/migratecmd",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/AlecAivazis/survey/v2:go_default_library",
+        "//vendor/github.com/pocketbase/dbx:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/core:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/daos:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/migrations:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/models:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/inflector:go_default_library",
+        "//vendor/github.com/pocketbase/pocketbase/tools/migrate:go_default_library",
+        "//vendor/github.com/spf13/cobra:go_default_library",
+    ],
+)
