@@ -76,11 +76,7 @@ func runPltBuild(_ *coral.Command, args []string) {
 		log.Fatal().Msg("media API endpoint is not configured; set the config key plt.mediaapi (or pass --media-api)")
 	}
 
-	path := resolveInputPath(args[0])
-	arc, err := sniffPlaylist(path)
-	if err != nil {
-		log.Fatal().Err(err).Msgf("Not a valid purple playlist: %s", path)
-	}
+	arc := openPlaylist(args[0])
 	defer func() { _ = arc.Close() }()
 
 	playlist, err := parsePlaylist(arc)
