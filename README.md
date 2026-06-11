@@ -29,6 +29,30 @@ vbs chapterlist file.mp4
 vbs chaptersplit file.mp4
 ```
 
+## plt - purple playlists
+
+Parse purple playlist exports (a ZIP container with a SQLite database produced
+by the source app) and prepare their media for live meetings run from Mitti.
+
+### Print a playlist
+
+Parse a playlist and print its cues as an aligned table. Works entirely
+offline; no media is downloaded.
+
+```bash
+vbs plt print meeting.playlist
+```
+
+Use `--json` to emit the same data as JSON:
+
+```bash
+vbs plt print --json meeting.playlist
+```
+
+The format is detected by content, not file extension, so a renamed export is
+still recognized. Invalid files are rejected with a message naming what was
+wrong (not a zip, missing manifest, non-SQLite database, or missing tables).
+
 ## installation for homebrew (MacOS/Linux)
 
     brew install kindlyops/tap/vbs

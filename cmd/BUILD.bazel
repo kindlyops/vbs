@@ -10,6 +10,9 @@ go_library(
         "play.go",
         "play_unix.go",
         "play_windows.go",
+        "plt.go",
+        "plt_helpers.go",
+        "plt_parse.go",
         "root.go",
     ],
     importpath = "github.com/kindlyops/vbs/cmd",
@@ -37,6 +40,7 @@ go_library(
         "//vendor/github.com/rs/zerolog:go_default_library",
         "//vendor/github.com/rs/zerolog/log:go_default_library",
         "//vendor/github.com/spf13/viper:go_default_library",
+        "//vendor/modernc.org/sqlite:go_default_library",
     ] + select({
         "@io_bazel_rules_go//go/platform:windows": [
             "//vendor/github.com/Microsoft/go-winio:go_default_library",
@@ -50,11 +54,17 @@ go_test(
     srcs = [
         "chapters_test.go",
         "lighting_test.go",
+        "plt_fixture_test.go",
+        "plt_helpers_test.go",
+        "plt_parse_test.go",
+        "plt_print_test.go",
+        "plt_sniff_test.go",
         "root_test.go",
     ],
     embed = [":go_default_library"],
     deps = [
         "//vendor/github.com/rs/zerolog:go_default_library",
         "//vendor/github.com/spf13/viper:go_default_library",
+        "//vendor/modernc.org/sqlite:go_default_library",
     ],
 )
