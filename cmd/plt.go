@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -49,12 +50,7 @@ offline; no media is downloaded.`,
 }
 
 func runPltPrint(_ *coral.Command, args []string) {
-	path := resolveInputPath(args[0])
-
-	arc, err := sniffPlaylist(path)
-	if err != nil {
-		log.Fatal().Err(err).Msgf("Not a valid purple playlist: %s", path)
-	}
+	arc := openPlaylist(args[0])
 	defer func() { _ = arc.Close() }()
 
 	if arc.schemaVersion != verifiedSchemaVersion {
@@ -91,6 +87,35 @@ func resolveInputPath(p string) string {
 		return filepath.Join(wd, p)
 	}
 	return p
+}
+
+// checkPlaylistFile reports a clear, path-focused error when the file is
+// missing or unreadable, keeping it distinct from a format-validation failure.
+func checkPlaylistFile(path string) error {
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("no such file: %s", path)
+		}
+		return fmt.Errorf("could not access %s: %w", path, err)
+	}
+	return nil
+}
+
+// openPlaylist resolves the argument, fails fast with a distinct message when
+// the file is missing, then sniffs and returns the validated archive. Shared
+// by the print and build commands.
+func openPlaylist(rawPath string) *archive {
+	path := resolveInputPath(rawPath)
+
+	if err := checkPlaylistFile(path); err != nil {
+		log.Fatal().Err(err).Msg("Could not open playlist file")
+	}
+
+	arc, err := sniffPlaylist(path)
+	if err != nil {
+		log.Fatal().Err(err).Msgf("Not a valid purple playlist: %s", path)
+	}
+	return arc
 }
 
 // printView is the offline summary rendered by plt print, shared by the text

@@ -17,6 +17,7 @@ package cmd
 import (
 	"encoding/json"
 	"math"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -47,6 +48,27 @@ func TestResolveInputPath(t *testing.T) {
 			t.Errorf("resolveInputPath = %q, want unchanged relative path", got)
 		}
 	})
+}
+
+func TestCheckPlaylistFile(t *testing.T) {
+	dir := t.TempDir()
+
+	present := filepath.Join(dir, "present.playlist")
+	if err := os.WriteFile(present, []byte("data"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	if err := checkPlaylistFile(present); err != nil {
+		t.Errorf("existing file should pass, got: %v", err)
+	}
+
+	missing := filepath.Join(dir, "missing.playlist")
+	err := checkPlaylistFile(missing)
+	if err == nil {
+		t.Fatal("missing file should error")
+	}
+	if !strings.Contains(err.Error(), "no such file") {
+		t.Errorf("error %q should mention 'no such file'", err.Error())
+	}
 }
 
 func TestDescribeSource(t *testing.T) {
