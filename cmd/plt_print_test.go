@@ -17,9 +17,37 @@ package cmd
 import (
 	"encoding/json"
 	"math"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestResolveInputPath(t *testing.T) {
+	abs := filepath.Join(t.TempDir(), "meeting.playlist")
+
+	t.Run("absolute path is unchanged", func(t *testing.T) {
+		t.Setenv("BUILD_WORKING_DIRECTORY", "/some/where")
+		if got := resolveInputPath(abs); got != abs {
+			t.Errorf("resolveInputPath(%q) = %q, want unchanged", abs, got)
+		}
+	})
+
+	t.Run("relative path joins BUILD_WORKING_DIRECTORY", func(t *testing.T) {
+		t.Setenv("BUILD_WORKING_DIRECTORY", "/launch/dir")
+		got := resolveInputPath("../export/meeting.playlist")
+		want := filepath.Join("/launch/dir", "../export/meeting.playlist")
+		if got != want {
+			t.Errorf("resolveInputPath = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("relative path unchanged when env unset", func(t *testing.T) {
+		t.Setenv("BUILD_WORKING_DIRECTORY", "")
+		if got := resolveInputPath("rel/meeting.playlist"); got != "rel/meeting.playlist" {
+			t.Errorf("resolveInputPath = %q, want unchanged relative path", got)
+		}
+	})
+}
 
 func TestDescribeSource(t *testing.T) {
 	cases := []struct {

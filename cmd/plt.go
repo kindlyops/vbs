@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"text/tabwriter"
 
 	"github.com/muesli/coral"
@@ -28,23 +29,27 @@ import (
 var pltPrintJSON bool
 
 var pltCmd = &coral.Command{
-	Use:   "plt",
+	Use:   "plt <command> <playlist-file>",
 	Short: "Work with purple playlists.",
 	Long: `Parse, build, and prepare media for purple playlist exports from the
-source app for use in live meetings.`,
+source app for use in live meetings. Each subcommand takes the path to a
+playlist export file.`,
+	Example: `  vbs plt print meeting.playlist
+  vbs plt build meeting.playlist`,
 }
 
 var pltPrintCmd = &coral.Command{
-	Use:   "print <playlist>",
+	Use:   "print <playlist-file>",
 	Short: "Parse and pretty-print a purple playlist.",
 	Long: `Parse a purple playlist export and print its cues. Works entirely
 offline; no media is downloaded.`,
-	Run:  runPltPrint,
-	Args: coral.ExactArgs(1),
+	Example: "  vbs plt print meeting.playlist",
+	Run:     runPltPrint,
+	Args:    coral.ExactArgs(1),
 }
 
-func runPltPrint(cmd *coral.Command, args []string) {
-	path := args[0]
+func runPltPrint(_ *coral.Command, args []string) {
+	path := resolveInputPath(args[0])
 
 	arc, err := sniffPlaylist(path)
 	if err != nil {
@@ -72,6 +77,20 @@ func runPltPrint(cmd *coral.Command, args []string) {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not render playlist")
 	}
+}
+
+// resolveInputPath makes a user-supplied path usable regardless of how the
+// binary was launched. Relative paths are resolved against the directory the
+// command was invoked from; under `bazel run` that is reported via
+// BUILD_WORKING_DIRECTORY, since the process itself starts in the runfiles tree.
+func resolveInputPath(p string) string {
+	if p == "" || filepath.IsAbs(p) {
+		return p
+	}
+	if wd := os.Getenv("BUILD_WORKING_DIRECTORY"); wd != "" {
+		return filepath.Join(wd, p)
+	}
+	return p
 }
 
 // printView is the offline summary rendered by plt print, shared by the text
