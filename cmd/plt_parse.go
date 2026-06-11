@@ -127,6 +127,39 @@ func (a *archive) Close() error {
 	return os.RemoveAll(a.tmpDir)
 }
 
+// extractEntry writes the named zip entry to destPath. destPath is chosen by
+// the caller (derived from item order and slug), never from the entry name, so
+// there is no zip-slip exposure; the entry name only locates the source bytes.
+func (a *archive) extractEntry(entryName, destPath string) error {
+	zr, err := zip.OpenReader(a.path)
+	if err != nil {
+		return fmt.Errorf("could not reopen archive: %w", err)
+	}
+	defer func() { _ = zr.Close() }()
+
+	entry := findZipEntry(&zr.Reader, entryName)
+	if entry == nil {
+		return fmt.Errorf("zip entry %q not found in archive", entryName)
+	}
+
+	rc, err := entry.Open()
+	if err != nil {
+		return fmt.Errorf("could not open zip entry %q: %w", entryName, err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	out, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("could not create %s: %w", destPath, err)
+	}
+	defer func() { _ = out.Close() }()
+
+	if _, err := io.Copy(out, rc); err != nil {
+		return fmt.Errorf("could not extract %q to %s: %w", entryName, destPath, err)
+	}
+	return nil
+}
+
 // manifestDoc is the subset of manifest.json the sniffer validates.
 type manifestDoc struct {
 	UserDataBackup struct {

@@ -178,12 +178,17 @@ func describeSource(it Item) string {
 		return "unknown source"
 	}
 
-	switch {
-	case loc.KeySymbol == "nwt" && loc.BookNumber > 0:
+	shape, err := classifyLocation(loc)
+	if err != nil {
+		return fmt.Sprintf("unsupported location (type %d)", loc.Type)
+	}
+
+	switch shape {
+	case shapeBookChapter:
 		return fmt.Sprintf("book %d:%d", loc.BookNumber, loc.ChapterNumber)
-	case loc.KeySymbol != "" && loc.Track > 0:
+	case shapePub:
 		return fmt.Sprintf("pub %s track %d", loc.KeySymbol, loc.Track)
-	case loc.Type == 3 && loc.DocumentID > 0:
+	case shapeDocid:
 		return fmt.Sprintf("docid %d", loc.DocumentID)
 	default:
 		return fmt.Sprintf("unsupported location (type %d)", loc.Type)
