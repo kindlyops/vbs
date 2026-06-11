@@ -35,12 +35,14 @@ var (
 )
 
 var pltBuildCmd = &coral.Command{
-	Use:   "build <playlist>",
+	Use:   "build <playlist-file>",
 	Short: "Download media and build a play-ready working directory.",
 	Long: `Parse a purple playlist, download every referenced video at the chosen
 resolution, pre-cut segment clips, and write a self-contained working directory
 with ordered clips, a JSON cue sheet, and a Typst cue sheet (compiled to PDF
 when typst is installed).`,
+	Example: `  vbs plt build meeting.playlist
+  vbs plt build --resolution 480p --out ./shows meeting.playlist`,
 	Run:  runPltBuild,
 	Args: coral.ExactArgs(1),
 }
@@ -74,9 +76,10 @@ func runPltBuild(_ *coral.Command, args []string) {
 		log.Fatal().Msg("media API endpoint is not configured; set the config key plt.mediaapi (or pass --media-api)")
 	}
 
-	arc, err := sniffPlaylist(args[0])
+	path := resolveInputPath(args[0])
+	arc, err := sniffPlaylist(path)
 	if err != nil {
-		log.Fatal().Err(err).Msgf("Not a valid purple playlist: %s", args[0])
+		log.Fatal().Err(err).Msgf("Not a valid purple playlist: %s", path)
 	}
 	defer func() { _ = arc.Close() }()
 
@@ -154,7 +157,7 @@ func newBuildContext(arc *archive, playlist *Playlist, base string) (*buildConte
 	}
 	cacheDir := filepath.Join(userCache, "vbs", "media")
 
-	outDir := filepath.Join(pltBuildOut, slugify(playlist.Name))
+	outDir := filepath.Join(resolveInputPath(pltBuildOut), slugify(playlist.Name))
 	for _, sub := range []string{"clips", "media", "thumbs"} {
 		if err := os.MkdirAll(filepath.Join(outDir, sub), 0o755); err != nil {
 			return nil, fmt.Errorf("could not create %s: %w", sub, err)
