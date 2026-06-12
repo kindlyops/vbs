@@ -53,6 +53,26 @@ The format is detected by content, not file extension, so a renamed export is
 still recognized. Invalid files are rejected with a message naming what was
 wrong (not a zip, missing manifest, non-SQLite database, or missing tables).
 
+### Build a working directory
+
+Download every referenced video at the chosen resolution, pre-cut segment clips,
+and write a self-contained per-playlist working directory:
+
+```bash
+vbs plt build meeting.playlist
+```
+
+This produces `<playlist-slug>/` containing ordered play-ready `clips/`, the
+untouched source downloads in `media/`, extracted `thumbs/`, a `playlist.json`
+cue sheet, and a Typst `cuesheet.typ` (compiled to `cuesheet.pdf` when `typst`
+is installed). Downloads are cached and verified by checksum, so re-running is
+fast and deterministic. `ffmpeg` and `ffprobe` are required.
+
+The media API endpoint is read from the config key `plt.mediaapi` (never
+committed); override it per run with `--media-api`. Other flags: `--out` (where
+to create the working directory), `--resolution` (default `720p`), and `--lang`
+(override the written-language code).
+
 ## installation for homebrew (MacOS/Linux)
 
     brew install kindlyops/tap/vbs

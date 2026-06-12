@@ -1,0 +1,382 @@
+// Copyright © 2026 Kindly Ops, LLC <support@kindlyops.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cmd
+
+import (
+	"encoding/json"
+	"fmt"
+	"math"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/muesli/coral"
+	"github.com/rs/zerolog/log"
+)
+
+var (
+	pltCuesheetOut        string
+	pltCuesheetLang       string
+	pltCuesheetResolution string
+)
+
+var pltCuesheetCmd = &coral.Command{
+	Use:   "cuesheet <playlist-file>",
+	Short: "Generate a cue sheet (and PDF) without downloading media.",
+	Long: `Parse a purple playlist and write a cue sheet directory containing
+playlist.json, cuesheet.typ, extracted thumbnails, and (when typst is
+installed) cuesheet.pdf. Nothing is downloaded and no clips are cut, so it
+works fully offline and needs neither ffmpeg nor the media API. The lead-in
+column is left blank because it requires probing the actual video files.`,
+	Example: "  vbs plt cuesheet meeting.playlist",
+	Run:     runPltCuesheet,
+	Args:    coral.ExactArgs(1),
+}
+
+func runPltCuesheet(_ *coral.Command, args []string) {
+	arc := openPlaylist(args[0])
+	defer func() { _ = arc.Close() }()
+
+	playlist, err := parsePlaylist(arc)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not parse playlist")
+	}
+
+	outDir, pdf, err := buildCueSheetOnly(arc, playlist)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not build cue sheet")
+	}
+	if !pdf {
+		log.Info().Msg("typst not found on PATH; wrote cuesheet.typ only (install typst to render cuesheet.pdf)")
+	}
+	log.Info().Msgf("Wrote cue sheet into %s", outDir)
+}
+
+// buildCueSheetOnly assembles cue metadata from the playlist alone — no media
+// downloads, no clip cutting — and writes playlist.json plus the cue sheet.
+func buildCueSheetOnly(arc *archive, playlist *Playlist) (string, bool, error) {
+	langID := playlistLanguageID(playlist)
+	langCode, err := resolveLanguage(langID, pltCuesheetLang)
+	if err != nil {
+		return "", false, err
+	}
+
+	outDir := filepath.Join(resolveInputPath(pltCuesheetOut), slugify(playlist.Name))
+	if err := os.MkdirAll(filepath.Join(outDir, "thumbs"), 0o755); err != nil {
+		return "", false, fmt.Errorf("could not create thumbs dir: %w", err)
+	}
+	if err := markWorkingDir(outDir); err != nil {
+		return "", false, err
+	}
+
+	var cues []cue
+	seen := map[string]int{}
+	for i, item := range playlist.Items {
+		cues = append(cues, cuesheetCues(arc, item, i+1, outDir, seen)...)
+	}
+
+	manifest := buildManifest{
+		Name:       playlist.Name,
+		Slug:       slugify(playlist.Name),
+		Language:   langInfo{ID: langID, Code: langCode},
+		Resolution: pltCuesheetResolution,
+		BuiltAt:    time.Now().UTC().Format(time.RFC3339),
+		Cues:       cues,
+	}
+
+	if err := writePlaylistJSON(outDir, manifest); err != nil {
+		return outDir, false, err
+	}
+	pdf, err := writeCueSheet(outDir, manifest)
+	return outDir, pdf, err
+}
+
+// cuesheetCues builds the cues for one item without media: durations come from
+// ticks/markers and the thumbnail from the zip. Clip names are the names build
+// would produce; no cut metadata is set, so the lead-in column stays blank.
+func cuesheetCues(arc *archive, item Item, index int, outDir string, seen map[string]int) []cue {
+	thumb := extractThumbnail(arc, item, index, outDir)
+	slug := uniqueSlug(slugify(item.Label), seen)
+
+	if item.IsImage() {
+		return []cue{{
+			Index:        index,
+			Label:        item.Label,
+			Kind:         "image",
+			Clip:         fmt.Sprintf("clips/%02d-%s%s", index, slug, imageExt(item.Image)),
+			EndActionRaw: item.EndAction,
+			DurationSec:  ticksToSeconds(item.Image.DurationTicks),
+			Thumbnail:    thumb,
+		}}
+	}
+	if item.Location == nil {
+		return []cue{{Index: index, Label: item.Label, Kind: "video", EndActionRaw: item.EndAction, Thumbnail: thumb}}
+	}
+
+	segments := mergeMarkers(item.Markers)
+	if len(segments) == 0 {
+		if trimmed, ok := trimRange(item); ok {
+			segments = []clipRange{trimmed}
+		} else {
+			return []cue{{
+				Index:        index,
+				Label:        item.Label,
+				Kind:         "video",
+				Clip:         fmt.Sprintf("clips/%02d-%s.mp4", index, slug),
+				EndActionRaw: item.EndAction,
+				DurationSec:  ticksToSeconds(item.Location.BaseDurationTicks),
+				Thumbnail:    thumb,
+			}}
+		}
+	}
+
+	return cuesheetSegmentCues(item, index, slug, segments, thumb)
+}
+
+// cuesheetSegmentCues turns merged marker ranges into one cue each, with the
+// duration of each segment (no keyframe snapping, so no cut/lead-in).
+func cuesheetSegmentCues(item Item, index int, slug string, segments []clipRange, thumb string) []cue {
+	cues := make([]cue, 0, len(segments))
+	for i, seg := range segments {
+		suffix := ""
+		if len(segments) > 1 {
+			suffix = string(rune('a' + i))
+		}
+		start := ticksToSeconds(seg.startTicks)
+		end := ticksToSeconds(seg.endTicks)
+		cues = append(cues, cue{
+			Index:        index,
+			Label:        item.Label,
+			Kind:         "video",
+			Clip:         fmt.Sprintf("clips/%02d%s-%s.mp4", index, suffix, slug),
+			Markers:      toCueMarkers(seg.markers),
+			EndActionRaw: item.EndAction,
+			DurationSec:  end - start,
+			Thumbnail:    thumb,
+		})
+	}
+	return cues
+}
+
+func init() {
+	pltCuesheetCmd.Flags().StringVar(&pltCuesheetOut, "out", ".", "directory to create the cue-sheet directory in")
+	pltCuesheetCmd.Flags().StringVar(&pltCuesheetLang, "lang", "", "override the written-language code (e.g. ASL)")
+	pltCuesheetCmd.Flags().StringVar(&pltCuesheetResolution, "resolution", "720p", "resolution label for the cue sheet")
+
+	pltCmd.AddCommand(pltCuesheetCmd)
+}
+
+// buildManifest is the playlist.json contract: a self-describing, ordered list
+// of play-ready cues plus the context needed to regenerate or hand off the
+// working directory (consumed by the Phase 3 .mitti writer).
+type buildManifest struct {
+	Name       string   `json:"name"`
+	Slug       string   `json:"slug"`
+	Language   langInfo `json:"language"`
+	Resolution string   `json:"resolution"`
+	BuiltAt    string   `json:"builtAt"`
+	Cues       []cue    `json:"cues"`
+}
+
+type langInfo struct {
+	ID   int    `json:"id"`
+	Code string `json:"code"`
+}
+
+type cue struct {
+	Index        int         `json:"index"`
+	Label        string      `json:"label"`
+	Kind         string      `json:"kind"`
+	Clip         string      `json:"clip"`
+	SourceMedia  string      `json:"sourceMedia,omitempty"`
+	Markers      []cueMarker `json:"markers,omitempty"`
+	Cut          *cutInfo    `json:"cut,omitempty"`
+	EndActionRaw int         `json:"endActionRaw"`
+	DurationSec  float64     `json:"durationSec"`
+	Thumbnail    string      `json:"thumbnail"`
+}
+
+type cueMarker struct {
+	Label    string  `json:"label"`
+	Start    float64 `json:"start"`
+	Duration float64 `json:"duration"`
+}
+
+type cutInfo struct {
+	RequestedStart float64 `json:"requestedStart"`
+	SnappedStart   float64 `json:"snappedStart"`
+	LeadIn         float64 `json:"leadIn"`
+	End            float64 `json:"end"`
+	Duration       float64 `json:"duration"`
+}
+
+// writePlaylistJSON writes the manifest to playlist.json in dir.
+func writePlaylistJSON(dir string, manifest buildManifest) error {
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("could not encode playlist.json: %w", err)
+	}
+	path := filepath.Join(dir, "playlist.json")
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+		return fmt.Errorf("could not write playlist.json: %w", err)
+	}
+	return nil
+}
+
+// formatTimecode renders seconds as m:ss.t (tenths).
+func formatTimecode(seconds float64) string {
+	if seconds < 0 {
+		seconds = 0
+	}
+	minutes := int(seconds) / 60
+	rem := seconds - float64(minutes*60)
+	return fmt.Sprintf("%d:%04.1f", minutes, rem)
+}
+
+// cueNumberColor is the single accent color for cue numbers (Typst expression).
+const cueNumberColor = `rgb("#235a68")`
+
+// renderCueSheet builds the Typst source for the technical-director cue sheet:
+// a clean sans-serif, near-borderless layout with color-coded cue numbers, a
+// header band, and a footer rule — echoing the meeting-workbook style.
+func renderCueSheet(manifest buildManifest) string {
+	var b strings.Builder
+
+	total, maxDur := 0.0, 0.0
+	for _, c := range manifest.Cues {
+		total += c.DurationSec
+		if c.DurationSec > maxDur {
+			maxDur = c.DurationSec
+		}
+	}
+
+	writeCueSheetPreamble(&b, manifest, total)
+
+	b.WriteString("#table(\n")
+	b.WriteString("  columns: (auto, auto, 1fr, 3cm, auto),\n")
+	b.WriteString("  stroke: none,\n")
+	b.WriteString("  inset: (x: 8pt, y: 9pt),\n")
+	b.WriteString("  align: (left + horizon, center + horizon, left + horizon, " +
+		"left + horizon, center + horizon),\n")
+	b.WriteString("  table.header(\n")
+	b.WriteString("    [], [],\n")
+	b.WriteString("    text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[CUE], " +
+		"text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[DURATION], " +
+		"text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[AFTER],\n")
+	b.WriteString("  ),\n")
+	b.WriteString("  table.hline(stroke: 0.6pt + luma(55%)),\n")
+
+	elapsed := 0.0
+	for _, c := range manifest.Cues {
+		elapsed += c.DurationSec
+		b.WriteString(cueSheetRow(c, elapsed, maxDur))
+	}
+
+	b.WriteString(")\n")
+	return b.String()
+}
+
+// writeCueSheetPreamble emits the page setup (with a footer rule), the title
+// band, and the muted metadata line.
+func writeCueSheetPreamble(b *strings.Builder, manifest buildManifest, total float64) {
+	fmt.Fprintf(b, "#set page(paper: \"us-letter\", margin: (x: 1.5cm, top: 1.5cm, bottom: 1.7cm),\n")
+	b.WriteString("  footer: context [\n")
+	b.WriteString("    #set text(size: 7.5pt, fill: luma(55%))\n")
+	b.WriteString("    #line(length: 100%, stroke: 0.5pt + luma(78%))\n    #v(2pt)\n")
+	b.WriteString("    #align(right)[#counter(page).display() / #counter(page).final().first()]\n  ])\n")
+	b.WriteString("#set text(font: (\"Helvetica Neue\", \"Arial\"), size: 10pt, number-width: \"tabular\")\n")
+	b.WriteString("#show raw: set text(size: 7.5pt, fill: luma(50%))\n")
+	b.WriteString("#let sparkbar(p) = box(width: 80%, height: 0.32em, fill: luma(90%))[" +
+		"#box(width: p * 1%, height: 100%, fill: rgb(\"#235a68\"))]\n\n")
+
+	b.WriteString("#grid(columns: (1fr, auto), align: (left + bottom, right + bottom), column-gutter: 12pt,\n")
+	fmt.Fprintf(b, "  text(size: 18pt, weight: \"bold\")[%s],\n", escapeTypst(manifest.Name))
+	fmt.Fprintf(b, "  text(size: 9.5pt, fill: luma(40%%))[%s (%d) · %s · %d cues · %s],\n",
+		escapeTypst(manifest.Language.Code), manifest.Language.ID, manifest.Resolution,
+		len(manifest.Cues), formatTimecode(total))
+	b.WriteString(")\n#v(5pt)\n#line(length: 100%, stroke: 1pt)\n#v(6pt)\n\n")
+}
+
+// endActionLabel interprets the source app's after-cue action codes:
+// 0 continue (auto-advance), 1 stop, 2 freeze on the last frame.
+func endActionLabel(code int) string {
+	switch code {
+	case 0:
+		return "continue"
+	case 1:
+		return "stop"
+	case 2:
+		return "freeze"
+	default:
+		return fmt.Sprintf("code %d", code)
+	}
+}
+
+// cueSheetRow renders one cue's cells plus a faint separator below it. The
+// Duration cell stacks the cue length, a proportional sparkline, and the
+// running elapsed time (de-emphasized) so elapsed needs no column of its own.
+func cueSheetRow(c cue, elapsed, maxDur float64) string {
+	thumb := "[]"
+	if c.Thumbnail != "" {
+		thumb = fmt.Sprintf("[#image(%q, width: 2cm)]", c.Thumbnail)
+	}
+	number := fmt.Sprintf("[#text(fill: %s, weight: \"bold\", size: 12pt)[%d]]", cueNumberColor, c.Index)
+
+	// Square-root scale so short cues stay distinguishable while the longest
+	// still reads as the longest.
+	pace := 0.0
+	if maxDur > 0 {
+		pace = math.Sqrt(c.DurationSec/maxDur) * 100
+	}
+	duration := fmt.Sprintf("[#stack(spacing: 3.5pt, [%s], sparkbar(%.1f), "+
+		"text(size: 7pt, fill: luma(62%%))[elapsed %s])]",
+		formatTimecode(c.DurationSec), pace, formatTimecode(elapsed))
+
+	return fmt.Sprintf("  %s, %s, [#text(weight: 500)[%s] \\ #raw(%q)], %s, "+
+		"[#text(fill: luma(50%%))[%s]],\n"+
+		"  table.hline(stroke: 0.3pt + luma(88%%)),\n",
+		number, thumb, escapeTypst(c.Label), c.Clip, duration, endActionLabel(c.EndActionRaw))
+}
+
+// escapeTypst escapes characters that would otherwise be Typst markup.
+func escapeTypst(s string) string {
+	replacer := strings.NewReplacer(
+		"\\", "\\\\", "#", "\\#", "*", "\\*", "_", "\\_",
+		"$", "\\$", "[", "\\[", "]", "\\]", "@", "\\@",
+	)
+	return replacer.Replace(s)
+}
+
+// writeCueSheet writes cuesheet.typ and, when typst is on PATH, compiles
+// cuesheet.pdf. It returns whether a PDF was produced.
+func writeCueSheet(dir string, manifest buildManifest) (bool, error) {
+	typPath := filepath.Join(dir, "cuesheet.typ")
+	if err := os.WriteFile(typPath, []byte(renderCueSheet(manifest)), 0o600); err != nil {
+		return false, fmt.Errorf("could not write cuesheet.typ: %w", err)
+	}
+
+	if _, err := exec.LookPath("typst"); err != nil {
+		return false, nil
+	}
+
+	pdfPath := filepath.Join(dir, "cuesheet.pdf")
+	cmd := exec.Command("typst", "compile", "--root", dir, typPath, pdfPath)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return false, fmt.Errorf("typst compile failed: %s: %w", out, err)
+	}
+	return true, nil
+}

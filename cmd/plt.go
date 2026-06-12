@@ -21,10 +21,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"text/tabwriter"
 
 	"github.com/muesli/coral"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 )
 
 var pltPrintJSON bool
@@ -63,7 +65,7 @@ func runPltPrint(_ *coral.Command, args []string) {
 		log.Fatal().Err(err).Msg("Could not parse playlist")
 	}
 
-	view := buildPrintView(pl)
+	view := buildPrintView(pl, viper.GetString("plt.mediaapi"))
 
 	if pltPrintJSON {
 		err = renderJSON(os.Stdout, view)
@@ -132,6 +134,7 @@ type printItem struct {
 	Kind        string        `json:"kind"`
 	DurationSec float64       `json:"durationSec"`
 	EndAction   int           `json:"endAction"`
+	MediaURL    string        `json:"mediaURL,omitempty"`
 	Markers     []printMarker `json:"markers,omitempty"`
 }
 
@@ -141,8 +144,11 @@ type printMarker struct {
 	DurationSec float64 `json:"durationSec"`
 }
 
-// buildPrintView projects the parsed playlist into the print summary.
-func buildPrintView(pl *Playlist) printView {
+// buildPrintView projects the parsed playlist into the print summary. base is
+// the configured media API endpoint (plt.mediaapi); when empty, media URLs are
+// shown with a "<plt.mediaapi>" placeholder so the playlist-derived query is
+// still visible offline.
+func buildPrintView(pl *Playlist, base string) printView {
 	view := printView{Name: pl.Name, Items: make([]printItem, 0, len(pl.Items))}
 
 	for _, it := range pl.Items {
@@ -153,6 +159,7 @@ func buildPrintView(pl *Playlist) printView {
 			Kind:        itemKind(it),
 			DurationSec: itemDurationSec(it),
 			EndAction:   it.EndAction,
+			MediaURL:    itemMediaURL(it, base),
 		}
 		for _, m := range it.Markers {
 			pi.Markers = append(pi.Markers, printMarker{
@@ -164,6 +171,33 @@ func buildPrintView(pl *Playlist) printView {
 		view.Items = append(view.Items, pi)
 	}
 	return view
+}
+
+// itemMediaURL builds the media API query URL an item resolves to, derived from
+// its catalog keys. Image cues and unsupported shapes have no URL. When base is
+// empty the placeholder "<plt.mediaapi>" stands in for the configured endpoint.
+func itemMediaURL(it Item, base string) string {
+	if it.Location == nil {
+		return ""
+	}
+	if base == "" {
+		base = "<plt.mediaapi>"
+	}
+
+	url, err := buildMediaURL(base, displayLangCode(it.Location.MepsLanguage), it.Location)
+	if err != nil {
+		return ""
+	}
+	return url
+}
+
+// displayLangCode returns the written-language code for a MepsLanguage ID, or
+// the numeric ID when it is not mapped (best effort for display only).
+func displayLangCode(id int) string {
+	if code, err := resolveLanguage(id, ""); err == nil {
+		return code
+	}
+	return strconv.Itoa(id)
 }
 
 // describeSource renders a one-line description of where an item's media comes
@@ -178,12 +212,17 @@ func describeSource(it Item) string {
 		return "unknown source"
 	}
 
-	switch {
-	case loc.KeySymbol == "nwt" && loc.BookNumber > 0:
+	shape, err := classifyLocation(loc)
+	if err != nil {
+		return fmt.Sprintf("unsupported location (type %d)", loc.Type)
+	}
+
+	switch shape {
+	case shapeBookChapter:
 		return fmt.Sprintf("book %d:%d", loc.BookNumber, loc.ChapterNumber)
-	case loc.KeySymbol != "" && loc.Track > 0:
+	case shapePub:
 		return fmt.Sprintf("pub %s track %d", loc.KeySymbol, loc.Track)
-	case loc.Type == 3 && loc.DocumentID > 0:
+	case shapeDocid:
 		return fmt.Sprintf("docid %d", loc.DocumentID)
 	default:
 		return fmt.Sprintf("unsupported location (type %d)", loc.Type)
@@ -226,7 +265,7 @@ func renderText(w io.Writer, view printView) error {
 	}
 
 	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "#\tLABEL\tSOURCE\tDURATION\tMARKERS\tEND"); err != nil {
+	if _, err := fmt.Fprintln(tw, "#\tLABEL\tSOURCE\tDURATION\tMARKERS\tAFTER"); err != nil {
 		return fmt.Errorf("could not write table header: %w", err)
 	}
 
@@ -235,14 +274,39 @@ func renderText(w io.Writer, view printView) error {
 		if len(it.Markers) > 0 {
 			markers = fmt.Sprintf("%d", len(it.Markers))
 		}
-		if _, err := fmt.Fprintf(tw, "%d\t%s\t%s\t%.1fs\t%s\t%d\n",
-			it.Position, it.Label, it.Source, it.DurationSec, markers, it.EndAction); err != nil {
+		if _, err := fmt.Fprintf(tw, "%d\t%s\t%s\t%.1fs\t%s\t%s\n",
+			it.Position, it.Label, it.Source, it.DurationSec, markers, endActionLabel(it.EndAction)); err != nil {
 			return fmt.Errorf("could not write table row: %w", err)
 		}
 	}
 
 	if err := tw.Flush(); err != nil {
 		return fmt.Errorf("could not flush table: %w", err)
+	}
+
+	return renderMediaURLs(w, view)
+}
+
+// renderMediaURLs prints the media API query URL each item resolves to, derived
+// from the playlist's catalog keys.
+func renderMediaURLs(w io.Writer, view printView) error {
+	var withURL []printItem
+	for _, it := range view.Items {
+		if it.MediaURL != "" {
+			withURL = append(withURL, it)
+		}
+	}
+	if len(withURL) == 0 {
+		return nil
+	}
+
+	if _, err := fmt.Fprint(w, "\nMedia URLs:\n"); err != nil {
+		return fmt.Errorf("could not write media URL header: %w", err)
+	}
+	for _, it := range withURL {
+		if _, err := fmt.Fprintf(w, "  %d  %s\n", it.Position, it.MediaURL); err != nil {
+			return fmt.Errorf("could not write media URL: %w", err)
+		}
 	}
 	return nil
 }

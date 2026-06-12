@@ -110,7 +110,7 @@ func TestDescribeSource(t *testing.T) {
 
 func TestBuildPrintView(t *testing.T) {
 	pl := parseFixture(t)
-	view := buildPrintView(pl)
+	view := buildPrintView(pl, "https://example.invalid/api")
 
 	if view.Name != "synthetic event" {
 		t.Errorf("view.Name = %q", view.Name)
@@ -119,30 +119,41 @@ func TestBuildPrintView(t *testing.T) {
 		t.Fatalf("len(view.Items) = %d, want 4", len(view.Items))
 	}
 
-	song := view.Items[0]
+	assertSongCue(t, view.Items[0])
+	if n := len(view.Items[1].Markers); n != 3 {
+		t.Errorf("chapter markers = %d, want 3", n)
+	}
+	assertImageCue(t, view.Items[2])
+}
+
+func assertSongCue(t *testing.T, song printItem) {
+	t.Helper()
 	if song.Source != "pub sjj track 135" {
 		t.Errorf("song.Source = %q", song.Source)
 	}
 	if math.Abs(song.DurationSec-139.006) > 1e-6 {
 		t.Errorf("song.DurationSec = %v, want 139.006", song.DurationSec)
 	}
-
-	chapter := view.Items[1]
-	if len(chapter.Markers) != 3 {
-		t.Errorf("chapter markers = %d, want 3", len(chapter.Markers))
+	if !strings.Contains(song.MediaURL, "pub=sjj") || !strings.Contains(song.MediaURL, "track=135") {
+		t.Errorf("song.MediaURL = %q, want pub=sjj & track=135", song.MediaURL)
 	}
+}
 
-	img := view.Items[2]
+func assertImageCue(t *testing.T, img printItem) {
+	t.Helper()
 	if img.Source != "embedded image" {
 		t.Errorf("img.Source = %q", img.Source)
 	}
 	if math.Abs(img.DurationSec-4.0) > 1e-6 {
 		t.Errorf("img.DurationSec = %v, want 4.0", img.DurationSec)
 	}
+	if img.MediaURL != "" {
+		t.Errorf("image cue should have no media URL, got %q", img.MediaURL)
+	}
 }
 
 func TestRenderJSON_RoundTrips(t *testing.T) {
-	view := buildPrintView(parseFixture(t))
+	view := buildPrintView(parseFixture(t), "https://example.invalid/api")
 
 	var buf strings.Builder
 	if err := renderJSON(&buf, view); err != nil {
@@ -159,7 +170,7 @@ func TestRenderJSON_RoundTrips(t *testing.T) {
 }
 
 func TestRenderText_ContainsKeyData(t *testing.T) {
-	view := buildPrintView(parseFixture(t))
+	view := buildPrintView(parseFixture(t), "https://example.invalid/api")
 
 	var buf strings.Builder
 	if err := renderText(&buf, view); err != nil {
@@ -170,6 +181,7 @@ func TestRenderText_ContainsKeyData(t *testing.T) {
 	wants := []string{
 		"synthetic event", "pub sjj track 135", "book 23:5",
 		"embedded image", "docid 1112024040",
+		"Media URLs:", "pub=sjj", "booknum=23", "docid=1112024040",
 	}
 	for _, want := range wants {
 		if !strings.Contains(out, want) {
