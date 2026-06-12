@@ -265,7 +265,7 @@ func renderText(w io.Writer, view printView) error {
 	}
 
 	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "#\tLABEL\tSOURCE\tDURATION\tMARKERS\tEND"); err != nil {
+	if _, err := fmt.Fprintln(tw, "#\tLABEL\tSOURCE\tDURATION\tMARKERS\tAFTER"); err != nil {
 		return fmt.Errorf("could not write table header: %w", err)
 	}
 
@@ -274,8 +274,8 @@ func renderText(w io.Writer, view printView) error {
 		if len(it.Markers) > 0 {
 			markers = fmt.Sprintf("%d", len(it.Markers))
 		}
-		if _, err := fmt.Fprintf(tw, "%d\t%s\t%s\t%.1fs\t%s\t%d\n",
-			it.Position, it.Label, it.Source, it.DurationSec, markers, it.EndAction); err != nil {
+		if _, err := fmt.Fprintf(tw, "%d\t%s\t%s\t%.1fs\t%s\t%s\n",
+			it.Position, it.Label, it.Source, it.DurationSec, markers, endActionLabel(it.EndAction)); err != nil {
 			return fmt.Errorf("could not write table row: %w", err)
 		}
 	}

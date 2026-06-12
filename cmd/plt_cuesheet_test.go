@@ -130,6 +130,15 @@ func sampleManifest() buildManifest {
 	}
 }
 
+func TestEndActionLabel(t *testing.T) {
+	cases := map[int]string{0: "continue", 1: "stop", 2: "freeze", 3: "code 3"}
+	for code, want := range cases {
+		if got := endActionLabel(code); got != want {
+			t.Errorf("endActionLabel(%d) = %q, want %q", code, got, want)
+		}
+	}
+}
+
 func TestFormatTimecode(t *testing.T) {
 	cases := map[float64]string{
 		0:       "0:00.0",

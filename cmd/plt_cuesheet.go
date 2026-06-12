@@ -243,7 +243,12 @@ func formatTimecode(seconds float64) string {
 	return fmt.Sprintf("%d:%04.1f", minutes, rem)
 }
 
-// renderCueSheet builds the Typst source for the technical-director cue sheet.
+// cueNumberColor is the single accent color for cue numbers (Typst expression).
+const cueNumberColor = `rgb("#235a68")`
+
+// renderCueSheet builds the Typst source for the technical-director cue sheet:
+// a clean sans-serif, near-borderless layout with color-coded cue numbers, a
+// header band, and a footer rule — echoing the meeting-workbook style.
 func renderCueSheet(manifest buildManifest) string {
 	var b strings.Builder
 
@@ -252,31 +257,80 @@ func renderCueSheet(manifest buildManifest) string {
 		total += c.DurationSec
 	}
 
-	b.WriteString("#set page(paper: \"us-letter\", margin: 1.5cm)\n")
-	b.WriteString("#set text(size: 9pt)\n\n")
-	fmt.Fprintf(&b, "= %s\n\n", manifest.Name)
-	fmt.Fprintf(&b, "Language: %s (%d) · Resolution: %s · Cues: %d · Runtime: %s · Built: %s\n\n",
-		manifest.Language.Code, manifest.Language.ID, manifest.Resolution,
-		len(manifest.Cues), formatTimecode(total), manifest.BuiltAt)
+	writeCueSheetPreamble(&b, manifest, total)
 
 	b.WriteString("#table(\n")
 	b.WriteString("  columns: (auto, auto, 1fr, auto, auto, auto),\n")
-	b.WriteString("  table.header[\\#][Thumb][Cue][Dur][After][Elapsed],\n")
+	b.WriteString("  stroke: none,\n")
+	b.WriteString("  inset: (x: 8pt, y: 9pt),\n")
+	b.WriteString("  align: (left + horizon, center + horizon, left + horizon, " +
+		"right + horizon, center + horizon, right + horizon),\n")
+	b.WriteString("  table.header(\n")
+	b.WriteString("    [], [],\n")
+	b.WriteString("    text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[CUE], " +
+		"text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[DUR], " +
+		"text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[AFTER], " +
+		"text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[ELAPSED],\n")
+	b.WriteString("  ),\n")
+	b.WriteString("  table.hline(stroke: 0.6pt + luma(55%)),\n")
 
 	elapsed := 0.0
 	for _, c := range manifest.Cues {
 		elapsed += c.DurationSec
-		thumb := "[]"
-		if c.Thumbnail != "" {
-			thumb = fmt.Sprintf("image(%q, width: 2cm)", c.Thumbnail)
-		}
-		fmt.Fprintf(&b, "  [%d], [#%s], [%s \\ #raw(%q)], [%s], [%d], [%s],\n",
-			c.Index, thumb, escapeTypst(c.Label), c.Clip,
-			formatTimecode(c.DurationSec), c.EndActionRaw, formatTimecode(elapsed))
+		b.WriteString(cueSheetRow(c, elapsed))
 	}
 
 	b.WriteString(")\n")
 	return b.String()
+}
+
+// writeCueSheetPreamble emits the page setup (with a footer rule), the title
+// band, and the muted metadata line.
+func writeCueSheetPreamble(b *strings.Builder, manifest buildManifest, total float64) {
+	fmt.Fprintf(b, "#set page(paper: \"us-letter\", margin: (x: 1.5cm, top: 1.5cm, bottom: 1.7cm),\n")
+	b.WriteString("  footer: context [\n")
+	b.WriteString("    #set text(size: 7.5pt, fill: luma(55%))\n")
+	b.WriteString("    #line(length: 100%, stroke: 0.5pt + luma(78%))\n    #v(2pt)\n")
+	b.WriteString("    #align(right)[#counter(page).display() / #counter(page).final().first()]\n  ])\n")
+	b.WriteString("#set text(font: (\"Helvetica Neue\", \"Arial\"), size: 10pt, number-width: \"tabular\")\n")
+	b.WriteString("#show raw: set text(size: 7.5pt, fill: luma(50%))\n\n")
+
+	b.WriteString("#grid(columns: (1fr, auto), align: (left + bottom, right + bottom), column-gutter: 12pt,\n")
+	fmt.Fprintf(b, "  text(size: 18pt, weight: \"bold\")[%s],\n", escapeTypst(manifest.Name))
+	fmt.Fprintf(b, "  text(size: 9.5pt, fill: luma(40%%))[%s (%d) · %s · %d cues · %s],\n",
+		escapeTypst(manifest.Language.Code), manifest.Language.ID, manifest.Resolution,
+		len(manifest.Cues), formatTimecode(total))
+	b.WriteString(")\n#v(5pt)\n#line(length: 100%, stroke: 1pt)\n#v(6pt)\n\n")
+}
+
+// endActionLabel interprets the source app's after-cue action codes:
+// 0 continue (auto-advance), 1 stop, 2 freeze on the last frame.
+func endActionLabel(code int) string {
+	switch code {
+	case 0:
+		return "continue"
+	case 1:
+		return "stop"
+	case 2:
+		return "freeze"
+	default:
+		return fmt.Sprintf("code %d", code)
+	}
+}
+
+// cueSheetRow renders one cue's cells plus a faint separator below it.
+func cueSheetRow(c cue, elapsed float64) string {
+	thumb := "[]"
+	if c.Thumbnail != "" {
+		thumb = fmt.Sprintf("[#image(%q, width: 2cm)]", c.Thumbnail)
+	}
+	number := fmt.Sprintf("[#text(fill: %s, weight: \"bold\", size: 12pt)[%d]]", cueNumberColor, c.Index)
+
+	return fmt.Sprintf("  %s, %s, [#text(weight: 500)[%s] \\ #raw(%q)], [%s], "+
+		"[#text(fill: luma(50%%))[%s]], [#text(fill: luma(45%%))[%s]],\n"+
+		"  table.hline(stroke: 0.3pt + luma(88%%)),\n",
+		number, thumb, escapeTypst(c.Label), c.Clip,
+		formatTimecode(c.DurationSec), endActionLabel(c.EndActionRaw), formatTimecode(elapsed))
 }
 
 // escapeTypst escapes characters that would otherwise be Typst markup.
