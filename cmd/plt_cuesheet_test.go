@@ -63,6 +63,10 @@ func assertCueSheetOnlyLayout(t *testing.T, workDir string) {
 			t.Errorf("%s missing: %v", f, err)
 		}
 	}
+	gi, err := os.ReadFile(filepath.Join(workDir, ".gitignore"))
+	if err != nil || !strings.Contains(string(gi), "*") {
+		t.Errorf("working dir should self-ignore via .gitignore, got %q (err %v)", gi, err)
+	}
 	if entries, _ := os.ReadDir(filepath.Join(workDir, "thumbs")); len(entries) == 0 {
 		t.Error("expected extracted thumbnails")
 	}

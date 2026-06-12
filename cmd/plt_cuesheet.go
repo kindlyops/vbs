@@ -79,6 +79,9 @@ func buildCueSheetOnly(arc *archive, playlist *Playlist) (string, bool, error) {
 	if err := os.MkdirAll(filepath.Join(outDir, "thumbs"), 0o755); err != nil {
 		return "", false, fmt.Errorf("could not create thumbs dir: %w", err)
 	}
+	if err := markWorkingDir(outDir); err != nil {
+		return "", false, err
+	}
 
 	var cues []cue
 	seen := map[string]int{}
