@@ -17,6 +17,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -332,9 +333,11 @@ func cueSheetRow(c cue, elapsed, maxDur float64) string {
 	}
 	number := fmt.Sprintf("[#text(fill: %s, weight: \"bold\", size: 12pt)[%d]]", cueNumberColor, c.Index)
 
+	// Square-root scale so short cues stay distinguishable while the longest
+	// still reads as the longest.
 	pace := 0.0
 	if maxDur > 0 {
-		pace = c.DurationSec / maxDur * 100
+		pace = math.Sqrt(c.DurationSec/maxDur) * 100
 	}
 	duration := fmt.Sprintf("[#stack(spacing: 3.5pt, [%s], sparkbar(%.1f), "+
 		"text(size: 7pt, fill: luma(62%%))[elapsed %s])]",
