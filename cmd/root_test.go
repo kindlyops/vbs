@@ -43,6 +43,7 @@ func TestRootCommand_HasSubcommands(t *testing.T) {
 		"chapterlist",
 		"chaptersplit",
 		"serve",
+		"plt",
 	}
 
 	availableCommands := make(map[string]bool)
