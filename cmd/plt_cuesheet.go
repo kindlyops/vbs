@@ -260,8 +260,8 @@ func renderCueSheet(manifest buildManifest) string {
 		len(manifest.Cues), formatTimecode(total), manifest.BuiltAt)
 
 	b.WriteString("#table(\n")
-	b.WriteString("  columns: (auto, auto, 1fr, auto, auto, auto, auto),\n")
-	b.WriteString("  table.header[\\#][Thumb][Cue][Dur][Lead][After][Elapsed],\n")
+	b.WriteString("  columns: (auto, auto, 1fr, auto, auto, auto),\n")
+	b.WriteString("  table.header[\\#][Thumb][Cue][Dur][After][Elapsed],\n")
 
 	elapsed := 0.0
 	for _, c := range manifest.Cues {
@@ -270,13 +270,9 @@ func renderCueSheet(manifest buildManifest) string {
 		if c.Thumbnail != "" {
 			thumb = fmt.Sprintf("image(%q, width: 2cm)", c.Thumbnail)
 		}
-		lead := ""
-		if c.Cut != nil {
-			lead = fmt.Sprintf("%.3f", c.Cut.LeadIn)
-		}
-		fmt.Fprintf(&b, "  [%d], [#%s], [%s \\ #raw(%q)], [%s], [%s], [%d], [%s],\n",
+		fmt.Fprintf(&b, "  [%d], [#%s], [%s \\ #raw(%q)], [%s], [%d], [%s],\n",
 			c.Index, thumb, escapeTypst(c.Label), c.Clip,
-			formatTimecode(c.DurationSec), lead, c.EndActionRaw, formatTimecode(elapsed))
+			formatTimecode(c.DurationSec), c.EndActionRaw, formatTimecode(elapsed))
 	}
 
 	b.WriteString(")\n")
