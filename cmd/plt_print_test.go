@@ -110,7 +110,7 @@ func TestDescribeSource(t *testing.T) {
 
 func TestBuildPrintView(t *testing.T) {
 	pl := parseFixture(t)
-	view := buildPrintView(pl)
+	view := buildPrintView(pl, "https://example.invalid/api")
 
 	if view.Name != "synthetic event" {
 		t.Errorf("view.Name = %q", view.Name)
@@ -126,6 +126,9 @@ func TestBuildPrintView(t *testing.T) {
 	if math.Abs(song.DurationSec-139.006) > 1e-6 {
 		t.Errorf("song.DurationSec = %v, want 139.006", song.DurationSec)
 	}
+	if !strings.Contains(song.MediaURL, "pub=sjj") || !strings.Contains(song.MediaURL, "track=135") {
+		t.Errorf("song.MediaURL = %q, want pub=sjj & track=135", song.MediaURL)
+	}
 
 	chapter := view.Items[1]
 	if len(chapter.Markers) != 3 {
@@ -139,10 +142,13 @@ func TestBuildPrintView(t *testing.T) {
 	if math.Abs(img.DurationSec-4.0) > 1e-6 {
 		t.Errorf("img.DurationSec = %v, want 4.0", img.DurationSec)
 	}
+	if img.MediaURL != "" {
+		t.Errorf("image cue should have no media URL, got %q", img.MediaURL)
+	}
 }
 
 func TestRenderJSON_RoundTrips(t *testing.T) {
-	view := buildPrintView(parseFixture(t))
+	view := buildPrintView(parseFixture(t), "https://example.invalid/api")
 
 	var buf strings.Builder
 	if err := renderJSON(&buf, view); err != nil {
@@ -159,7 +165,7 @@ func TestRenderJSON_RoundTrips(t *testing.T) {
 }
 
 func TestRenderText_ContainsKeyData(t *testing.T) {
-	view := buildPrintView(parseFixture(t))
+	view := buildPrintView(parseFixture(t), "https://example.invalid/api")
 
 	var buf strings.Builder
 	if err := renderText(&buf, view); err != nil {
@@ -170,6 +176,7 @@ func TestRenderText_ContainsKeyData(t *testing.T) {
 	wants := []string{
 		"synthetic event", "pub sjj track 135", "book 23:5",
 		"embedded image", "docid 1112024040",
+		"Media URLs:", "pub=sjj", "booknum=23", "docid=1112024040",
 	}
 	for _, want := range wants {
 		if !strings.Contains(out, want) {
