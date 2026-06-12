@@ -252,32 +252,34 @@ const cueNumberColor = `rgb("#235a68")`
 func renderCueSheet(manifest buildManifest) string {
 	var b strings.Builder
 
-	total := 0.0
+	total, maxDur := 0.0, 0.0
 	for _, c := range manifest.Cues {
 		total += c.DurationSec
+		if c.DurationSec > maxDur {
+			maxDur = c.DurationSec
+		}
 	}
 
 	writeCueSheetPreamble(&b, manifest, total)
 
 	b.WriteString("#table(\n")
-	b.WriteString("  columns: (auto, auto, 1fr, auto, auto, auto),\n")
+	b.WriteString("  columns: (auto, auto, 1fr, 3cm, auto),\n")
 	b.WriteString("  stroke: none,\n")
 	b.WriteString("  inset: (x: 8pt, y: 9pt),\n")
 	b.WriteString("  align: (left + horizon, center + horizon, left + horizon, " +
-		"right + horizon, center + horizon, right + horizon),\n")
+		"left + horizon, center + horizon),\n")
 	b.WriteString("  table.header(\n")
 	b.WriteString("    [], [],\n")
 	b.WriteString("    text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[CUE], " +
-		"text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[DUR], " +
-		"text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[AFTER], " +
-		"text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[ELAPSED],\n")
+		"text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[DURATION], " +
+		"text(size: 7.5pt, fill: luma(45%), tracking: 0.5pt)[AFTER],\n")
 	b.WriteString("  ),\n")
 	b.WriteString("  table.hline(stroke: 0.6pt + luma(55%)),\n")
 
 	elapsed := 0.0
 	for _, c := range manifest.Cues {
 		elapsed += c.DurationSec
-		b.WriteString(cueSheetRow(c, elapsed))
+		b.WriteString(cueSheetRow(c, elapsed, maxDur))
 	}
 
 	b.WriteString(")\n")
@@ -293,7 +295,9 @@ func writeCueSheetPreamble(b *strings.Builder, manifest buildManifest, total flo
 	b.WriteString("    #line(length: 100%, stroke: 0.5pt + luma(78%))\n    #v(2pt)\n")
 	b.WriteString("    #align(right)[#counter(page).display() / #counter(page).final().first()]\n  ])\n")
 	b.WriteString("#set text(font: (\"Helvetica Neue\", \"Arial\"), size: 10pt, number-width: \"tabular\")\n")
-	b.WriteString("#show raw: set text(size: 7.5pt, fill: luma(50%))\n\n")
+	b.WriteString("#show raw: set text(size: 7.5pt, fill: luma(50%))\n")
+	b.WriteString("#let sparkbar(p) = box(width: 80%, height: 0.32em, fill: luma(90%))[" +
+		"#box(width: p * 1%, height: 100%, fill: rgb(\"#235a68\"))]\n\n")
 
 	b.WriteString("#grid(columns: (1fr, auto), align: (left + bottom, right + bottom), column-gutter: 12pt,\n")
 	fmt.Fprintf(b, "  text(size: 18pt, weight: \"bold\")[%s],\n", escapeTypst(manifest.Name))
@@ -318,19 +322,28 @@ func endActionLabel(code int) string {
 	}
 }
 
-// cueSheetRow renders one cue's cells plus a faint separator below it.
-func cueSheetRow(c cue, elapsed float64) string {
+// cueSheetRow renders one cue's cells plus a faint separator below it. The
+// Duration cell stacks the cue length, a proportional sparkline, and the
+// running elapsed time (de-emphasized) so elapsed needs no column of its own.
+func cueSheetRow(c cue, elapsed, maxDur float64) string {
 	thumb := "[]"
 	if c.Thumbnail != "" {
 		thumb = fmt.Sprintf("[#image(%q, width: 2cm)]", c.Thumbnail)
 	}
 	number := fmt.Sprintf("[#text(fill: %s, weight: \"bold\", size: 12pt)[%d]]", cueNumberColor, c.Index)
 
-	return fmt.Sprintf("  %s, %s, [#text(weight: 500)[%s] \\ #raw(%q)], [%s], "+
-		"[#text(fill: luma(50%%))[%s]], [#text(fill: luma(45%%))[%s]],\n"+
+	pace := 0.0
+	if maxDur > 0 {
+		pace = c.DurationSec / maxDur * 100
+	}
+	duration := fmt.Sprintf("[#stack(spacing: 3.5pt, [%s], sparkbar(%.1f), "+
+		"text(size: 7pt, fill: luma(62%%))[elapsed %s])]",
+		formatTimecode(c.DurationSec), pace, formatTimecode(elapsed))
+
+	return fmt.Sprintf("  %s, %s, [#text(weight: 500)[%s] \\ #raw(%q)], %s, "+
+		"[#text(fill: luma(50%%))[%s]],\n"+
 		"  table.hline(stroke: 0.3pt + luma(88%%)),\n",
-		number, thumb, escapeTypst(c.Label), c.Clip,
-		formatTimecode(c.DurationSec), endActionLabel(c.EndActionRaw), formatTimecode(elapsed))
+		number, thumb, escapeTypst(c.Label), c.Clip, duration, endActionLabel(c.EndActionRaw))
 }
 
 // escapeTypst escapes characters that would otherwise be Typst markup.
