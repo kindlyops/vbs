@@ -344,6 +344,12 @@ func (ctx *buildContext) ensureMediaCopy(rm resolvedMedia) (string, error) {
 
 // extractThumb extracts an item's thumbnail to thumbs/NN.ext, best effort.
 func (ctx *buildContext) extractThumb(item Item, index int) string {
+	return extractThumbnail(ctx.arc, item, index, ctx.outDir)
+}
+
+// extractThumbnail extracts an item's thumbnail from the archive to
+// outDir/thumbs/NN.ext and returns its path relative to outDir (best effort).
+func extractThumbnail(arc *archive, item Item, index int, outDir string) string {
 	if item.ThumbnailPath == "" {
 		return ""
 	}
@@ -352,7 +358,7 @@ func (ctx *buildContext) extractThumb(item Item, index int) string {
 		ext = ".jpg"
 	}
 	rel := filepath.Join("thumbs", fmt.Sprintf("%02d%s", index, ext))
-	if err := ctx.arc.extractEntry(item.ThumbnailPath, filepath.Join(ctx.outDir, rel)); err != nil {
+	if err := arc.extractEntry(item.ThumbnailPath, filepath.Join(outDir, rel)); err != nil {
 		log.Warn().Err(err).Msgf("could not extract thumbnail for item %d", index)
 		return ""
 	}

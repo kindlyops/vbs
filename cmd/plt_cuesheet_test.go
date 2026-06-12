@@ -22,6 +22,82 @@ import (
 	"testing"
 )
 
+func TestBuildCueSheetOnly_NoMedia(t *testing.T) {
+	arc, err := sniffPlaylist(writePlaylistFixture(t, fixtureOptions{}))
+	if err != nil {
+		t.Fatalf("sniff: %v", err)
+	}
+	t.Cleanup(func() { _ = arc.Close() })
+	playlist, err := parsePlaylist(arc)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	out := t.TempDir()
+	pltCuesheetOut = out
+	pltCuesheetResolution = "720p"
+	pltCuesheetLang = ""
+	t.Cleanup(func() { pltCuesheetOut = "."; pltCuesheetResolution = "720p"; pltCuesheetLang = "" })
+
+	workDir, _, err := buildCueSheetOnly(arc, playlist)
+	if err != nil {
+		t.Fatalf("buildCueSheetOnly: %v", err)
+	}
+
+	assertCueSheetOnlyLayout(t, workDir)
+
+	manifest := readBuildManifest(t, filepath.Join(workDir, "playlist.json"))
+	// 4 items -> 5 cues (book/chapter item splits into 2 lettered segments).
+	if len(manifest.Cues) != 5 {
+		t.Errorf("cues = %d, want 5", len(manifest.Cues))
+	}
+	assertCuesHaveNoCut(t, manifest.Cues)
+}
+
+// assertCueSheetOnlyLayout checks the cue sheet + thumbs exist but nothing was
+// downloaded or cut.
+func assertCueSheetOnlyLayout(t *testing.T, workDir string) {
+	t.Helper()
+	for _, f := range []string{"cuesheet.typ", "playlist.json"} {
+		if _, err := os.Stat(filepath.Join(workDir, f)); err != nil {
+			t.Errorf("%s missing: %v", f, err)
+		}
+	}
+	if entries, _ := os.ReadDir(filepath.Join(workDir, "thumbs")); len(entries) == 0 {
+		t.Error("expected extracted thumbnails")
+	}
+	for _, dir := range []string{"media", "clips"} {
+		if _, err := os.Stat(filepath.Join(workDir, dir)); err == nil {
+			t.Errorf("%s/ should not exist in a cue-sheet-only build", dir)
+		}
+	}
+}
+
+func readBuildManifest(t *testing.T, path string) buildManifest {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var manifest buildManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("%s parse: %v", path, err)
+	}
+	return manifest
+}
+
+func assertCuesHaveNoCut(t *testing.T, cues []cue) {
+	t.Helper()
+	for _, c := range cues {
+		if c.Cut != nil {
+			t.Errorf("cue %d should have no cut (lead-in needs the video): %+v", c.Index, c.Cut)
+		}
+		if c.DurationSec <= 0 {
+			t.Errorf("cue %d has no duration", c.Index)
+		}
+	}
+}
+
 func sampleManifest() buildManifest {
 	return buildManifest{
 		Name:       "event Dec 2nd",
