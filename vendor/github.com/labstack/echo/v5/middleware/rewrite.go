@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package middleware
 
 import (
 	"errors"
+	"maps"
 	"regexp"
 
 	"github.com/labstack/echo/v5"
@@ -58,12 +62,10 @@ func (config RewriteConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 	if config.RegexRules == nil {
 		config.RegexRules = make(map[*regexp.Regexp]string)
 	}
-	for k, v := range rewriteRulesRegex(config.Rules) {
-		config.RegexRules[k] = v
-	}
+	maps.Copy(config.RegexRules, rewriteRulesRegex(config.Rules))
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) (err error) {
+		return func(c *echo.Context) (err error) {
 			if config.Skipper(c) {
 				return next(c)
 			}

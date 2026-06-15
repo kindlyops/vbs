@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package middleware
 
 import (
@@ -101,8 +104,22 @@ func (config SecureConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 		config.Skipper = DefaultSecureConfig.Skipper
 	}
 
+	// Precompute the Strict-Transport-Security header value once: it depends only on immutable config,
+	// so there is no need to rebuild it with fmt.Sprintf on every HTTPS request. Empty when HSTS is disabled.
+	hstsValue := ""
+	if config.HSTSMaxAge != 0 {
+		subdomains := ""
+		if !config.HSTSExcludeSubdomains {
+			subdomains = "; includeSubdomains"
+		}
+		if config.HSTSPreloadEnabled {
+			subdomains += "; preload"
+		}
+		hstsValue = fmt.Sprintf("max-age=%d%s", config.HSTSMaxAge, subdomains)
+	}
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if config.Skipper(c) {
 				return next(c)
 			}
@@ -119,15 +136,8 @@ func (config SecureConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 			if config.XFrameOptions != "" {
 				res.Header().Set(echo.HeaderXFrameOptions, config.XFrameOptions)
 			}
-			if (c.IsTLS() || (req.Header.Get(echo.HeaderXForwardedProto) == "https")) && config.HSTSMaxAge != 0 {
-				subdomains := ""
-				if !config.HSTSExcludeSubdomains {
-					subdomains = "; includeSubdomains"
-				}
-				if config.HSTSPreloadEnabled {
-					subdomains = fmt.Sprintf("%s; preload", subdomains)
-				}
-				res.Header().Set(echo.HeaderStrictTransportSecurity, fmt.Sprintf("max-age=%d%s", config.HSTSMaxAge, subdomains))
+			if hstsValue != "" && (c.IsTLS() || (req.Header.Get(echo.HeaderXForwardedProto) == "https")) {
+				res.Header().Set(echo.HeaderStrictTransportSecurity, hstsValue)
 			}
 			if config.ContentSecurityPolicy != "" {
 				if config.CSPReportOnly {
