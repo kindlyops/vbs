@@ -56,7 +56,7 @@ func runPltPrint(_ *coral.Command, args []string) {
 	defer func() { _ = arc.Close() }()
 
 	if !schemaVersionVerified(arc.schemaVersion) {
-		log.Warn().Msgf("schema version %d is outside the verified range %d-%d; proceeding because required tables are present",
+		log.Warn().Msgf("schema version %d outside verified range %d-%d; proceeding because required tables are present",
 			arc.schemaVersion, minVerifiedSchemaVersion, maxVerifiedSchemaVersion)
 	}
 
