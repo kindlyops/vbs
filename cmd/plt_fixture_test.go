@@ -76,7 +76,7 @@ func writePlaylistFixture(t *testing.T, opts fixtureOptions) string {
 	files := map[string][]byte{
 		dbName:            dbBytes,
 		fixtureThumbA:     onePixelJPEG(t),
-		fixtureThumbBook: onePixelJPEG(t),
+		fixtureThumbBook:  onePixelJPEG(t),
 		fixtureThumbImage: onePixelJPEG(t),
 		fixtureThumbDocid: onePixelJPEG(t),
 		fixtureImageFile:  onePixelJPEG(t),
@@ -95,7 +95,7 @@ func fixtureManifest(t *testing.T, dbName string, schemaVersion int) []byte {
 	t.Helper()
 
 	if schemaVersion == 0 {
-		schemaVersion = verifiedSchemaVersion
+		schemaVersion = minVerifiedSchemaVersion
 	}
 
 	manifest := map[string]any{
