@@ -95,7 +95,7 @@ func fixtureManifest(t *testing.T, dbName string, schemaVersion int) []byte {
 	t.Helper()
 
 	if schemaVersion == 0 {
-		schemaVersion = verifiedSchemaVersion
+		schemaVersion = minVerifiedSchemaVersion
 	}
 
 	manifest := map[string]any{

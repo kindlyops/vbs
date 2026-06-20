@@ -32,10 +32,22 @@ const sqliteMagic = "SQLite format 3\x00"
 
 var zipMagic = []byte("PK\x03\x04")
 
-// verifiedSchemaVersion is the source-app backup schema version this parser
-// was validated against. Other versions warn but still proceed when the
+// minVerifiedSchemaVersion and maxVerifiedSchemaVersion bound the inclusive
+// range of source-app backup schema versions this parser has been validated
+// against. Versions within the range are known to be compatible: the newer
+// ones only add tables and columns the parser ignores, leaving every column it
+// reads unchanged. Versions outside the range warn but still proceed when the
 // required tables are present — the tables are the real contract.
-const verifiedSchemaVersion = 14
+const (
+	minVerifiedSchemaVersion = 14
+	maxVerifiedSchemaVersion = 16
+)
+
+// schemaVersionVerified reports whether v falls within the inclusive range of
+// schema versions this parser has been validated against.
+func schemaVersionVerified(v int) bool {
+	return v >= minVerifiedSchemaVersion && v <= maxVerifiedSchemaVersion
+}
 
 // requiredTables are the database tables the parser depends on. Their presence
 // is the contract that lets us read a playlist regardless of schema version.

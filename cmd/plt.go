@@ -55,9 +55,9 @@ func runPltPrint(_ *coral.Command, args []string) {
 	arc := openPlaylist(args[0])
 	defer func() { _ = arc.Close() }()
 
-	if arc.schemaVersion != verifiedSchemaVersion {
-		log.Warn().Msgf("schema version %d differs from verified version %d; proceeding because required tables are present",
-			arc.schemaVersion, verifiedSchemaVersion)
+	if !schemaVersionVerified(arc.schemaVersion) {
+		log.Warn().Msgf("schema version %d is outside the verified range %d-%d; proceeding because required tables are present",
+			arc.schemaVersion, minVerifiedSchemaVersion, maxVerifiedSchemaVersion)
 	}
 
 	pl, err := parsePlaylist(arc)

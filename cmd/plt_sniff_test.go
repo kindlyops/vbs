@@ -28,8 +28,8 @@ func TestSniffPlaylist_AcceptsValidRenamedFile(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = arc.Close() })
 
-	if arc.schemaVersion != verifiedSchemaVersion {
-		t.Errorf("schemaVersion = %d, want %d", arc.schemaVersion, verifiedSchemaVersion)
+	if arc.schemaVersion != minVerifiedSchemaVersion {
+		t.Errorf("schemaVersion = %d, want %d", arc.schemaVersion, minVerifiedSchemaVersion)
 	}
 	if arc.dbPath == "" {
 		t.Error("expected dbPath to be populated")
@@ -77,5 +77,55 @@ func TestSniffPlaylist_UnverifiedSchemaProceeds(t *testing.T) {
 
 	if arc.schemaVersion != 99 {
 		t.Errorf("schemaVersion = %d, want 99", arc.schemaVersion)
+	}
+}
+
+// TestSniffPlaylist_AcceptsSchemaV16 covers the newer verified schema version.
+// v16 only adds tables and columns the parser ignores, so the cues it reads are
+// unchanged and the export sniffs and parses like any other verified version.
+func TestSniffPlaylist_AcceptsSchemaV16(t *testing.T) {
+	path := writePlaylistFixture(t, fixtureOptions{schemaVersion: 16})
+
+	arc, err := sniffPlaylist(path)
+	if err != nil {
+		t.Fatalf("schema v16 should sniff cleanly, got: %v", err)
+	}
+	t.Cleanup(func() { _ = arc.Close() })
+
+	if arc.schemaVersion != 16 {
+		t.Errorf("schemaVersion = %d, want 16", arc.schemaVersion)
+	}
+	if !schemaVersionVerified(arc.schemaVersion) {
+		t.Errorf("schema v16 should be within the verified range %d-%d",
+			minVerifiedSchemaVersion, maxVerifiedSchemaVersion)
+	}
+
+	pl, err := parsePlaylist(arc)
+	if err != nil {
+		t.Fatalf("parse schema v16: %v", err)
+	}
+	if len(pl.Items) != 4 {
+		t.Errorf("len(Items) = %d, want 4", len(pl.Items))
+	}
+}
+
+// TestSchemaVersionVerified pins the inclusive verified range so the warning
+// gate trips only for versions outside it.
+func TestSchemaVersionVerified(t *testing.T) {
+	cases := []struct {
+		version int
+		want    bool
+	}{
+		{13, false},
+		{14, true},
+		{15, true},
+		{16, true},
+		{17, false},
+		{99, false},
+	}
+	for _, tc := range cases {
+		if got := schemaVersionVerified(tc.version); got != tc.want {
+			t.Errorf("schemaVersionVerified(%d) = %v, want %v", tc.version, got, tc.want)
+		}
 	}
 }
