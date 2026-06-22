@@ -21,12 +21,6 @@ checksum:
 sboms:
   - artifacts: archive
 
-announce:
-  discord:
-    enabled: true
-    message_template: '{{ .ProjectName }} {{ .Tag }} is out! Check it out at {{ .ReleaseURL }} or brew upgrade {{ .ProjectName }}'
-    author: 'GoReleaser'
-
 homebrew_casks:
   - repository:
       owner: kindlyops
