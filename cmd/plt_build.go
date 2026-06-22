@@ -312,6 +312,11 @@ func (ctx *buildContext) cutCues(
 // resolveMedia downloads and caches the rendition for a location, memoizing by
 // query URL so a location referenced by several items is fetched once.
 func (ctx *buildContext) resolveMedia(loc *Location) (resolvedMedia, error) {
+	if ctx.langCode == "" {
+		return resolvedMedia{}, fmt.Errorf(
+			"unknown language id %d; set it explicitly with --lang", ctx.langID)
+	}
+
 	endpoint, err := buildMediaURL(ctx.base, ctx.langCode, loc)
 	if err != nil {
 		return resolvedMedia{}, err

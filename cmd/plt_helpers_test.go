@@ -54,6 +54,8 @@ func TestResolveLanguage(t *testing.T) {
 		{"override wins over known", 420, "ESL", "ESL", false},
 		{"override fills unknown", 999, "FOO", "FOO", false},
 		{"unknown id is fatal", 999, "", "", true},
+		{"id 0 is not fatal", 0, "", "", false},
+		{"override wins over id 0", 0, "ASL", "ASL", false},
 	}
 
 	for _, tc := range cases {
