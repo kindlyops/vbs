@@ -35,11 +35,17 @@ func ticksToSeconds(ticks int64) float64 {
 }
 
 // resolveLanguage returns the written-language code for a MepsLanguage ID.
-// A non-empty override always wins; otherwise the embedded map is consulted
-// and an unmapped ID is a fatal error naming the override flag.
+// A non-empty override always wins. An ID of 0 means no located item dictated a
+// language (e.g. an image-only playlist), which is not an error here: an empty
+// code is returned and any download that genuinely needs a language enforces it
+// at fetch time. A non-zero, unmapped ID is a fatal error naming the flag.
 func resolveLanguage(id int, override string) (string, error) {
 	if override != "" {
 		return override, nil
+	}
+
+	if id == 0 {
+		return "", nil
 	}
 
 	if code, ok := languageNames[id]; ok {

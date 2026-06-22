@@ -13,7 +13,7 @@ builds:
       - windows_amd64
     binary: vbs
     hooks:
-      post: pwsh goreleaser-post-hook.ps1
+      post: pwsh goreleaser-post-hook.ps1 {{ .Os }} {{ .Arch }}
 
 checksum:
   name_template: 'checksums.txt'
@@ -27,7 +27,7 @@ announce:
     message_template: '{{ .ProjectName }} {{ .Tag }} is out! Check it out at {{ .ReleaseURL }} or brew upgrade {{ .ProjectName }}'
     author: 'GoReleaser'
 
-brews:
+homebrew_casks:
   - repository:
       owner: kindlyops
       name: homebrew-tap
@@ -59,15 +59,14 @@ brews:
     # Default is empty.
     description: "vbs helps work with video broadcast files and streams."
 
-    # So you can `brew test` your formula.
-    # Default is empty.
-    test: |
-      system "#{bin}/vbs --version"
-
-    # Custom install script for brew.
-    # Default is 'bin.install "program"'.
-    install: |
-      bin.install "vbs"
+    # vbs ships unsigned, so macOS quarantines the downloaded binary and refuses
+    # to run it ("vbs is damaged"). Strip the quarantine attribute on install.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/vbs"]
+          end
 
 scoops:
   - # Template for the url which is determined by the given Token (github or gitlab)
