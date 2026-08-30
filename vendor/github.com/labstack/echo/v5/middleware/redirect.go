@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package middleware
 
 import (
@@ -125,7 +128,7 @@ func (config RedirectConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if config.Skipper(c) {
 				return next(c)
 			}
@@ -149,14 +152,17 @@ var redirectHTTPS = func(scheme, host, uri string) (bool, string) {
 }
 
 var redirectHTTPSWWW = func(scheme, host, uri string) (bool, string) {
-	if scheme != "https" && !strings.HasPrefix(host, www) {
+	// Redirect if not HTTPS OR missing www prefix (needs either fix)
+	if scheme != "https" || !strings.HasPrefix(host, www) {
+		host = strings.TrimPrefix(host, www) // Remove www if present to avoid duplication
 		return true, "https://www." + host + uri
 	}
 	return false, ""
 }
 
 var redirectNonHTTPSWWW = func(scheme, host, uri string) (ok bool, url string) {
-	if scheme != "https" {
+	// Redirect if not HTTPS OR has www prefix (needs either fix)
+	if scheme != "https" || strings.HasPrefix(host, www) {
 		host = strings.TrimPrefix(host, www)
 		return true, "https://" + host + uri
 	}
