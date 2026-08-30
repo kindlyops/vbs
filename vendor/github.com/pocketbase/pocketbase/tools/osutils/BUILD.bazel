@@ -1,0 +1,10 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["dir.go"],
+    importmap = "github.com/kindlyops/vbs/vendor/github.com/pocketbase/pocketbase/tools/osutils",
+    importpath = "github.com/pocketbase/pocketbase/tools/osutils",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/pocketbase/pocketbase/tools/list:go_default_library"],
+)
