@@ -75,9 +75,9 @@ rules_pkg_dependencies()
 
 http_archive(
     name = "rules_oci",
-    sha256 = "46ce9edcff4d3d7b3a550774b82396c0fa619cc9ce9da00c1b09a08b45ea5a14",
-    strip_prefix = "rules_oci-1.8.0",
-    url = "https://github.com/bazel-contrib/rules_oci/releases/download/v1.8.0/rules_oci-v1.8.0.tar.gz",
+    sha256 = "243eac87ec41d68d1d9e6d21884a50ec28e031f702b0b9fcdc7f97c3f3d5389a",
+    strip_prefix = "rules_oci-2.3.3",
+    url = "https://github.com/bazel-contrib/rules_oci/releases/download/v2.3.3/rules_oci-v2.3.3.tar.gz",
 )
 
 load("@rules_oci//oci:dependencies.bzl", "rules_oci_dependencies")
