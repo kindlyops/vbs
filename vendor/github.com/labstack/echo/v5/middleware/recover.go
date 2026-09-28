@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package middleware
 
 import (
 	"fmt"
+	"net/http"
 	"runtime"
 
 	"github.com/labstack/echo/v5"
@@ -56,13 +60,16 @@ func (config RecoverConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) (err error) {
+		return func(c *echo.Context) (err error) {
 			if config.Skipper(c) {
 				return next(c)
 			}
 
 			defer func() {
 				if r := recover(); r != nil {
+					if r == http.ErrAbortHandler {
+						panic(r)
+					}
 					tmpErr, ok := r.(error)
 					if !ok {
 						tmpErr = fmt.Errorf("%v", r)
@@ -70,7 +77,7 @@ func (config RecoverConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 					if !config.DisablePrintStack {
 						stack := make([]byte, config.StackSize)
 						length := runtime.Stack(stack, !config.DisableStackAll)
-						tmpErr = fmt.Errorf("[PANIC RECOVER] %w %s", tmpErr, stack[:length])
+						tmpErr = &PanicStackError{Stack: stack[:length], Err: tmpErr}
 					}
 					err = tmpErr
 				}
@@ -78,4 +85,19 @@ func (config RecoverConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 			return next(c)
 		}
 	}, nil
+}
+
+// PanicStackError is an error type that wraps an error along with its stack trace.
+// It is returned when config.DisablePrintStack is set to false.
+type PanicStackError struct {
+	Stack []byte
+	Err   error
+}
+
+func (e *PanicStackError) Error() string {
+	return fmt.Sprintf("[PANIC RECOVER] %s %s", e.Err.Error(), e.Stack)
+}
+
+func (e *PanicStackError) Unwrap() error {
+	return e.Err
 }
