@@ -61,18 +61,19 @@ func encodeStill(src, out string, width, height int) error {
 		fmt.Sprintf("[0:v]scale=%d:%d:force_original_aspect_ratio=decrease:", width, height) +
 		"force_divisible_by=2,format=rgba[fg];" +
 		"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=gbrp," +
-		"setsar=1,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[v]"
+		"setsar=1,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p," +
+		"setparams=color_primaries=bt709:color_trc=bt709[v]"
 
 	cmd := exec.Command("ffmpeg", "-loglevel", "error",
 		"-loop", "1", "-framerate", "30000/1001", "-i", src,
 		"-filter_complex", filter, "-map", "[v]",
 		"-t", strconv.FormatFloat(stillDurationSec, 'f', -1, 64),
 		"-color_range", "tv", "-colorspace", "bt709",
-		"-color_primaries", "bt709", "-color_trc", "bt709",
 		"-c:v", "libx264", "-profile:v", "main", "-an", "-movflags", "+faststart",
 		"-y", out)
 	if combined, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("ffmpeg still encode failed for %s -> %s: %s: %w", src, out, combined, err)
+		return fmt.Errorf(
+			"ffmpeg still encode failed for %s -> %s: %s: %w", src, out, combined, err)
 	}
 
 	return nil

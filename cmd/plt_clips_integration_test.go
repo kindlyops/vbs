@@ -133,7 +133,7 @@ func ffprobeStream(t *testing.T, path string) string {
 
 	out, err := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0",
 		"-show_entries", "stream=codec_name,profile,width,height,pix_fmt,r_frame_rate,"+
-			"color_range,color_space",
+			"color_range,color_space,color_primaries,color_transfer",
 		"-of", "default=noprint_wrappers=1", path).Output()
 	if err != nil {
 		t.Fatalf("ffprobe stream failed: %v", err)
@@ -163,7 +163,7 @@ func TestEncodeStill_Integration(t *testing.T) {
 	stream := ffprobeStream(t, out)
 	wants := []string{
 		"codec_name=h264", "profile=Main", "width=1280", "height=720", "pix_fmt=yuv420p",
-		"r_frame_rate=30000/1001", "color_range=tv", "color_space=bt709",
+		"r_frame_rate=30000/1001", "color_range=tv", "color_space=bt709", "color_primaries=bt709", "color_transfer=bt709",
 	}
 
 	for _, want := range wants {
@@ -223,7 +223,10 @@ func TestEncodeStill_TransparentPNG(t *testing.T) {
 	}
 
 	stream := ffprobeStream(t, out)
-	for _, want := range []string{"pix_fmt=yuv420p", "color_range=tv", "color_space=bt709"} {
+	for _, want := range []string{
+		"pix_fmt=yuv420p", "color_range=tv", "color_space=bt709",
+		"color_primaries=bt709", "color_transfer=bt709",
+	} {
 		if !strings.Contains(stream, want) {
 			t.Errorf("PNG stream missing %q:\n%s", want, stream)
 		}
