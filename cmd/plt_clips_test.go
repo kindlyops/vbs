@@ -88,3 +88,34 @@ func TestMergeMarkers(t *testing.T) {
 		})
 	}
 }
+
+func TestFrameSize(t *testing.T) {
+	cases := []struct {
+		label         string
+		width, height int
+	}{
+		{"240p", 426, 240},
+		{"360p", 640, 360},
+		{"480p", 854, 480},
+		{"720p", 1280, 720},
+		{"1080p", 1920, 1080},
+	}
+	for _, tc := range cases {
+		w, h, err := frameSize(tc.label)
+		if err != nil {
+			t.Errorf("frameSize(%q): %v", tc.label, err)
+			continue
+		}
+		if w != tc.width || h != tc.height {
+			t.Errorf("frameSize(%q) = %dx%d, want %dx%d", tc.label, w, h, tc.width, tc.height)
+		}
+	}
+}
+
+func TestFrameSize_Invalid(t *testing.T) {
+	for _, label := range []string{"", "720", "hd", "p", "0p", "-720p", "721p"} {
+		if _, _, err := frameSize(label); err == nil {
+			t.Errorf("frameSize(%q) should fail", label)
+		}
+	}
+}

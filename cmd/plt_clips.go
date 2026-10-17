@@ -28,6 +28,19 @@ import (
 // merges them into one contiguous clip (0.5 s, in 100 ns ticks).
 const markerMergeGapTicks = 5_000_000
 
+// frameSize maps a resolution label such as "720p" to a 16:9 frame size. The
+// width rounds to the nearest even number (480p -> 854x480) because H.264 with
+// 4:2:0 chroma needs even dimensions; for the same reason the height must be even.
+func frameSize(resolution string) (int, int, error) {
+	digits, ok := strings.CutSuffix(resolution, "p")
+	height, err := strconv.Atoi(digits)
+	if !ok || err != nil || height <= 0 || height%2 != 0 {
+		return 0, 0, fmt.Errorf("unsupported resolution %q: want an even height such as 720p", resolution)
+	}
+	width := 2 * ((height*8 + 4) / 9)
+	return width, height, nil
+}
+
 // clipRange is a contiguous span to cut from a source video, covering one or
 // more segment markers. Times are in 100 ns ticks relative to the source.
 type clipRange struct {
