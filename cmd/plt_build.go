@@ -40,7 +40,8 @@ var pltBuildCmd = &coral.Command{
 	Long: `Parse a purple playlist, download every referenced video at the chosen
 resolution, pre-cut segment clips, and write a self-contained working directory
 with ordered clips, a JSON cue sheet, and a Typst cue sheet (compiled to PDF
-when typst is installed).`,
+when typst is installed). Images become 4-second MP4 clips, and the original
+images are kept in media/.`,
 	Example: `  vbs plt build meeting.playlist
   vbs plt build --resolution 480p --out ./shows meeting.playlist`,
 	Run:  runPltBuild,
@@ -444,7 +445,7 @@ func imageExt(img *EmbeddedImage) string {
 func init() {
 	pltBuildCmd.Flags().StringVar(&pltBuildOut, "out", ".", "directory to create the working directory in")
 	pltBuildCmd.Flags().StringVar(&pltBuildLang, "lang", "", "override the written-language code (e.g. ASL)")
-	pltBuildCmd.Flags().StringVar(&pltBuildResolution, "resolution", "720p", "preferred rendition")
+	pltBuildCmd.Flags().StringVar(&pltBuildResolution, "resolution", "720p", "preferred rendition and still-clip frame height (e.g. 720p)")
 
 	var mediaAPI string
 	pltBuildCmd.Flags().StringVar(&mediaAPI, "media-api", "", "media API base URL (overrides config key plt.mediaapi)")
