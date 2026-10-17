@@ -132,7 +132,8 @@ func ffprobeStream(t *testing.T, path string) string {
 	t.Helper()
 
 	out, err := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0",
-		"-show_entries", "stream=codec_name,width,height,pix_fmt",
+		"-show_entries", "stream=codec_name,profile,width,height,pix_fmt,r_frame_rate,"+
+			"color_range,color_space",
 		"-of", "default=noprint_wrappers=1", path).Output()
 	if err != nil {
 		t.Fatalf("ffprobe stream failed: %v", err)
@@ -160,7 +161,10 @@ func TestEncodeStill_Integration(t *testing.T) {
 	}
 
 	stream := ffprobeStream(t, out)
-	wants := []string{"codec_name=h264", "width=1280", "height=720", "pix_fmt=yuv420p"}
+	wants := []string{
+		"codec_name=h264", "profile=Main", "width=1280", "height=720", "pix_fmt=yuv420p",
+		"r_frame_rate=30000/1001", "color_range=tv", "color_space=bt709",
+	}
 
 	for _, want := range wants {
 		if !strings.Contains(stream, want) {
@@ -182,5 +186,46 @@ func TestEncodeStill_MissingSource(t *testing.T) {
 	err := encodeStill(missing, filepath.Join(dir, "out.mp4"), 1280, 720)
 	if err == nil {
 		t.Fatal("expected an error for a missing source image")
+	}
+
+	if !strings.Contains(err.Error(), "missing.jpg") {
+		t.Errorf("error should name the source image, got: %v", err)
+	}
+}
+
+func TestEncodeStill_TransparentPNG(t *testing.T) {
+	requireFFmpeg(t)
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "clear.png")
+	out := filepath.Join(dir, "clear.mp4")
+
+	render := exec.Command("ffmpeg", "-loglevel", "error", "-f", "lavfi",
+		"-i", "color=c=white@0.0:s=64x36,format=rgba", "-frames:v", "1", "-y", src)
+	if combined, err := render.CombinedOutput(); err != nil {
+		t.Fatalf("could not render test image: %s: %v", combined, err)
+	}
+
+	if err := encodeStill(src, out, 1280, 720); err != nil {
+		t.Fatalf("encodeStill: %v", err)
+	}
+
+	sample := exec.Command("ffmpeg", "-v", "error", "-i", out, "-frames:v", "1",
+		"-vf", "crop=2:2:639:359,format=gray", "-f", "rawvideo", "-")
+
+	luma, err := sample.Output()
+	if err != nil || len(luma) == 0 {
+		t.Fatalf("could not sample center pixel: %v", err)
+	}
+
+	if luma[0] > 20 {
+		t.Errorf("transparent area luma = %d, want black (<= 20)", luma[0])
+	}
+
+	stream := ffprobeStream(t, out)
+	for _, want := range []string{"pix_fmt=yuv420p", "color_range=tv", "color_space=bt709"} {
+		if !strings.Contains(stream, want) {
+			t.Errorf("PNG stream missing %q:\n%s", want, stream)
+		}
 	}
 }

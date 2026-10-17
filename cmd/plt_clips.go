@@ -52,22 +52,27 @@ func frameSize(resolution string) (int, int, error) {
 const stillDurationSec = 4.0
 
 // encodeStill encodes an image as a stillDurationSec H.264 clip of width x
-// height. The image is scaled to fit and padded with black, and the output is
-// TV-range yuv420p at 29.97 fps to match the published videos.
+// height. The image is scaled to fit and composited onto black, so transparent
+// areas become black. The output is BT.709 TV-range yuv420p at 29.97 fps to
+// match the published videos.
 func encodeStill(src, out string, width, height int) error {
-	size := fmt.Sprintf("%d:%d", width, height)
-	filter := "scale=" + size + ":force_original_aspect_ratio=decrease:" +
-		"force_divisible_by=2:out_range=tv," +
-		"pad=" + size + ":(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p"
+	filter := fmt.Sprintf(
+		"color=c=black:s=%dx%d:r=30000/1001,format=rgb24[bg];", width, height) +
+		fmt.Sprintf("[0:v]scale=%d:%d:force_original_aspect_ratio=decrease:", width, height) +
+		"force_divisible_by=2,format=rgba[fg];" +
+		"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=gbrp," +
+		"setsar=1,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[v]"
 
 	cmd := exec.Command("ffmpeg", "-loglevel", "error",
 		"-loop", "1", "-framerate", "30000/1001", "-i", src,
+		"-filter_complex", filter, "-map", "[v]",
 		"-t", strconv.FormatFloat(stillDurationSec, 'f', -1, 64),
-		"-vf", filter, "-color_range", "tv",
+		"-color_range", "tv", "-colorspace", "bt709",
+		"-color_primaries", "bt709", "-color_trc", "bt709",
 		"-c:v", "libx264", "-profile:v", "main", "-an", "-movflags", "+faststart",
 		"-y", out)
 	if combined, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("ffmpeg still encode failed for %s: %s: %w", out, combined, err)
+		return fmt.Errorf("ffmpeg still encode failed for %s -> %s: %s: %w", src, out, combined, err)
 	}
 
 	return nil
