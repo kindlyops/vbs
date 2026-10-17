@@ -48,6 +48,31 @@ func frameSize(resolution string) (int, int, error) {
 	return width, height, nil
 }
 
+// stillDurationSec is the fixed length of a clip encoded from an image cue.
+const stillDurationSec = 4.0
+
+// encodeStill encodes an image as a stillDurationSec H.264 clip of width x
+// height. The image is scaled to fit and padded with black, and the output is
+// TV-range yuv420p at 29.97 fps to match the published videos.
+func encodeStill(src, out string, width, height int) error {
+	size := fmt.Sprintf("%d:%d", width, height)
+	filter := "scale=" + size + ":force_original_aspect_ratio=decrease:" +
+		"force_divisible_by=2:out_range=tv," +
+		"pad=" + size + ":(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p"
+
+	cmd := exec.Command("ffmpeg", "-loglevel", "error",
+		"-loop", "1", "-framerate", "30000/1001", "-i", src,
+		"-t", strconv.FormatFloat(stillDurationSec, 'f', -1, 64),
+		"-vf", filter, "-color_range", "tv",
+		"-c:v", "libx264", "-profile:v", "main", "-an", "-movflags", "+faststart",
+		"-y", out)
+	if combined, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("ffmpeg still encode failed for %s: %s: %w", out, combined, err)
+	}
+
+	return nil
+}
+
 // clipRange is a contiguous span to cut from a source video, covering one or
 // more segment markers. Times are in 100 ns ticks relative to the source.
 type clipRange struct {

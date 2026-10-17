@@ -126,3 +126,61 @@ func TestArchiveExtractEntry(t *testing.T) {
 		t.Errorf("extracted file is not a JPEG (len %d)", len(data))
 	}
 }
+
+// ffprobeStream returns the first video stream's fields as key=value lines.
+func ffprobeStream(t *testing.T, path string) string {
+	t.Helper()
+
+	out, err := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0",
+		"-show_entries", "stream=codec_name,width,height,pix_fmt",
+		"-of", "default=noprint_wrappers=1", path).Output()
+	if err != nil {
+		t.Fatalf("ffprobe stream failed: %v", err)
+	}
+
+	return string(out)
+}
+
+func TestEncodeStill_Integration(t *testing.T) {
+	requireFFmpeg(t)
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "still.jpg")
+	out := filepath.Join(dir, "still.mp4")
+
+	// A 4:3 source, so the 16:9 frame needs padding on the sides.
+	render := exec.Command("ffmpeg", "-loglevel", "error", "-f", "lavfi",
+		"-i", "testsrc=size=640x480", "-frames:v", "1", "-y", src)
+	if combined, err := render.CombinedOutput(); err != nil {
+		t.Fatalf("could not render test image: %s: %v", combined, err)
+	}
+
+	if err := encodeStill(src, out, 1280, 720); err != nil {
+		t.Fatalf("encodeStill: %v", err)
+	}
+
+	stream := ffprobeStream(t, out)
+	wants := []string{"codec_name=h264", "width=1280", "height=720", "pix_fmt=yuv420p"}
+
+	for _, want := range wants {
+		if !strings.Contains(stream, want) {
+			t.Errorf("stream missing %q:\n%s", want, stream)
+		}
+	}
+
+	if got := ffprobeDuration(t, out); math.Abs(got-stillDurationSec) > 0.05 {
+		t.Errorf("still duration = %v, want ~%v", got, stillDurationSec)
+	}
+}
+
+func TestEncodeStill_MissingSource(t *testing.T) {
+	requireFFmpeg(t)
+
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.jpg")
+
+	err := encodeStill(missing, filepath.Join(dir, "out.mp4"), 1280, 720)
+	if err == nil {
+		t.Fatal("expected an error for a missing source image")
+	}
+}
