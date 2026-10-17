@@ -56,16 +56,18 @@ type resolvedMedia struct {
 
 // buildContext carries the configuration and paths for one build.
 type buildContext struct {
-	arc        *archive
-	client     *http.Client
-	base       string
-	langID     int
-	langCode   string
-	resolution string
-	cacheDir   string
-	outDir     string
-	mediaByURL map[string]resolvedMedia
-	copied     map[string]bool
+	arc         *archive
+	client      *http.Client
+	base        string
+	langID      int
+	langCode    string
+	resolution  string
+	frameWidth  int
+	frameHeight int
+	cacheDir    string
+	outDir      string
+	mediaByURL  map[string]resolvedMedia
+	copied      map[string]bool
 }
 
 func runPltBuild(_ *coral.Command, args []string) {
@@ -147,6 +149,11 @@ func newBuildContext(arc *archive, playlist *Playlist, base string) (*buildConte
 		return nil, err
 	}
 
+	frameWidth, frameHeight, err := frameSize(pltBuildResolution)
+	if err != nil {
+		return nil, err
+	}
+
 	userCache, err := os.UserCacheDir()
 	if err != nil {
 		return nil, fmt.Errorf("could not locate user cache dir: %w", err)
@@ -164,16 +171,18 @@ func newBuildContext(arc *archive, playlist *Playlist, base string) (*buildConte
 	}
 
 	return &buildContext{
-		arc:        arc,
-		client:     http.DefaultClient,
-		base:       base,
-		langID:     langID,
-		langCode:   langCode,
-		resolution: pltBuildResolution,
-		cacheDir:   cacheDir,
-		outDir:     outDir,
-		mediaByURL: map[string]resolvedMedia{},
-		copied:     map[string]bool{},
+		arc:         arc,
+		client:      http.DefaultClient,
+		base:        base,
+		langID:      langID,
+		langCode:    langCode,
+		resolution:  pltBuildResolution,
+		frameWidth:  frameWidth,
+		frameHeight: frameHeight,
+		cacheDir:    cacheDir,
+		outDir:      outDir,
+		mediaByURL:  map[string]resolvedMedia{},
+		copied:      map[string]bool{},
 	}, nil
 }
 
@@ -231,19 +240,32 @@ func (ctx *buildContext) buildItemCues(item Item, index int, seen map[string]int
 	return ctx.cutCues(item, index, slug, ranges, sourceRel, thumb)
 }
 
-// imageCue extracts an embedded image cue from the archive into clips/.
+// imageCue extracts an embedded image into media/ and encodes it as a
+// fixed-length still clip in clips/.
 func (ctx *buildContext) imageCue(item Item, index int, slug, thumb string) ([]cue, error) {
-	clipRel := filepath.Join("clips", fmt.Sprintf("%02d-%s%s", index, slug, imageExt(item.Image)))
-	if err := ctx.arc.extractEntry(item.Image.FilePath, filepath.Join(ctx.outDir, clipRel)); err != nil {
+	sourceName := fmt.Sprintf("%02d-%s%s", index, slug, imageExt(item.Image))
+	sourceRel := filepath.Join("media", sourceName)
+	sourcePath := filepath.Join(ctx.outDir, sourceRel)
+
+	if err := ctx.arc.extractEntry(item.Image.FilePath, sourcePath); err != nil {
 		return nil, err
 	}
+
+	clipRel := filepath.Join("clips", fmt.Sprintf("%02d-%s.mp4", index, slug))
+	clipPath := filepath.Join(ctx.outDir, clipRel)
+
+	if err := encodeStill(sourcePath, clipPath, ctx.frameWidth, ctx.frameHeight); err != nil {
+		return nil, err
+	}
+
 	return []cue{{
 		Index:        index,
 		Label:        item.Label,
 		Kind:         "image",
 		Clip:         filepath.ToSlash(clipRel),
+		SourceMedia:  filepath.ToSlash(sourceRel),
 		EndActionRaw: item.EndAction,
-		DurationSec:  ticksToSeconds(item.Image.DurationTicks),
+		DurationSec:  stillDurationSec,
 		Thumbnail:    thumb,
 	}}, nil
 }

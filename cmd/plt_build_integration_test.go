@@ -16,10 +16,12 @@ package cmd
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -121,11 +123,16 @@ func assertBuildOutputs(t *testing.T, outDir string, manifest buildManifest) {
 		assertClipExists(t, workDir, c)
 		if c.Kind == "image" {
 			image++
+
+			assertStillCue(t, workDir, c)
 		}
 		if c.Cut != nil {
 			segments++
 		}
 	}
+
+	assertClipsAreMP4(t, workDir)
+
 	if image != 1 {
 		t.Errorf("image cues = %d, want 1", image)
 	}
@@ -139,5 +146,89 @@ func assertClipExists(t *testing.T, workDir string, c cue) {
 	info, err := os.Stat(filepath.Join(workDir, filepath.FromSlash(c.Clip)))
 	if err != nil || info.Size() == 0 {
 		t.Errorf("clip %q missing or empty: %v", c.Clip, err)
+	}
+}
+
+// assertStillCue checks an image cue was encoded to a still clip and that the
+// original image was kept in media/.
+func assertStillCue(t *testing.T, workDir string, c cue) {
+	t.Helper()
+
+	if !strings.HasSuffix(c.Clip, ".mp4") {
+		t.Errorf("image cue clip = %q, want an .mp4", c.Clip)
+	}
+
+	if c.DurationSec != stillDurationSec {
+		t.Errorf("image cue duration = %v, want %v", c.DurationSec, stillDurationSec)
+	}
+
+	if !strings.HasPrefix(c.SourceMedia, "media/") {
+		t.Errorf("image cue sourceMedia = %q, want a path in media/", c.SourceMedia)
+	} else {
+		sourcePath := filepath.Join(workDir, filepath.FromSlash(c.SourceMedia))
+		if _, err := os.Stat(sourcePath); err != nil {
+			t.Errorf("original image missing: %v", err)
+		}
+	}
+
+	if strings.HasSuffix(c.Clip, ".mp4") {
+		got := ffprobeDuration(t, filepath.Join(workDir, filepath.FromSlash(c.Clip)))
+		if math.Abs(got-stillDurationSec) > 0.05 {
+			t.Errorf("still clip duration = %v, want ~%v", got, stillDurationSec)
+		}
+	}
+}
+
+// assertClipsAreMP4 checks clips/ holds only MP4 files.
+func assertClipsAreMP4(t *testing.T, workDir string) {
+	t.Helper()
+
+	entries, err := os.ReadDir(filepath.Join(workDir, "clips"))
+	if err != nil {
+		t.Fatalf("read clips/: %v", err)
+	}
+
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) != ".mp4" {
+			t.Errorf("clips/ should hold only MP4 files, found %s", e.Name())
+		}
+	}
+}
+
+func TestBuildPlaylist_RejectsBadResolution(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	outDir := t.TempDir()
+
+	pltBuildOut = outDir
+	pltBuildResolution = "hd"
+	pltBuildLang = ""
+
+	t.Cleanup(func() { pltBuildOut = "."; pltBuildResolution = "720p"; pltBuildLang = "" })
+
+	arc, err := sniffPlaylist(writePlaylistFixture(t, fixtureOptions{}))
+	if err != nil {
+		t.Fatalf("sniff: %v", err)
+	}
+
+	t.Cleanup(func() { _ = arc.Close() })
+
+	playlist, err := parsePlaylist(arc)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	_, err = buildPlaylist(arc, playlist, "http://example.invalid")
+	if err == nil || !strings.Contains(err.Error(), `"hd"`) {
+		t.Fatalf("buildPlaylist error = %v, want one mentioning \"hd\"", err)
+	}
+
+	entries, readErr := os.ReadDir(outDir)
+	if readErr != nil {
+		t.Fatalf("read out dir: %v", readErr)
+	}
+
+	if len(entries) != 0 {
+		t.Errorf("out dir has %d entries, want 0", len(entries))
 	}
 }
