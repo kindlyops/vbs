@@ -31,23 +31,25 @@ func TestBuildMediaURL(t *testing.T) {
 		{
 			name:       "pub track",
 			loc:        Location{KeySymbol: "sjj", Track: 135, Type: 0},
-			wantParams: map[string]string{"output": "json", "fileformat": "mp4", "langwritten": "ASL", "pub": "sjj", "track": "135"},
+			wantParams: map[string]string{"output": "json", "fileformat": "mp4,m4v", "langwritten": "ASL", "pub": "sjj", "track": "135"},
 			forbidden:  []string{"booknum", "docid"},
 		},
 		{
 			name: "book/chapter",
 			loc:  Location{KeySymbol: "nwt", BookNumber: 23, ChapterNumber: 5, Type: 0},
 			wantParams: map[string]string{
-				"output": "json", "fileformat": "mp4", "langwritten": "ASL",
+				"output": "json", "fileformat": "mp4,m4v", "langwritten": "ASL",
 				"pub": "nwt", "booknum": "23", "track": "5",
 			},
 			forbidden: []string{"docid"},
 		},
 		{
-			name:       "docid",
-			loc:        Location{DocumentID: 1112024040, Track: 1, Type: 3},
-			wantParams: map[string]string{"output": "json", "fileformat": "mp4", "langwritten": "ASL", "docid": "1112024040"},
-			forbidden:  []string{"pub", "track", "booknum"},
+			name: "docid",
+			loc:  Location{DocumentID: 1112024040, Track: 1, Type: 3},
+			wantParams: map[string]string{
+				"output": "json", "fileformat": "mp4,m4v", "langwritten": "ASL", "docid": "1112024040",
+			},
+			forbidden: []string{"pub", "track", "booknum"},
 		},
 	}
 

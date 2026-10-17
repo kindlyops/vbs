@@ -33,8 +33,10 @@ type mediaResponse struct {
 	Files map[string]mediaLang `json:"files"`
 }
 
+// mediaLang holds one language's renditions. Some videos are published only as M4V.
 type mediaLang struct {
 	MP4 []mediaItem `json:"MP4"`
+	M4V []mediaItem `json:"M4V"`
 }
 
 type mediaItem struct {
@@ -82,22 +84,25 @@ func fetchMedia(client *http.Client, base, langCode string, loc *Location) (medi
 }
 
 // selectRendition picks the requested resolution for a language, or the
-// highest available when the requested one is absent. The bool reports whether
-// a fallback happened so the caller can warn naming the item.
+// highest available when the requested one is absent. MP4 renditions are
+// preferred over M4V at the same resolution. The bool reports whether a
+// fallback happened so the caller can warn naming the item.
 func selectRendition(resp mediaResponse, langCode, resolution string) (mediaItem, bool, error) {
-	lang, ok := resp.Files[langCode]
-	if !ok || len(lang.MP4) == 0 {
-		return mediaItem{}, false, fmt.Errorf("no MP4 renditions for language %q", langCode)
+	lang := resp.Files[langCode]
+	candidates := append(append([]mediaItem{}, lang.MP4...), lang.M4V...)
+
+	if len(candidates) == 0 {
+		return mediaItem{}, false, fmt.Errorf("no MP4 or M4V renditions for language %q", langCode)
 	}
 
-	for _, item := range lang.MP4 {
+	for _, item := range candidates {
 		if item.Label == resolution {
 			return item, false, nil
 		}
 	}
 
-	highest := lang.MP4[0]
-	for _, item := range lang.MP4[1:] {
+	highest := candidates[0]
+	for _, item := range candidates[1:] {
 		if item.FrameHeight > highest.FrameHeight {
 			highest = item
 		}
@@ -243,7 +248,7 @@ func classifyLocation(loc *Location) (shapeKind, error) {
 }
 
 // buildMediaURL builds the publisher's media-API query for a location. Every
-// query carries output=json, fileformat=mp4, and the written-language code,
+// query carries output=json, fileformat=mp4,m4v, and the written-language code,
 // plus the shape-specific parameters.
 func buildMediaURL(base, langCode string, loc *Location) (string, error) {
 	shape, err := classifyLocation(loc)
@@ -253,7 +258,7 @@ func buildMediaURL(base, langCode string, loc *Location) (string, error) {
 
 	params := url.Values{}
 	params.Set("output", "json")
-	params.Set("fileformat", "mp4")
+	params.Set("fileformat", "mp4,m4v")
 	params.Set("langwritten", langCode)
 
 	switch shape {

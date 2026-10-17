@@ -114,3 +114,60 @@ func TestSelectRendition(t *testing.T) {
 		}
 	})
 }
+
+// m4vOnlyMediaJSON is a response whose renditions are published only as M4V.
+const m4vOnlyMediaJSON = `{
+  "files": {
+    "ASL": {
+      "M4V": [
+        {"title": "video", "label": "480p", "filesize": 9000000, "duration": 229.66,
+         "frameWidth": 854, "frameHeight": 480,
+         "file": {"url": "https://example.invalid/a/x/o/video_r480P.m4v",
+                  "checksum": "dddddddddddddddddddddddddddddddd"}},
+        {"title": "video", "label": "720p", "filesize": 18000000, "duration": 229.66,
+         "frameWidth": 1280, "frameHeight": 720,
+         "file": {"url": "https://example.invalid/a/x/o/video_r720P.m4v",
+                  "checksum": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}}
+      ]
+    }
+  }
+}`
+
+func TestSelectRendition_M4VOnly(t *testing.T) {
+	srv := mediaTestServer(t, m4vOnlyMediaJSON)
+
+	resp, err := fetchMedia(srv.Client(), srv.URL, "ASL", &Location{KeySymbol: "sjj", Track: 135})
+	if err != nil {
+		t.Fatalf("fetchMedia: %v", err)
+	}
+
+	item, fellBack, err := selectRendition(resp, "ASL", "720p")
+	if err != nil {
+		t.Fatalf("selectRendition: %v", err)
+	}
+
+	if fellBack {
+		t.Error("720p M4V is present; should not fall back")
+	}
+
+	if item.File.Checksum != "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" {
+		t.Errorf("picked %q, want the 720p M4V", item.File.URL)
+	}
+}
+
+func TestSelectRendition_PrefersMP4OverM4V(t *testing.T) {
+	mp4 := mediaItem{Label: "720p", FrameHeight: 720, File: mediaFile{URL: "a.mp4"}}
+	m4v := mediaItem{Label: "720p", FrameHeight: 720, File: mediaFile{URL: "a.m4v"}}
+	resp := mediaResponse{Files: map[string]mediaLang{
+		"ASL": {MP4: []mediaItem{mp4}, M4V: []mediaItem{m4v}},
+	}}
+
+	item, _, err := selectRendition(resp, "ASL", "720p")
+	if err != nil {
+		t.Fatalf("selectRendition: %v", err)
+	}
+
+	if item.File.URL != "a.mp4" {
+		t.Errorf("picked %q, want the MP4 when both formats offer 720p", item.File.URL)
+	}
+}
