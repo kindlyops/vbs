@@ -445,7 +445,9 @@ func imageExt(img *EmbeddedImage) string {
 func init() {
 	pltBuildCmd.Flags().StringVar(&pltBuildOut, "out", ".", "directory to create the working directory in")
 	pltBuildCmd.Flags().StringVar(&pltBuildLang, "lang", "", "override the written-language code (e.g. ASL)")
-	pltBuildCmd.Flags().StringVar(&pltBuildResolution, "resolution", "720p", "preferred rendition and still-clip frame height (e.g. 720p)")
+	pltBuildCmd.Flags().StringVar(
+		&pltBuildResolution, "resolution", "720p",
+		"preferred rendition and still-clip frame height (e.g. 720p)")
 
 	var mediaAPI string
 	pltBuildCmd.Flags().StringVar(&mediaAPI, "media-api", "", "media API base URL (overrides config key plt.mediaapi)")
