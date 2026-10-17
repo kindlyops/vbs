@@ -99,6 +99,7 @@ func TestFrameSize(t *testing.T) {
 		{"480p", 854, 480},
 		{"720p", 1280, 720},
 		{"1080p", 1920, 1080},
+		{"4320p", 7680, 4320},
 	}
 	for _, tc := range cases {
 		w, h, err := frameSize(tc.label)
@@ -113,7 +114,7 @@ func TestFrameSize(t *testing.T) {
 }
 
 func TestFrameSize_Invalid(t *testing.T) {
-	for _, label := range []string{"", "720", "hd", "p", "0p", "-720p", "721p"} {
+	for _, label := range []string{"", "720", "hd", "p", "0p", "-720p", "721p", "4322p", "99999p"} {
 		if _, _, err := frameSize(label); err == nil {
 			t.Errorf("frameSize(%q) should fail", label)
 		}
