@@ -6,6 +6,10 @@
   "MD013": { "code_blocks": false }
 } -->
 
+> **Status:** implemented. Review rounds added a 4320 height cap, black
+> compositing for transparent images, BT.709 tagging, and extra tests; the
+> spec and code are the source of truth for final behavior.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
