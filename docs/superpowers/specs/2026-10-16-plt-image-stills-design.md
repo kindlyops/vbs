@@ -25,8 +25,9 @@ The encoded clip:
 The frame size comes from `--resolution`. The height is the number in an
 `NNNp` label, so any such label works, including ones with no matching video
 rendition (e.g. `1080p`). Width is the 16:9 width rounded to an even number
-(e.g. 480p → 854×480). A label that is not of the form `NNNp` is an error
-that names the label.
+(e.g. 480p → 854×480). A label that is not of the form `NNNp`, or whose
+height is zero or odd (H.264 4:2:0 needs even dimensions), is an error that
+names the label.
 
 ## playlist.json
 
