@@ -105,8 +105,10 @@ func TestFrameSize(t *testing.T) {
 		w, h, err := frameSize(tc.label)
 		if err != nil {
 			t.Errorf("frameSize(%q): %v", tc.label, err)
+
 			continue
 		}
+
 		if w != tc.width || h != tc.height {
 			t.Errorf("frameSize(%q) = %dx%d, want %dx%d", tc.label, w, h, tc.width, tc.height)
 		}

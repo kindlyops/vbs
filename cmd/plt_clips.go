@@ -40,7 +40,8 @@ func frameSize(resolution string) (int, int, error) {
 
 	if !ok || err != nil || height <= 0 || height%2 != 0 || height > maxFrameHeight {
 		return 0, 0, fmt.Errorf(
-			"unsupported resolution %q: want an even height up to 4320, such as 720p", resolution)
+			"unsupported resolution %q: want an even height up to %d, such as 720p",
+			resolution, maxFrameHeight)
 	}
 
 	width := 2 * ((height*8 + 4) / 9)

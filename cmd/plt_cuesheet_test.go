@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -223,8 +224,9 @@ func assertImageCuesAreStills(t *testing.T, cues []cue) {
 
 		found = true
 
-		if !strings.HasSuffix(c.Clip, ".mp4") {
-			t.Errorf("image cue clip = %q, want an .mp4", c.Clip)
+		want := fmt.Sprintf("clips/%02d-%s.mp4", c.Index, slugify(c.Label))
+		if c.Clip != want {
+			t.Errorf("image cue clip = %q, want %q", c.Clip, want)
 		}
 
 		if c.DurationSec != stillDurationSec {
