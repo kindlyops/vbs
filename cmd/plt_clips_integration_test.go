@@ -163,7 +163,8 @@ func TestEncodeStill_Integration(t *testing.T) {
 	stream := ffprobeStream(t, out)
 	wants := []string{
 		"codec_name=h264", "profile=Main", "width=1280", "height=720", "pix_fmt=yuv420p",
-		"r_frame_rate=30000/1001", "color_range=tv", "color_space=bt709", "color_primaries=bt709", "color_transfer=bt709",
+		"r_frame_rate=30000/1001", "color_range=tv", "color_space=bt709",
+		"color_primaries=bt709", "color_transfer=bt709",
 	}
 
 	for _, want := range wants {
