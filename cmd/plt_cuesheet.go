@@ -117,9 +117,9 @@ func cuesheetCues(arc *archive, item Item, index int, outDir string, seen map[st
 			Index:        index,
 			Label:        item.Label,
 			Kind:         "image",
-			Clip:         fmt.Sprintf("clips/%02d-%s%s", index, slug, imageExt(item.Image)),
+			Clip:         fmt.Sprintf("clips/%02d-%s.mp4", index, slug),
 			EndActionRaw: item.EndAction,
-			DurationSec:  ticksToSeconds(item.Image.DurationTicks),
+			DurationSec:  stillDurationSec,
 			Thumbnail:    thumb,
 		}}
 	}

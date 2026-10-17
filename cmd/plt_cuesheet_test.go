@@ -52,6 +52,7 @@ func TestBuildCueSheetOnly_NoMedia(t *testing.T) {
 		t.Errorf("cues = %d, want 5", len(manifest.Cues))
 	}
 	assertCuesHaveNoCut(t, manifest.Cues)
+	assertImageCuesAreStills(t, manifest.Cues)
 }
 
 // assertCueSheetOnlyLayout checks the cue sheet + thumbs exist but nothing was
@@ -128,7 +129,8 @@ func sampleManifest() buildManifest {
 			},
 			{
 				Index: 3, Label: "picture.jpg", Kind: "image",
-				Clip: "clips/03-picture.jpg", EndActionRaw: 2, DurationSec: 4.0, Thumbnail: "thumbs/03.jpeg",
+				Clip: "clips/03-picture.mp4", SourceMedia: "media/03-picture.jpg",
+				EndActionRaw: 2, DurationSec: 4.0, Thumbnail: "thumbs/03.jpeg",
 			},
 		},
 	}
@@ -205,5 +207,32 @@ func TestRenderCueSheet(t *testing.T) {
 	// One table row per cue (count the leading "  [%d]," cells via the index).
 	if n := strings.Count(out, "image(\"thumbs/"); n != 3 {
 		t.Errorf("expected 3 thumbnail cells, got %d", n)
+	}
+}
+
+// assertImageCuesAreStills checks image cues name the MP4 build would encode.
+func assertImageCuesAreStills(t *testing.T, cues []cue) {
+	t.Helper()
+
+	found := false
+
+	for _, c := range cues {
+		if c.Kind != "image" {
+			continue
+		}
+
+		found = true
+
+		if !strings.HasSuffix(c.Clip, ".mp4") {
+			t.Errorf("image cue clip = %q, want an .mp4", c.Clip)
+		}
+
+		if c.DurationSec != stillDurationSec {
+			t.Errorf("image cue duration = %v, want %v", c.DurationSec, stillDurationSec)
+		}
+	}
+
+	if !found {
+		t.Error("fixture should contain an image cue")
 	}
 }
