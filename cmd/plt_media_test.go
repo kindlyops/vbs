@@ -30,16 +30,16 @@ func TestBuildMediaURL(t *testing.T) {
 	}{
 		{
 			name:       "pub track",
-			loc:        Location{KeySymbol: "sjj", Track: 135, Type: 0},
-			wantParams: map[string]string{"output": "json", "fileformat": "mp4,m4v", "langwritten": "ASL", "pub": "sjj", "track": "135"},
+			loc:        Location{KeySymbol: "abc", Track: 135, Type: 0},
+			wantParams: map[string]string{"output": "json", "fileformat": "mp4,m4v", "langwritten": "ASL", "pub": "abc", "track": "135"},
 			forbidden:  []string{"booknum", "docid"},
 		},
 		{
 			name: "book/chapter",
-			loc:  Location{KeySymbol: "nwt", BookNumber: 23, ChapterNumber: 5, Type: 0},
+			loc:  Location{KeySymbol: bookKeySymbol, BookNumber: 23, ChapterNumber: 5, Type: 0},
 			wantParams: map[string]string{
 				"output": "json", "fileformat": "mp4,m4v", "langwritten": "ASL",
-				"pub": "nwt", "booknum": "23", "track": "5",
+				"pub": bookKeySymbol, "booknum": "23", "track": "5",
 			},
 			forbidden: []string{"docid"},
 		},

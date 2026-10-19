@@ -24,7 +24,7 @@ import (
 // hostname rewritten to example.invalid. It offers four renditions for ASL.
 const sanitizedMediaJSON = `{
   "pubName": "Synthetic Songs",
-  "pub": "sjj",
+  "pub": "abc",
   "track": 135,
   "fileformat": "mp4",
   "files": {
@@ -32,19 +32,19 @@ const sanitizedMediaJSON = `{
       "MP4": [
         {"title": "song", "label": "240p", "filesize": 4000000, "duration": 139.006,
          "frameWidth": 426, "frameHeight": 240,
-         "file": {"url": "https://example.invalid/a/x/o/sjj_ASL_135_r240P.mp4",
+         "file": {"url": "https://example.invalid/a/x/o/abc_ASL_135_r240P.mp4",
                   "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
         {"title": "song", "label": "360p", "filesize": 7000000, "duration": 139.006,
          "frameWidth": 640, "frameHeight": 360,
-         "file": {"url": "https://example.invalid/a/x/o/sjj_ASL_135_r360P.mp4",
+         "file": {"url": "https://example.invalid/a/x/o/abc_ASL_135_r360P.mp4",
                   "checksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
         {"title": "song", "label": "480p", "filesize": 11000000, "duration": 139.006,
          "frameWidth": 854, "frameHeight": 480,
-         "file": {"url": "https://example.invalid/a/x/o/sjj_ASL_135_r480P.mp4",
+         "file": {"url": "https://example.invalid/a/x/o/abc_ASL_135_r480P.mp4",
                   "checksum": "cccccccccccccccccccccccccccccccc"}},
         {"title": "song", "label": "720p", "filesize": 16112944, "duration": 139.006,
          "frameWidth": 1280, "frameHeight": 720,
-         "file": {"url": "https://example.invalid/a/x/o/sjj_ASL_135_r720P.mp4",
+         "file": {"url": "https://example.invalid/a/x/o/abc_ASL_135_r720P.mp4",
                   "checksum": "1915564d166a4b264eda0f607ccda127"}}
       ]
     }
@@ -65,7 +65,7 @@ func mediaTestServer(t *testing.T, body string) *httptest.Server {
 func TestFetchMedia_ParsesRenditions(t *testing.T) {
 	srv := mediaTestServer(t, sanitizedMediaJSON)
 
-	resp, err := fetchMedia(srv.Client(), srv.URL, "ASL", &Location{KeySymbol: "sjj", Track: 135})
+	resp, err := fetchMedia(srv.Client(), srv.URL, "ASL", &Location{KeySymbol: "abc", Track: 135})
 	if err != nil {
 		t.Fatalf("fetchMedia: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestFetchMedia_ParsesRenditions(t *testing.T) {
 
 func TestSelectRendition(t *testing.T) {
 	srv := mediaTestServer(t, sanitizedMediaJSON)
-	resp, err := fetchMedia(srv.Client(), srv.URL, "ASL", &Location{KeySymbol: "sjj", Track: 135})
+	resp, err := fetchMedia(srv.Client(), srv.URL, "ASL", &Location{KeySymbol: "abc", Track: 135})
 	if err != nil {
 		t.Fatalf("fetchMedia: %v", err)
 	}
@@ -136,7 +136,7 @@ const m4vOnlyMediaJSON = `{
 func TestSelectRendition_M4VOnly(t *testing.T) {
 	srv := mediaTestServer(t, m4vOnlyMediaJSON)
 
-	resp, err := fetchMedia(srv.Client(), srv.URL, "ASL", &Location{KeySymbol: "sjj", Track: 135})
+	resp, err := fetchMedia(srv.Client(), srv.URL, "ASL", &Location{KeySymbol: "abc", Track: 135})
 	if err != nil {
 		t.Fatalf("fetchMedia: %v", err)
 	}

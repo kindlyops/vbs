@@ -79,12 +79,12 @@ func TestDescribeSource(t *testing.T) {
 	}{
 		{
 			"pub track",
-			Item{Location: &Location{KeySymbol: "sjj", Track: 135, Type: 0}},
-			"pub sjj track 135",
+			Item{Location: &Location{KeySymbol: "abc", Track: 135, Type: 0}},
+			"pub abc track 135",
 		},
 		{
 			"book/chapter",
-			Item{Location: &Location{KeySymbol: "nwt", BookNumber: 23, ChapterNumber: 5, Type: 0}},
+			Item{Location: &Location{KeySymbol: bookKeySymbol, BookNumber: 23, ChapterNumber: 5, Type: 0}},
 			"book 23:5",
 		},
 		{
@@ -128,14 +128,14 @@ func TestBuildPrintView(t *testing.T) {
 
 func assertSongCue(t *testing.T, song printItem) {
 	t.Helper()
-	if song.Source != "pub sjj track 135" {
+	if song.Source != "pub abc track 135" {
 		t.Errorf("song.Source = %q", song.Source)
 	}
 	if math.Abs(song.DurationSec-139.006) > 1e-6 {
 		t.Errorf("song.DurationSec = %v, want 139.006", song.DurationSec)
 	}
-	if !strings.Contains(song.MediaURL, "pub=sjj") || !strings.Contains(song.MediaURL, "track=135") {
-		t.Errorf("song.MediaURL = %q, want pub=sjj & track=135", song.MediaURL)
+	if !strings.Contains(song.MediaURL, "pub=abc") || !strings.Contains(song.MediaURL, "track=135") {
+		t.Errorf("song.MediaURL = %q, want pub=abc & track=135", song.MediaURL)
 	}
 }
 
@@ -179,9 +179,9 @@ func TestRenderText_ContainsKeyData(t *testing.T) {
 	out := buf.String()
 
 	wants := []string{
-		"synthetic event", "pub sjj track 135", "book 23:5",
+		"synthetic event", "pub abc track 135", "book 23:5",
 		"embedded image", "docid 1112024040",
-		"Media URLs:", "pub=sjj", "booknum=23", "docid=1112024040",
+		"Media URLs:", "pub=abc", "booknum=23", "docid=1112024040",
 	}
 	for _, want := range wants {
 		if !strings.Contains(out, want) {

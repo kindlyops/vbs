@@ -58,8 +58,8 @@ func TestParsePlaylist_PubTrackItem(t *testing.T) {
 	if song.Location == nil {
 		t.Fatal("song should have a Location")
 	}
-	if song.Location.KeySymbol != "sjj" || song.Location.Track != 135 {
-		t.Errorf("song location = %+v, want KeySymbol sjj track 135", song.Location)
+	if song.Location.KeySymbol != "abc" || song.Location.Track != 135 {
+		t.Errorf("song location = %+v, want KeySymbol abc track 135", song.Location)
 	}
 	if song.Location.BaseDurationTicks != 1390060000 {
 		t.Errorf("song BaseDurationTicks = %d, want 1390060000", song.Location.BaseDurationTicks)

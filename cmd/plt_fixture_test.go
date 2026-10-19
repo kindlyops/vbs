@@ -240,8 +240,8 @@ func fixtureData() []string {
 		`INSERT INTO TagMap VALUES (3, 1, 3, 2)`,
 		`INSERT INTO TagMap VALUES (4, 1, 4, 3)`,
 
-		`INSERT INTO Location VALUES (1, NULL, NULL, 1102016935, 135, 'sjj', 420, 0)`,
-		`INSERT INTO Location VALUES (2, 23, 5, NULL, NULL, 'nwt', 420, 0)`,
+		`INSERT INTO Location VALUES (1, NULL, NULL, 1102016935, 135, 'abc', 420, 0)`,
+		`INSERT INTO Location VALUES (2, 23, 5, NULL, NULL, '` + bookKeySymbol + `', 420, 0)`,
 		`INSERT INTO Location VALUES (4, NULL, NULL, 1112024040, 1, NULL, 420, 3)`,
 
 		`INSERT INTO PlaylistItemLocationMap VALUES (1, 1, 2, 1390060000)`,

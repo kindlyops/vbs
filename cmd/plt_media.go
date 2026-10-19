@@ -222,21 +222,24 @@ func writeSidecar(dest string, item mediaItem) error {
 	return nil
 }
 
+// bookKeySymbol is the key symbol that marks a book/chapter location.
+const bookKeySymbol = "nwt"
+
 // shapeKind identifies how a Location resolves to a catalog media query.
 type shapeKind int
 
 const (
 	shapePub         shapeKind = iota // KeySymbol + Track (e.g. a song or story)
-	shapeBookChapter                  // KeySymbol "nwt" + BookNumber + ChapterNumber
+	shapeBookChapter                  // bookKeySymbol + BookNumber + ChapterNumber
 	shapeDocid                        // Type 3, resolved by DocumentId
 )
 
 // classifyLocation determines a Location's catalog shape, following the
-// resolution rule: a book/chapter reference (nwt + book), then a tracked publication,
+// resolution rule: a book/chapter reference (bookKeySymbol + book), then a tracked publication,
 // then a document id. Anything else is an error naming the row.
 func classifyLocation(loc *Location) (shapeKind, error) {
 	switch {
-	case loc.KeySymbol == "nwt" && loc.BookNumber > 0:
+	case loc.KeySymbol == bookKeySymbol && loc.BookNumber > 0:
 		return shapeBookChapter, nil
 	case loc.KeySymbol != "" && loc.Track > 0:
 		return shapePub, nil
@@ -266,7 +269,7 @@ func buildMediaURL(base, langCode string, loc *Location) (string, error) {
 		params.Set("pub", loc.KeySymbol)
 		params.Set("track", strconv.FormatInt(loc.Track, 10))
 	case shapeBookChapter:
-		params.Set("pub", "nwt")
+		params.Set("pub", bookKeySymbol)
 		params.Set("booknum", strconv.FormatInt(loc.BookNumber, 10))
 		params.Set("track", strconv.FormatInt(loc.ChapterNumber, 10))
 	case shapeDocid:

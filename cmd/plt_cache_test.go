@@ -78,14 +78,14 @@ func TestFetchToCache_ReusesCache(t *testing.T) {
 		Label:    "720p",
 		Filesize: int64(len(body)),
 		Duration: 139.006,
-		File:     mediaFile{URL: srv.URL + "/o/sjj_ASL_135_r720P.mp4", Checksum: md5Hex(body)},
+		File:     mediaFile{URL: srv.URL + "/o/abc_ASL_135_r720P.mp4", Checksum: md5Hex(body)},
 	}
 
 	first, err := fetchToCache(srv.Client(), cacheDir, item)
 	if err != nil {
 		t.Fatalf("first fetch: %v", err)
 	}
-	if filepath.Base(first) != "sjj_ASL_135_r720P.mp4" {
+	if filepath.Base(first) != "abc_ASL_135_r720P.mp4" {
 		t.Errorf("cached name = %q, want basename of URL", filepath.Base(first))
 	}
 
