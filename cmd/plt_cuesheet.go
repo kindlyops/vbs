@@ -105,9 +105,10 @@ func buildCueSheetOnly(arc *archive, playlist *Playlist) (string, bool, error) {
 	return outDir, pdf, err
 }
 
-// cuesheetCues builds the cues for one item without media: durations come from
-// ticks/markers and the thumbnail from the zip. Clip names are the names build
-// would produce; no cut metadata is set, so the lead-in column stays blank.
+// cuesheetCues builds the cues for one item without media: video durations come
+// from ticks/markers, image cues use the fixed still duration, and the thumbnail
+// comes from the zip. Clip names are the names build would produce; no cut
+// metadata is set, so the lead-in column stays blank.
 func cuesheetCues(arc *archive, item Item, index int, outDir string, seen map[string]int) []cue {
 	thumb := extractThumbnail(arc, item, index, outDir)
 	slug := uniqueSlug(slugify(item.Label), seen)
@@ -117,9 +118,9 @@ func cuesheetCues(arc *archive, item Item, index int, outDir string, seen map[st
 			Index:        index,
 			Label:        item.Label,
 			Kind:         "image",
-			Clip:         fmt.Sprintf("clips/%02d-%s%s", index, slug, imageExt(item.Image)),
+			Clip:         fmt.Sprintf("clips/%02d-%s.mp4", index, slug),
 			EndActionRaw: item.EndAction,
-			DurationSec:  ticksToSeconds(item.Image.DurationTicks),
+			DurationSec:  stillDurationSec,
 			Thumbnail:    thumb,
 		}}
 	}

@@ -28,6 +28,58 @@ import (
 // merges them into one contiguous clip (0.5 s, in 100 ns ticks).
 const markerMergeGapTicks = 5_000_000
 
+// maxFrameHeight bounds frameSize so typos fail clearly and width math cannot overflow.
+const maxFrameHeight = 4320
+
+// frameSize maps a resolution label such as "720p" to a 16:9 frame size. The
+// width rounds to the nearest even number (480p -> 854x480) because H.264 with
+// 4:2:0 chroma needs even dimensions; for the same reason the height must be even.
+func frameSize(resolution string) (int, int, error) {
+	digits, ok := strings.CutSuffix(resolution, "p")
+	height, err := strconv.Atoi(digits)
+
+	if !ok || err != nil || height <= 0 || height%2 != 0 || height > maxFrameHeight {
+		return 0, 0, fmt.Errorf(
+			"unsupported resolution %q: want an even height up to %d, such as 720p",
+			resolution, maxFrameHeight)
+	}
+
+	width := 2 * ((height*8 + 4) / 9)
+
+	return width, height, nil
+}
+
+// stillDurationSec is the fixed length of a clip encoded from an image cue.
+const stillDurationSec = 4.0
+
+// encodeStill encodes an image as a stillDurationSec H.264 clip of width x
+// height. The image is scaled to fit and composited onto black, so transparent
+// areas become black. The output is BT.709 TV-range yuv420p at 29.97 fps to
+// match the published videos.
+func encodeStill(src, out string, width, height int) error {
+	filter := fmt.Sprintf(
+		"color=c=black:s=%dx%d:r=30000/1001,format=rgb24[bg];", width, height) +
+		fmt.Sprintf("[0:v]scale=%d:%d:force_original_aspect_ratio=decrease:", width, height) +
+		"force_divisible_by=2,format=rgba[fg];" +
+		"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=gbrp," +
+		"setsar=1,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p," +
+		"setparams=color_primaries=bt709:color_trc=bt709[v]"
+
+	cmd := exec.Command("ffmpeg", "-loglevel", "error",
+		"-loop", "1", "-framerate", "30000/1001", "-i", src,
+		"-filter_complex", filter, "-map", "[v]",
+		"-t", strconv.FormatFloat(stillDurationSec, 'f', -1, 64),
+		"-color_range", "tv", "-colorspace", "bt709",
+		"-c:v", "libx264", "-profile:v", "main", "-an", "-movflags", "+faststart",
+		"-y", out)
+	if combined, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf(
+			"ffmpeg still encode failed for %s -> %s: %s: %w", src, out, combined, err)
+	}
+
+	return nil
+}
+
 // clipRange is a contiguous span to cut from a source video, covering one or
 // more segment markers. Times are in 100 ns ticks relative to the source.
 type clipRange struct {

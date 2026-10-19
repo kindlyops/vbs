@@ -126,3 +126,110 @@ func TestArchiveExtractEntry(t *testing.T) {
 		t.Errorf("extracted file is not a JPEG (len %d)", len(data))
 	}
 }
+
+// ffprobeStream returns the first video stream's fields as key=value lines.
+func ffprobeStream(t *testing.T, path string) string {
+	t.Helper()
+
+	out, err := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0",
+		"-show_entries", "stream=codec_name,profile,width,height,pix_fmt,r_frame_rate,"+
+			"color_range,color_space,color_primaries,color_transfer",
+		"-of", "default=noprint_wrappers=1", path).Output()
+	if err != nil {
+		t.Fatalf("ffprobe stream failed: %v", err)
+	}
+
+	return string(out)
+}
+
+func TestEncodeStill_Integration(t *testing.T) {
+	requireFFmpeg(t)
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "still.jpg")
+	out := filepath.Join(dir, "still.mp4")
+
+	// A 4:3 source, so the 16:9 frame needs padding on the sides.
+	render := exec.Command("ffmpeg", "-loglevel", "error", "-f", "lavfi",
+		"-i", "testsrc=size=640x480", "-frames:v", "1", "-y", src)
+	if combined, err := render.CombinedOutput(); err != nil {
+		t.Fatalf("could not render test image: %s: %v", combined, err)
+	}
+
+	if err := encodeStill(src, out, 1280, 720); err != nil {
+		t.Fatalf("encodeStill: %v", err)
+	}
+
+	stream := ffprobeStream(t, out)
+	wants := []string{
+		"codec_name=h264", "profile=Main", "width=1280", "height=720", "pix_fmt=yuv420p",
+		"r_frame_rate=30000/1001", "color_range=tv", "color_space=bt709",
+		"color_primaries=bt709", "color_transfer=bt709",
+	}
+
+	for _, want := range wants {
+		if !strings.Contains(stream, want) {
+			t.Errorf("stream missing %q:\n%s", want, stream)
+		}
+	}
+
+	if got := ffprobeDuration(t, out); math.Abs(got-stillDurationSec) > 0.05 {
+		t.Errorf("still duration = %v, want ~%v", got, stillDurationSec)
+	}
+}
+
+func TestEncodeStill_MissingSource(t *testing.T) {
+	requireFFmpeg(t)
+
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.jpg")
+
+	err := encodeStill(missing, filepath.Join(dir, "out.mp4"), 1280, 720)
+	if err == nil {
+		t.Fatal("expected an error for a missing source image")
+	}
+
+	if !strings.Contains(err.Error(), "missing.jpg") {
+		t.Errorf("error should name the source image, got: %v", err)
+	}
+}
+
+func TestEncodeStill_TransparentPNG(t *testing.T) {
+	requireFFmpeg(t)
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "clear.png")
+	out := filepath.Join(dir, "clear.mp4")
+
+	render := exec.Command("ffmpeg", "-loglevel", "error", "-f", "lavfi",
+		"-i", "color=c=white@0.0:s=64x36,format=rgba", "-frames:v", "1", "-y", src)
+	if combined, err := render.CombinedOutput(); err != nil {
+		t.Fatalf("could not render test image: %s: %v", combined, err)
+	}
+
+	if err := encodeStill(src, out, 1280, 720); err != nil {
+		t.Fatalf("encodeStill: %v", err)
+	}
+
+	sample := exec.Command("ffmpeg", "-v", "error", "-i", out, "-frames:v", "1",
+		"-vf", "crop=2:2:639:359,format=gray", "-f", "rawvideo", "-")
+
+	luma, err := sample.Output()
+	if err != nil || len(luma) == 0 {
+		t.Fatalf("could not sample center pixel: %v", err)
+	}
+
+	if luma[0] > 20 {
+		t.Errorf("transparent area luma = %d, want black (<= 20)", luma[0])
+	}
+
+	stream := ffprobeStream(t, out)
+	for _, want := range []string{
+		"pix_fmt=yuv420p", "color_range=tv", "color_space=bt709",
+		"color_primaries=bt709", "color_transfer=bt709",
+	} {
+		if !strings.Contains(stream, want) {
+			t.Errorf("PNG stream missing %q:\n%s", want, stream)
+		}
+	}
+}

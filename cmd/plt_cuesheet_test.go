@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,6 +53,7 @@ func TestBuildCueSheetOnly_NoMedia(t *testing.T) {
 		t.Errorf("cues = %d, want 5", len(manifest.Cues))
 	}
 	assertCuesHaveNoCut(t, manifest.Cues)
+	assertImageCuesAreStills(t, manifest.Cues)
 }
 
 // assertCueSheetOnlyLayout checks the cue sheet + thumbs exist but nothing was
@@ -112,13 +114,13 @@ func sampleManifest() buildManifest {
 		Cues: []cue{
 			{
 				Index: 1, Label: "First Clip", Kind: "video",
-				Clip: "clips/01-opening-song.mp4", SourceMedia: "media/sjj_ASL_135_r720P.mp4",
+				Clip: "clips/01-opening-song.mp4", SourceMedia: "media/first-clip_r720P.mp4",
 				EndActionRaw: 2, DurationSec: 139.006, Thumbnail: "thumbs/01.jpeg",
 			},
 			{
 				Index: 2, Label: "Part 1 Section 5:1, 2", Kind: "video",
 				Clip:        "clips/02-part-1-section-5-1-2.mp4",
-				SourceMedia: "media/nwt_23_Isa_ASL_05_r720P.mp4",
+				SourceMedia: "media/second-clip_r720P.mp4",
 				Markers: []cueMarker{
 					{Label: "Marker one", Start: 2.068, Duration: 18.651},
 					{Label: "Marker two", Start: 20.720, Duration: 35.602},
@@ -128,7 +130,8 @@ func sampleManifest() buildManifest {
 			},
 			{
 				Index: 3, Label: "picture.jpg", Kind: "image",
-				Clip: "clips/03-picture.jpg", EndActionRaw: 2, DurationSec: 4.0, Thumbnail: "thumbs/03.jpeg",
+				Clip: "clips/03-picture.mp4", SourceMedia: "media/03-picture.jpg",
+				EndActionRaw: 2, DurationSec: 4.0, Thumbnail: "thumbs/03.jpeg",
 			},
 		},
 	}
@@ -205,5 +208,33 @@ func TestRenderCueSheet(t *testing.T) {
 	// One table row per cue (count the leading "  [%d]," cells via the index).
 	if n := strings.Count(out, "image(\"thumbs/"); n != 3 {
 		t.Errorf("expected 3 thumbnail cells, got %d", n)
+	}
+}
+
+// assertImageCuesAreStills checks image cues name the MP4 build would encode.
+func assertImageCuesAreStills(t *testing.T, cues []cue) {
+	t.Helper()
+
+	found := false
+
+	for _, c := range cues {
+		if c.Kind != "image" {
+			continue
+		}
+
+		found = true
+
+		want := fmt.Sprintf("clips/%02d-%s.mp4", c.Index, slugify(c.Label))
+		if c.Clip != want {
+			t.Errorf("image cue clip = %q, want %q", c.Clip, want)
+		}
+
+		if c.DurationSec != stillDurationSec {
+			t.Errorf("image cue duration = %v, want %v", c.DurationSec, stillDurationSec)
+		}
+	}
+
+	if !found {
+		t.Error("fixture should contain an image cue")
 	}
 }
