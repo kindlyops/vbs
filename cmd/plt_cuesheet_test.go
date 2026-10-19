@@ -114,13 +114,13 @@ func sampleManifest() buildManifest {
 		Cues: []cue{
 			{
 				Index: 1, Label: "First Clip", Kind: "video",
-				Clip: "clips/01-opening-song.mp4", SourceMedia: "media/sjj_ASL_135_r720P.mp4",
+				Clip: "clips/01-opening-song.mp4", SourceMedia: "media/first-clip_r720P.mp4",
 				EndActionRaw: 2, DurationSec: 139.006, Thumbnail: "thumbs/01.jpeg",
 			},
 			{
 				Index: 2, Label: "Part 1 Section 5:1, 2", Kind: "video",
 				Clip:        "clips/02-part-1-section-5-1-2.mp4",
-				SourceMedia: "media/nwt_23_Isa_ASL_05_r720P.mp4",
+				SourceMedia: "media/second-clip_r720P.mp4",
 				Markers: []cueMarker{
 					{Label: "Marker one", Start: 2.068, Duration: 18.651},
 					{Label: "Marker two", Start: 20.720, Duration: 35.602},
