@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -282,9 +283,11 @@ func renderCueSheet(manifest buildManifest) string {
 	b.WriteString("  table.hline(stroke: 0.6pt + luma(55%)),\n")
 
 	elapsed := 0.0
-	for _, c := range manifest.Cues {
-		elapsed += c.DurationSec
-		b.WriteString(cueSheetRow(c, elapsed, maxDur))
+	numbers := cueNumbers(manifest.Cues)
+
+	for i := range manifest.Cues {
+		elapsed += manifest.Cues[i].DurationSec
+		b.WriteString(cueSheetRow(manifest.Cues[i], numbers[i], elapsed, maxDur))
 	}
 
 	b.WriteString(")\n")
@@ -327,30 +330,61 @@ func endActionLabel(code int) string {
 	}
 }
 
+// cueNumbers labels each cue for the sheet. An item cut into several clips
+// gives every clip the item's index, so those clips are lettered in order
+// (2a, 2b), matching their clip file names; other cues keep the plain index.
+func cueNumbers(cues []cue) []string {
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+
+	counts := make(map[int]int, len(cues))
+	for i := range cues {
+		counts[cues[i].Index]++
+	}
+
+	seen := make(map[int]int, len(cues))
+	numbers := make([]string, len(cues))
+
+	for position := range cues {
+		index := cues[position].Index
+		if counts[index] == 1 {
+			numbers[position] = strconv.Itoa(index)
+
+			continue
+		}
+
+		numbers[position] = strconv.Itoa(index) + string(letters[seen[index]%len(letters)])
+		seen[index]++
+	}
+
+	return numbers
+}
+
 // cueSheetRow renders one cue's cells plus a faint separator below it. The
 // Duration cell stacks the cue length, a proportional sparkline, and the
 // running elapsed time (de-emphasized) so elapsed needs no column of its own.
-func cueSheetRow(c cue, elapsed, maxDur float64) string {
+func cueSheetRow(entry cue, number string, elapsed, maxDur float64) string {
 	thumb := "[]"
-	if c.Thumbnail != "" {
-		thumb = fmt.Sprintf("[#image(%q, width: 2cm)]", c.Thumbnail)
+	if entry.Thumbnail != "" {
+		thumb = fmt.Sprintf("[#image(%q, width: 2cm)]", entry.Thumbnail)
 	}
-	number := fmt.Sprintf("[#text(fill: %s, weight: \"bold\", size: 12pt)[%d]]", cueNumberColor, c.Index)
+
+	numberCell := fmt.Sprintf("[#text(fill: %s, weight: \"bold\", size: 12pt)[%s]]", cueNumberColor, number)
 
 	// Square-root scale so short cues stay distinguishable while the longest
-	// still reads as the longest.
+	// still reads as the longest. sparkbar takes a percentage.
+	const fullBar = 100
 	pace := 0.0
 	if maxDur > 0 {
-		pace = math.Sqrt(c.DurationSec/maxDur) * 100
+		pace = math.Sqrt(entry.DurationSec/maxDur) * fullBar
 	}
 	duration := fmt.Sprintf("[#stack(spacing: 3.5pt, [%s], sparkbar(%.1f), "+
 		"text(size: 7pt, fill: luma(62%%))[elapsed %s])]",
-		formatTimecode(c.DurationSec), pace, formatTimecode(elapsed))
+		formatTimecode(entry.DurationSec), pace, formatTimecode(elapsed))
 
 	return fmt.Sprintf("  %s, %s, [#text(weight: 500)[%s] \\ #raw(%q)], %s, "+
 		"[#text(fill: luma(50%%))[%s]],\n"+
 		"  table.hline(stroke: 0.3pt + luma(88%%)),\n",
-		number, thumb, escapeTypst(c.Label), c.Clip, duration, endActionLabel(c.EndActionRaw))
+		numberCell, thumb, escapeTypst(entry.Label), entry.Clip, duration, endActionLabel(entry.EndActionRaw))
 }
 
 // escapeTypst escapes characters that would otherwise be Typst markup.

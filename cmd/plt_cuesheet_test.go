@@ -189,6 +189,42 @@ func TestWritePlaylistJSON_RoundTrips(t *testing.T) {
 	}
 }
 
+func TestCueNumbers_LetterSplitItems(t *testing.T) {
+	t.Parallel()
+
+	base := sampleManifest().Cues[0]
+	cues := make([]cue, 0, 5)
+
+	for _, index := range []int{1, 2, 2, 2, 3} {
+		next := base
+		next.Index = index
+		cues = append(cues, next)
+	}
+
+	got := strings.Join(cueNumbers(cues), ",")
+
+	if want := "1,2a,2b,2c,3"; got != want {
+		t.Errorf("cueNumbers = %s, want %s", got, want)
+	}
+}
+
+func TestRenderCueSheet_SplitItemNumbers(t *testing.T) {
+	t.Parallel()
+
+	manifest := sampleManifest()
+	split := manifest.Cues[1]
+	split.Clip = "clips/02b-part-1-section-5-1-2.mp4"
+	manifest.Cues = append(manifest.Cues[:2], append([]cue{split}, manifest.Cues[2:]...)...)
+
+	out := renderCueSheet(manifest)
+
+	for _, want := range []string{"[2a]]", "[2b]]", "[3]]"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("cue sheet missing cue number cell %q", want)
+		}
+	}
+}
+
 func TestRenderCueSheet(t *testing.T) {
 	out := renderCueSheet(sampleManifest())
 
