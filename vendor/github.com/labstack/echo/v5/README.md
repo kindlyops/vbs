@@ -1,54 +1,84 @@
-<a href="https://echo.labstack.com"><img height="80" src="https://cdn.labstack.com/images/echo-logo.svg"></a>
-
-[![Sourcegraph](https://sourcegraph.com/github.com/labstack/echo/-/badge.svg?style=flat-square)](https://sourcegraph.com/github.com/labstack/echo?badge)
-[![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](https://pkg.go.dev/github.com/labstack/echo/v4)
-[![Go Report Card](https://goreportcard.com/badge/github.com/labstack/echo?style=flat-square)](https://goreportcard.com/report/github.com/labstack/echo)
-[![Build Status](http://img.shields.io/travis/labstack/echo.svg?style=flat-square)](https://travis-ci.org/labstack/echo)
+[![Latest release](https://img.shields.io/github/v/release/labstack/echo?style=flat-square&label=release&color=00afd1)](https://github.com/labstack/echo/releases)
+[![Last commit](https://img.shields.io/github/last-commit/labstack/echo/master?style=flat-square)](https://github.com/labstack/echo/commits/master)
+[![Go Reference](https://pkg.go.dev/badge/github.com/labstack/echo/v5.svg)](https://pkg.go.dev/github.com/labstack/echo/v5)
+[![CI](https://img.shields.io/github/actions/workflow/status/labstack/echo/ci.yml?style=flat-square&label=ci)](https://github.com/labstack/echo/actions/workflows/ci.yml)
 [![Codecov](https://img.shields.io/codecov/c/github/labstack/echo.svg?style=flat-square)](https://codecov.io/gh/labstack/echo)
-[![Forum](https://img.shields.io/badge/community-forum-00afd1.svg?style=flat-square)](https://github.com/labstack/echo/discussions)
-[![Twitter](https://img.shields.io/badge/twitter-@labstack-55acee.svg?style=flat-square)](https://twitter.com/labstack)
-[![License](http://img.shields.io/badge/license-mit-blue.svg?style=flat-square)](https://raw.githubusercontent.com/labstack/echo/master/LICENSE)
+[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/labstack/echo?style=flat-square&label=openssf%20scorecard)](https://scorecard.dev/viewer/?uri=github.com/labstack/echo)
+[![Sponsors](https://img.shields.io/github/sponsors/labstack?style=flat-square&color=db61a2)](https://github.com/sponsors/labstack)
+[![Discussions](https://img.shields.io/badge/community-discussions-00afd1.svg?style=flat-square)](https://github.com/labstack/echo/discussions)
+[![X](https://img.shields.io/badge/x-@labstack-000000.svg?style=flat-square)](https://x.com/labstack)
+[![License](https://img.shields.io/badge/license-mit-blue.svg?style=flat-square)](https://github.com/labstack/echo/blob/master/LICENSE)
 
-## Supported Go versions
+## Echo
 
-Echo supports last four major releases. `v5` starts from 1.16 until there is last four major releases after that.
+High performance, extensible, minimalist Go web framework.
 
-As of version 4.0.0, Echo is available as a [Go module](https://github.com/golang/go/wiki/Modules).
-Therefore a Go version capable of understanding /vN suffixed imports is required:
+Echo is built on Go's standard `net/http` and interoperates with it through `echo.WrapHandler` and `echo.WrapMiddleware`. It adds the parts the standard library leaves to you: a fast radix-tree router, request binding with pluggable validation, a deep middleware ecosystem, and centralized error handling. Echo is actively maintained, and `v5` is the current release line.
 
-- 1.9.7+
-- 1.10.3+
-- 1.16+
+- [Website](https://echo.labstack.com)
+- [Quick start](https://echo.labstack.com/guide/quickstart/)
+- [Middleware](https://echo.labstack.com/middleware/)
+- [API reference](https://pkg.go.dev/github.com/labstack/echo/v5)
+- Help and questions: [GitHub Discussions](https://github.com/labstack/echo/discussions)
 
-Any of these versions will allow you to import Echo as `github.com/labstack/echo/v4` which is the recommended
-way of using Echo going forward.
+### Features
 
-For older versions, please use the latest v3 tag.
+- Fast radix-tree [router](https://echo.labstack.com/guide/routing/) that prioritizes routes smartly
+- Route groups, with middleware at the root, group or route level
+- [Data binding](https://echo.labstack.com/guide/binding/) for JSON, XML, form, query and path parameters, with pluggable validation
+- Helpers for JSON, XML, HTML, file, stream and other responses
+- Centralized [error handling](https://echo.labstack.com/guide/error-handling/)
+- Structured request logging with `log/slog`
+- [Template rendering](https://echo.labstack.com/guide/templates/) with any template engine
+- TLS, [HTTP/2](https://echo.labstack.com/cookbook/http2/), [automatic TLS](https://echo.labstack.com/cookbook/auto-tls/) with Let's Encrypt, and [graceful shutdown](https://echo.labstack.com/cookbook/graceful-shutdown/)
 
-## Feature Overview
+## Used by
 
-- Optimized HTTP router which smartly prioritize routes
-- Build robust and scalable RESTful APIs
-- Group APIs
-- Extensible middleware framework
-- Define middleware at root, group or route level
-- Data binding for JSON, XML and form payload
-- Handy functions to send variety of HTTP responses
-- Centralized HTTP error handling
-- Template rendering with any template engine
-- Define your format for the logger
-- Highly customizable
-- Automatic TLS via Let’s Encrypt
-- HTTP/2 support
+Echo runs in production across the Go ecosystem, including:
 
-## [Guide](https://echo.labstack.com/guide)
+| Project | What runs on Echo |
+| --- | --- |
+| [Bluesky indigo](https://github.com/bluesky-social/indigo) | AT Protocol Relay and network services |
+| [Temporal UI](https://github.com/temporalio/ui) | Temporal Web UI server |
+| [NVIDIA Cloud Functions](https://github.com/NVIDIA/nvcf) | LLM API gateway |
+| [Azure Container Networking](https://github.com/Azure/azure-container-networking) | Container Networking Service REST API |
+| [osbuild-composer](https://github.com/osbuild/osbuild-composer) | Red Hat Image Builder cloud API |
+| [Docker Agent](https://github.com/docker/docker-agent) | Agent API, chat and A2A servers |
+| [YugabyteDB](https://github.com/yugabyte/yugabyte-db) | yugabyted UI API server |
+| [PostHog](https://github.com/PostHog/posthog) | Livestream service |
+| [Bytebase](https://github.com/bytebase/bytebase) | Backend server and API |
+| [Hatchet](https://github.com/hatchet-dev/hatchet) | API server |
+| [CasaOS](https://github.com/IceWhaleTech/CasaOS) | API server |
+| [Hanko](https://github.com/teamhanko/hanko) | Authentication backend |
+
+See [ADOPTERS.md](./ADOPTERS.md) for the full list. Using Echo in an open source project? [Add it](./ADOPTERS.md#add-your-project).
+
+## Sponsors
+
+| | Sponsor |
+| --- | --- |
+| <a href="https://blacksmith.sh"><img src="https://github.com/useblacksmith.png?size=56" height="28" alt="Blacksmith logo"></a> | [Blacksmith](https://blacksmith.sh): faster, drop-in GitHub Actions runners |
+| <a href="https://encore.dev"><img src="https://user-images.githubusercontent.com/78424526/214602214-52e0483a-b5fc-4d4c-b03e-0b7b23e012df.svg" height="28" alt="Encore logo"></a> | [Encore](https://encore.dev): the platform for building Go-based cloud backends |
+| <a href="https://github.com/gravitycarbon"><img src="https://github.com/gravitycarbon.png?size=56" height="28" alt="Gravity Carbon logo"></a> | [Gravity Carbon](https://github.com/gravitycarbon) |
+
+Echo is independent and community funded. If your company depends on Echo, please consider [sponsoring it](https://github.com/sponsors/labstack).
+
+## Getting started
+
+### Supported versions
+
+- `v5` is the current major version, released on 2026-01-18. See [API_CHANGES_V5.md](./API_CHANGES_V5.md) for the API changes from `v4` and upgrade notes.
+- `v4` receives security updates and bug fixes until 2026-12-31.
+
+See [ROADMAP.md](./ROADMAP.md) for where Echo is heading and the version support policy.
 
 ### Installation
 
 ```sh
-// go get github.com/labstack/echo/{version}
 go get github.com/labstack/echo/v5
 ```
+
+Echo supports the three most recent Go [releases](https://go.dev/doc/devel/release) and may work with older ones.
 
 ### Example
 
@@ -56,76 +86,91 @@ go get github.com/labstack/echo/v5
 package main
 
 import (
-  "github.com/labstack/echo/v5"
-  "github.com/labstack/echo/v5/middleware"
-  "net/http"
+	"log/slog"
+	"net/http"
+
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 )
 
 func main() {
-  // Echo instance
-  e := echo.New()
+	// Echo instance
+	e := echo.New()
 
-  // Middleware
-  e.Use(middleware.Logger())
-  e.Use(middleware.Recover())
+	// Middleware
+	e.Use(middleware.RequestLogger()) // log requests with log/slog
+	e.Use(middleware.Recover())       // recover from panics and return an error
 
-  // Routes
-  e.GET("/", hello)
+	// Routes
+	e.GET("/", hello)
 
-  // Start server
-  if err := e.Start(":1323"); err != http.ErrServerClosed {
-    log.Fatal(err)
-  }
+	// Start server
+	if err := e.Start(":8080"); err != nil {
+		slog.Error("failed to start server", "error", err)
+	}
 }
 
 // Handler
-func hello(c echo.Context) error {
-  return c.String(http.StatusOK, "Hello, World!")
+func hello(c *echo.Context) error {
+	return c.String(http.StatusOK, "Hello, World!")
 }
 ```
 
-# Third-party middlewares
+More in the [guide](https://echo.labstack.com/guide/quickstart/) and the [cookbook](https://echo.labstack.com/cookbook/hello-world/).
 
-| Repository                                                                                           | Description                                                                                                                                                                                                                                                                                                                                  |
-|------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [github.com/labstack/echo-contrib](https://github.com/labstack/echo-contrib)                         | (by Echo team) [casbin](https://github.com/casbin/casbin), [gorilla/sessions](https://github.com/gorilla/sessions), [jaegertracing](github.com/uber/jaeger-client-go), [prometheus](https://github.com/prometheus/client_golang/), [pprof](https://pkg.go.dev/net/http/pprof), [zipkin](https://github.com/openzipkin/zipkin-go) middlewares | 
-| [deepmap/oapi-codegen](https://github.com/deepmap/oapi-codegen)                                      | Automatically generate RESTful API documentation with [OpenAPI](https://swagger.io/specification/) Client and Server Code Generator                                                                                                                                                                                                          |
-| [github.com/swaggo/echo-swagger](https://github.com/swaggo/echo-swagger)                             | Automatically generate RESTful API documentation with [Swagger](https://swagger.io/) 2.0.                                                                                                                                                                                                                                                    |
-| [github.com/ziflex/lecho](https://github.com/ziflex/lecho)                                           | [Zerolog](https://github.com/rs/zerolog) logging library wrapper for Echo logger interface.                                                                                                                                                                                                                                                  |
-| [github.com/brpaz/echozap](https://github.com/brpaz/echozap)                                         | Uber´s [Zap](https://github.com/uber-go/zap) logging library wrapper for Echo logger interface.                                                                                                                                                                                                                                              |
-| [github.com/darkweak/souin/plugins/echo](https://github.com/darkweak/souin/tree/master/plugins/echo) | HTTP cache system based on [Souin](https://github.com/darkweak/souin) to automatically get your endpoints cached. It supports some distributed and non-distributed storage systems depending your needs.                                                                                                                                     |
-| [github.com/mikestefanello/pagoda](https://github.com/mikestefanello/pagoda)                         | Rapid, easy full-stack web development starter kit built with Echo.                                                                                                                                                                                                                                                                          |
+## Middleware
 
-Please send a PR to add your own library here.
+### Official
 
-## Help
+Maintained by the Echo team.
 
-- [Forum](https://github.com/labstack/echo/discussions)
+| Repository | Description |
+| --- | --- |
+| [labstack/echo-jwt](https://github.com/labstack/echo-jwt) | [JWT](https://github.com/golang-jwt/jwt) authentication |
+| [labstack/echo-contrib](https://github.com/labstack/echo-contrib) | [Casbin](https://github.com/casbin/casbin), [gorilla/sessions](https://github.com/gorilla/sessions) and [pprof](https://pkg.go.dev/net/http/pprof) |
+| [labstack/echo-otel](https://github.com/labstack/echo-otel) | [OpenTelemetry](https://opentelemetry.io/) tracing and metrics |
+| [labstack/echo-prometheus](https://github.com/labstack/echo-prometheus) | [Prometheus](https://github.com/prometheus/client_golang/) metrics |
 
-## Contribute
+### Third-party
 
-**Use issues for everything**
+These projects are maintained by their authors, not the Echo team. Review them before use, and check which Echo version (`v4` or `v5`) each supports.
 
-- For a small change, just send a PR.
-- For bigger changes open an issue for discussion before sending a PR.
-- PR should have:
-  - Test case
-  - Documentation
-  - Example (If it makes sense)
-- You can also contribute by:
-  - Reporting issues
-  - Suggesting new features or enhancements
-  - Improve/fix documentation
+| Repository | Description |
+| --- | --- |
+| [oapi-codegen/oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) | [OpenAPI](https://swagger.io/specification/) client and server code generator |
+| [swaggo/echo-swagger](https://github.com/swaggo/echo-swagger) | Serves [Swagger](https://swagger.io/) 2.0 API documentation |
+| [ziflex/lecho](https://github.com/ziflex/lecho) | [Zerolog](https://github.com/rs/zerolog) logger for Echo |
+| [brpaz/echozap](https://github.com/brpaz/echozap) | Uber [Zap](https://github.com/uber-go/zap) logging middleware |
+| [samber/slog-echo](https://github.com/samber/slog-echo) | [log/slog](https://pkg.go.dev/log/slog) logging middleware |
+| [darkweak/souin](https://github.com/darkweak/souin/tree/master/plugins/echo) | HTTP cache middleware based on [Souin](https://github.com/darkweak/souin), with distributed storage support |
+| [mikestefanello/pagoda](https://github.com/mikestefanello/pagoda) | Full-stack web development starter kit built on Echo |
+| [go-woo/protoc-gen-echo](https://github.com/go-woo/protoc-gen-echo) | Generates Echo server code from Protocol Buffers |
+
+To add your library, send a pull request.
+
+## Contributing
+
+Use issues for everything.
+
+- For a small change, send a pull request.
+- For a bigger change, open an issue to discuss it first.
+- A pull request should include tests, documentation and, where it helps, an example.
+
+You can also contribute by reporting issues, suggesting features and improving the documentation.
+
+## Security
+
+Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/labstack/echo/security/advisories/new), not in public issues. See [SECURITY.md](./SECURITY.md) for supported versions.
 
 ## Credits
 
-- [Vishal Rana](https://github.com/vishr) (Author)
+- [Vishal Rana](https://github.com/vishr) (Author and Maintainer)
 - [Nitin Rana](https://github.com/nr17) (Consultant)
-- [Roland Lammel](https://github.com/lammel) (Maintainer)
-- [Martti T.](https://github.com/aldas) (Maintainer)
-- [Pablo Andres Fuente](https://github.com/pafuent) (Maintainer)
+- [Martti T.](https://github.com/aldas) (Maintainer Emeritus)
+- [Roland Lammel](https://github.com/lammel) (Maintainer Emeritus)
+- [Pablo Andres Fuente](https://github.com/pafuent) (Maintainer Emeritus)
 - [Contributors](https://github.com/labstack/echo/graphs/contributors)
 
 ## License
 
-[MIT](https://github.com/labstack/echo/blob/master/LICENSE)
+[MIT](./LICENSE)
