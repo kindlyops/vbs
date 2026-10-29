@@ -57,9 +57,9 @@ homebrew_casks:
     # to run it ("vbs is damaged"). Strip the quarantine attribute on install.
     hooks:
       post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/vbs"]
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/vbs"]
           end
 
 scoops:
