@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v5"
 )
@@ -16,8 +20,11 @@ type MethodOverrideConfig struct {
 	Getter MethodOverrideGetter
 }
 
-// MethodOverrideGetter is a function that gets overridden method from the request
-type MethodOverrideGetter func(echo.Context) string
+// MethodOverrideGetter is a function that gets overridden method from the request.
+// The returned value should be a standard HTTP method name as used by net/http
+// (e.g. http.MethodDelete, "DELETE"). The middleware does not normalize case or
+// trim spaces — callers / Getter implementations should return a valid method.
+type MethodOverrideGetter func(c *echo.Context) string
 
 // DefaultMethodOverrideConfig is the default MethodOverride middleware config.
 var DefaultMethodOverrideConfig = MethodOverrideConfig{
@@ -29,7 +36,11 @@ var DefaultMethodOverrideConfig = MethodOverrideConfig{
 // MethodOverride  middleware checks for the overridden method from the request and
 // uses it instead of the original method.
 //
-// For security reasons, only `POST` method can be overridden.
+// For security reasons, only `POST` method can be overridden, and it cannot be overridden to `GET`, `HEAD`,
+// `OPTIONS`, `TRACE` or `CONNECT`. Otherwise a cross-site form POST could skip checks that apply only to
+// state-changing methods, such as the CSRF middleware.
+//
+// Register it with Echo#Pre so that routing uses the overridden method.
 func MethodOverride() echo.MiddlewareFunc {
 	return MethodOverrideWithConfig(DefaultMethodOverrideConfig)
 }
@@ -50,7 +61,7 @@ func (config MethodOverrideConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if config.Skipper(c) {
 				return next(c)
 			}
@@ -58,7 +69,7 @@ func (config MethodOverrideConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 			req := c.Request()
 			if req.Method == http.MethodPost {
 				m := config.Getter(c)
-				if m != "" {
+				if m != "" && !isForbiddenOverrideMethod(m) {
 					req.Method = m
 				}
 			}
@@ -67,10 +78,21 @@ func (config MethodOverrideConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
 	}, nil
 }
 
+// isForbiddenOverrideMethod reports whether POST must not be overridden to method m. Safe methods (and CONNECT) are
+// forbidden because middlewares such as CSRF do not check them.
+func isForbiddenOverrideMethod(m string) bool {
+	for _, forbidden := range []string{http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace, http.MethodConnect} {
+		if strings.EqualFold(m, forbidden) {
+			return true
+		}
+	}
+	return false
+}
+
 // MethodFromHeader is a `MethodOverrideGetter` that gets overridden method from
 // the request header.
 func MethodFromHeader(header string) MethodOverrideGetter {
-	return func(c echo.Context) string {
+	return func(c *echo.Context) string {
 		return c.Request().Header.Get(header)
 	}
 }
@@ -78,7 +100,7 @@ func MethodFromHeader(header string) MethodOverrideGetter {
 // MethodFromForm is a `MethodOverrideGetter` that gets overridden method from the
 // form parameter.
 func MethodFromForm(param string) MethodOverrideGetter {
-	return func(c echo.Context) string {
+	return func(c *echo.Context) string {
 		return c.FormValue(param)
 	}
 }
@@ -86,7 +108,7 @@ func MethodFromForm(param string) MethodOverrideGetter {
 // MethodFromQuery is a `MethodOverrideGetter` that gets overridden method from
 // the query parameter.
 func MethodFromQuery(param string) MethodOverrideGetter {
-	return func(c echo.Context) string {
+	return func(c *echo.Context) string {
 		return c.QueryParam(param)
 	}
 }
