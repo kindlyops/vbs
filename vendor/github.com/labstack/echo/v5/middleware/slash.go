@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: © 2015 LabStack LLC and Echo contributors
+
 package middleware
 
 import (
@@ -27,7 +30,7 @@ func AddTrailingSlash() echo.MiddlewareFunc {
 	return AddTrailingSlashWithConfig(AddTrailingSlashConfig{})
 }
 
-// AddTrailingSlashWithConfig returns a AddTrailingSlash middleware with config or panics on invalid configuration.
+// AddTrailingSlashWithConfig returns an AddTrailingSlash middleware with config or panics on invalid configuration.
 func AddTrailingSlashWithConfig(config AddTrailingSlashConfig) echo.MiddlewareFunc {
 	return toMiddlewareOrPanic(config)
 }
@@ -43,7 +46,7 @@ func (config AddTrailingSlashConfig) ToMiddleware() (echo.MiddlewareFunc, error)
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if config.Skipper(c) {
 				return next(c)
 			}
@@ -107,7 +110,7 @@ func (config RemoveTrailingSlashConfig) ToMiddleware() (echo.MiddlewareFunc, err
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if config.Skipper(c) {
 				return next(c)
 			}
@@ -139,10 +142,40 @@ func (config RemoveTrailingSlashConfig) ToMiddleware() (echo.MiddlewareFunc, err
 }
 
 func sanitizeURI(uri string) string {
+	// Browsers remove tab and newline characters from URLs, so `/\t/example.com` is `//example.com` to them and a
+	// control character could hide the double slash from the check below. Percent-encode C0 control characters and
+	// DEL first; the browser then requests the same path.
+	uri = escapeControlChars(uri)
 	// double slash `\\`, `//` or even `\/` is absolute uri for browsers and by redirecting request to that uri
 	// we are vulnerable to open redirect attack. so replace all slashes from the beginning with single slash
 	if len(uri) > 1 && (uri[0] == '\\' || uri[0] == '/') && (uri[1] == '\\' || uri[1] == '/') {
 		uri = "/" + strings.TrimLeft(uri, `/\`)
 	}
 	return uri
+}
+
+// escapeControlChars percent-encodes C0 control characters and DEL in s.
+// Keep in sync with the copy in echo.go.
+func escapeControlChars(s string) string {
+	i := 0
+	for i < len(s) && s[i] >= 0x20 && s[i] != 0x7f {
+		i++
+	}
+	if i == len(s) {
+		return s
+	}
+	const hexDigits = "0123456789ABCDEF"
+	var b strings.Builder
+	b.Grow(len(s) + 8)
+	b.WriteString(s[:i])
+	for ; i < len(s); i++ {
+		if ch := s[i]; ch < 0x20 || ch == 0x7f {
+			b.WriteByte('%')
+			b.WriteByte(hexDigits[ch>>4])
+			b.WriteByte(hexDigits[ch&0x0f])
+		} else {
+			b.WriteByte(ch)
+		}
+	}
+	return b.String()
 }
